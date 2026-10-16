@@ -1,0 +1,10 @@
+{
+  "IS_NOT_EMPTY": "{property} không được để trống",
+  "IS_STRING": "{property} phải là chuỗi",
+  "IS_BOOLEAN": "{property} phải là true hoặc false",
+  "IS_INT": "{property} phải là số nguyên",
+  "IS_ENUM": "{property} có giá trị không hợp lệ",
+  "MIN": "{property} không được nhỏ hơn {constraints.0}",
+  "MAX": "{property} không được lớn hơn {constraints.0}",
+  "MAX_LENGTH": "{property} tối đa {constraints.0} ký tự"
+}

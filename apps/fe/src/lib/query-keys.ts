@@ -1,0 +1,16 @@
+export const qk = {
+  session: ['session'] as const,
+  members: ['members'] as const,
+  computers: ['computers'] as const,
+  agents: ['agents'] as const,
+  agent: (id: string) => ['agents', id] as const,
+  agentActivity: (id: string) => ['agents', id, 'activity'] as const,
+  rooms: ['rooms'] as const,
+  chat: (id: string) => ['chats', id] as const,
+  messages: (id: string) => ['chats', id, 'messages'] as const,
+  tasks: ['tasks'] as const,
+  runSpans: ['run-spans'] as const,
+  scheduler: ['scheduler'] as const,
+  dashboard: ['dashboard'] as const,
+  connections: ['connections'] as const,
+};

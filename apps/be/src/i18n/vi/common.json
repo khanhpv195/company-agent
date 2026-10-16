@@ -1,0 +1,7 @@
+{
+  "SUCCESS": "Yêu cầu thành công",
+  "errors": {
+    "VALIDATION_FAILED": "Dữ liệu không hợp lệ",
+    "INTERNAL_SERVER_ERROR": "Đã có lỗi xảy ra, vui lòng thử lại sau"
+  }
+}

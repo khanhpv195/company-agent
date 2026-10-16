@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "src",
+  "compilerOptions": {
+    "deleteOutDir": true,
+    "tsConfigPath": "tsconfig.build.json",
+    "assets": [
+      { "include": "i18n/**/*", "watchAssets": true },
+      { "include": "resources/**/*", "watchAssets": true }
+    ],
+    "plugins": [
+      {
+        "name": "@nestjs/swagger",
+        "options": { "introspectComments": true, "classValidatorShim": true }
+      }
+    ]
+  },
+  "generateOptions": {
+    "spec": true
+  }
+}

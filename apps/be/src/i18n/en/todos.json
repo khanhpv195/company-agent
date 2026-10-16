@@ -1,0 +1,8 @@
+{
+  "CREATED": "Todo created successfully",
+  "LIST": "Todos retrieved successfully",
+  "DETAIL": "Todo retrieved successfully",
+  "UPDATED": "Todo updated successfully",
+  "DELETED": "Todo deleted successfully",
+  "NOT_FOUND": "Todo with id {id} was not found"
+}

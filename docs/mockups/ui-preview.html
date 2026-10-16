@@ -1,0 +1,1803 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agent UI Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #ffffff;
+    --paper: #f4efe4;
+    --rail: #fafafa;
+    --line: #ececec;
+    --text: #1d1d1b;
+    --muted: #8a8a85;
+    --soft: #5c5c58;
+    --hover: #f3f3f2;
+    --active: #ebebea;
+    --bubble-agent: #f5f5f4;
+    --bubble-human: #efede6;
+    --olive: #6b7046;
+    --olive-dark: #5a5e3a;
+    --link: #3f7a2a;
+    --claude: #d97757;
+    --avatar: #5157b0;
+    --ok: #3b9a5a;
+    --warn: #c98a1b;
+    --err: #c2453b;
+    --code-bg: #1f2023;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: Inter, system-ui, -apple-system, sans-serif; font-size: 14px; color: var(--text); background: #d9d6cf; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  input, textarea { font: inherit; color: inherit; }
+  svg.i { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  /* window frame */
+  .window { position: fixed; inset: 16px; border-radius: 12px; overflow: hidden; background: var(--bg); box-shadow: 0 20px 60px rgba(0,0,0,.25); display: flex; }
+  .traffic { position: absolute; top: 12px; left: 14px; display: flex; gap: 8px; z-index: 10; }
+  .traffic span { width: 12px; height: 12px; border-radius: 50%; }
+  .screen { display: none; flex: 1; min-width: 0; }
+  .screen.on { display: flex; }
+
+  /* ---------- login ---------- */
+  #login { background: var(--paper); background-image: radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px); background-size: 22px 22px; }
+  .hero { width: 50%; position: relative; overflow: hidden;
+    -webkit-mask: radial-gradient(10px at right, transparent 98%, #000) right / 100% 28px;
+            mask: radial-gradient(10px at right, transparent 98%, #000) right / 100% 28px; }
+  .hero svg { width: 100%; height: 100%; display: block; }
+  .brand { position: absolute; top: 34px; left: 32px; display: flex; align-items: center; gap: 6px; font-family: 'Inter Tight'; font-weight: 600; font-size: 18px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  .login-side { flex: 1; display: grid; place-items: center; }
+  .login-box { width: 400px; }
+  .login-box h1 { font-family: 'Inter Tight'; font-weight: 600; font-size: 46px; line-height: 1.05; letter-spacing: -0.04em; margin: 0 0 28px; }
+  .notyou { color: var(--soft); text-decoration: underline; text-underline-offset: 4px; text-decoration-color: #c9c4b8; font-size: 14px; }
+  .card { margin-top: 44px; background: #fff; border: 1px solid #e3ded3; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 12px rgba(80,70,40,.06); }
+  .card-body { padding: 26px 26px 28px; }
+  .sso { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .sso button { height: 36px; border: 1px solid #e4e4e4; border-radius: 6px; display: grid; place-items: center; }
+  .sso button:hover { background: var(--hover); }
+  .or { display: flex; align-items: center; gap: 14px; margin: 20px 0; color: var(--muted); font-size: 12px; }
+  .or::before, .or::after { content: ''; flex: 1; height: 1px; background: #e4e4e4; }
+  label { display: block; font-weight: 500; font-size: 13px; margin-bottom: 8px; }
+  .field { width: 100%; height: 44px; border: 1px solid #d9d9d9; border-radius: 8px; padding: 0 14px; outline: none; }
+  .field:focus { border-color: var(--olive); box-shadow: 0 0 0 3px rgba(107,112,70,.15); }
+  .btn-olive { width: 100%; height: 44px; margin-top: 16px; border-radius: 8px; background: var(--olive); color: #fff; font-weight: 600; box-shadow: inset 0 -2px 0 rgba(0,0,0,.15); }
+  .btn-olive:hover { background: var(--olive-dark); }
+  .card-foot { background: #f2f2f1; border-top: 1px solid #e6e6e6; text-align: center; padding: 18px; font-size: 13px; color: var(--soft); }
+  .card-foot a { color: var(--link); font-weight: 600; text-decoration: none; }
+
+  /* ---------- onboarding ---------- */
+  #onboard { background: var(--paper); background-image: radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px); background-size: 22px 22px; align-items: center; justify-content: center; }
+  .ob { width: 560px; }
+  .steps { display: flex; gap: 6px; margin-bottom: 26px; }
+  .steps span { flex: 1; height: 4px; border-radius: 4px; background: #ddd7ca; }
+  .steps span.done { background: var(--olive); }
+  .ob h2 { font-family: 'Inter Tight'; font-size: 32px; letter-spacing: -0.03em; margin: 0 0 8px; }
+  .ob p.lead { color: var(--soft); margin: 0 0 24px; line-height: 1.55; }
+  .cmd { display: flex; align-items: center; gap: 10px; background: var(--code-bg); color: #e8e6df; border-radius: 10px; padding: 14px 16px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  .cmd code { flex: 1; }
+  .cmd button { color: #aaa; }
+  .cmd button:hover { color: #fff; }
+  .ob ol { padding-left: 18px; color: var(--soft); line-height: 1.8; margin: 18px 0; }
+  .status { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid #e3ded3; background: #fff; border-radius: 10px; }
+  .spinner { width: 16px; height: 16px; border: 2px solid #ddd; border-top-color: var(--olive); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+  .dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(59,154,90,.15); }
+  .dot.off { background: #c4c4c0; }
+  .dot.busy { background: var(--warn); }
+  .ob .btn-olive:disabled { opacity: .45; cursor: not-allowed; }
+  .skip { display: block; margin: 14px auto 0; color: var(--muted); font-size: 13px; }
+
+  /* ---------- app ---------- */
+  .rail { width: 66px; background: var(--rail); border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; padding: 36px 0 14px; gap: 6px; }
+  .rail .logo { margin-bottom: 14px; }
+  .rail button.ri { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: #4a4a47; }
+  .rail button.ri:hover { background: var(--hover); }
+  .rail button.ri.on { background: var(--active); color: var(--text); }
+  .rail hr { width: 28px; border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+  .rail .spacer { flex: 1; }
+  .me { width: 26px; height: 26px; border-radius: 50%; background: var(--avatar); color: #fff; font-size: 13px; display: grid; place-items: center; margin-top: 6px; }
+
+  .panel { width: 390px; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 20px 12px 20px; }
+  .panel-head h3 { margin: 0; font-size: 17px; font-weight: 600; }
+  .icon-btn { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--soft); }
+  .icon-btn:hover { background: var(--hover); }
+  .tabs { display: flex; gap: 4px; padding: 0 20px 14px; }
+  .tabs button { padding: 6px 12px; border-radius: 999px; color: var(--soft); font-size: 14px; }
+  .tabs button.on { background: var(--active); color: var(--text); font-weight: 600; }
+  .tabs button:hover:not(.on) { background: var(--hover); }
+  .panel-body { overflow-y: auto; flex: 1; padding-bottom: 20px; }
+  .sec { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer; user-select: none; }
+  .sec .chev { width: 14px; height: 14px; color: var(--muted); transition: transform .15s; }
+  .sec.closed .chev { transform: rotate(-90deg); }
+  .sec .badge { margin-left: auto; }
+  .empty-line { padding: 2px 20px 8px 56px; color: var(--muted); font-size: 12.5px; }
+  .item { display: flex; gap: 12px; padding: 10px 16px 10px 20px; cursor: pointer; align-items: flex-start; }
+  .item:hover { background: var(--hover); }
+  .item.on { background: var(--active); }
+  .item .av { width: 40px; height: 40px; }
+  .item .meta { flex: 1; min-width: 0; }
+  .item .row { display: flex; justify-content: space-between; gap: 8px; }
+  .item .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .time { color: var(--muted); font-size: 12px; flex: none; }
+  .item .prev { color: var(--soft); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .badge { background: var(--claude); color: #fff; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 1px 7px; }
+  .av { border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 18px; flex: none; overflow: hidden; }
+  .av.human { background: var(--avatar); }
+
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+  .empty-state { flex: 1; display: grid; place-items: center; }
+  .chat-head { height: 60px; display: flex; align-items: center; gap: 10px; padding: 0 22px; border-bottom: 1px solid transparent; }
+  .chat-head .title { font-weight: 600; font-size: 15px; }
+  .chat-head .sub { color: var(--muted); font-size: 12.5px; }
+  .chat-head .right { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+  .spark { color: var(--claude); font-size: 13px; }
+  .timeline { flex: 1; overflow-y: auto; padding: 8px 0 24px; }
+  .msg { display: flex; gap: 14px; padding: 10px 70px 10px 70px; max-width: 920px; }
+  .msg .av { width: 32px; height: 32px; font-size: 15px; margin-top: 2px; }
+  .msg .who { font-size: 12.5px; font-weight: 500; margin-bottom: 6px; display: flex; gap: 6px; align-items: center; }
+  .msg .who .t { color: var(--muted); font-weight: 400; }
+  .bubble { background: var(--bubble-agent); border-radius: 12px; padding: 12px 14px; line-height: 1.6; display: inline-block; max-width: 100%; }
+  .msg.human .bubble { background: var(--bubble-human); }
+  .bubble p { margin: 0 0 10px; } .bubble p:last-child { margin-bottom: 0; }
+  .bubble ol, .bubble ul { margin: 6px 0 10px; padding-left: 22px; } .bubble li { margin: 4px 0; }
+  .bubble code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #fff; border: 1px solid #e2e2e0; border-radius: 5px; padding: 1px 5px; }
+  .bubble pre { background: var(--code-bg); color: #e8e6df; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 12.5px; margin: 8px 0; }
+  .bubble pre code { background: none; border: 0; padding: 0; color: inherit; }
+  .mention { color: var(--link); font-weight: 600; background: rgba(63,122,42,.08); border-radius: 4px; padding: 0 3px; }
+  .caret { display: inline-block; width: 7px; height: 15px; background: var(--claude); vertical-align: -2px; margin-left: 2px; animation: blink 1s steps(2) infinite; border-radius: 1px; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .assign { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--soft); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px 3px 8px; margin-bottom: 8px; background: #fff; }
+  .assign .st { font-weight: 600; }
+  .assign.completed .st { color: var(--ok); } .assign.failed .st { color: var(--err); }
+  .tool { border: 1px solid var(--line); border-radius: 10px; background: #fff; margin-bottom: 8px; font-size: 12.5px; overflow: hidden; max-width: 640px; }
+  .tool summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; }
+  .tool summary::-webkit-details-marker { display: none; }
+  .tool summary .nm { font-weight: 600; }
+  .tool summary .arg { color: var(--soft); font-family: ui-monospace, Menlo, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tool summary .r { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .tool pre { margin: 0; padding: 10px 12px; background: #fafaf9; border-top: 1px solid var(--line); font-size: 12px; white-space: pre-wrap; color: #444; }
+  .mini-spin { width: 12px; height: 12px; border: 2px solid #ddd; border-top-color: var(--claude); border-radius: 50%; animation: spin .8s linear infinite; }
+
+  .composer-wrap { padding: 0 70px 18px; position: relative; }
+  .composer { border: 1px solid #dcdcda; border-radius: 14px; padding: 10px 14px 8px; box-shadow: 0 1px 2px rgba(0,0,0,.04); background: #fff; }
+  .composer:focus-within { border-color: #c4c4c0; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+  .composer textarea { width: 100%; border: 0; outline: none; resize: none; height: 24px; max-height: 160px; line-height: 1.5; }
+  .composer .bar { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .composer .bar .sp { flex: 1; }
+  .composer .hint { color: var(--muted); font-size: 12px; }
+  .mention-pop { position: absolute; bottom: 100%; left: 70px; width: 300px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.12); padding: 6px; display: none; }
+  .mention-pop.on { display: block; }
+  .mention-pop .h { font-size: 11px; color: var(--muted); padding: 6px 8px; text-transform: uppercase; letter-spacing: .04em; }
+  .mention-pop .opt { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
+  .mention-pop .opt.sel, .mention-pop .opt:hover { background: var(--hover); }
+  .mention-pop .opt .av { width: 24px; height: 24px; font-size: 12px; }
+  .mention-pop .opt small { color: var(--muted); margin-left: auto; }
+
+  /* detail pages */
+  .page { flex: 1; overflow-y: auto; padding: 40px 56px; }
+  .page h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.02em; }
+  .page .lead { color: var(--soft); margin: 0 0 24px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .box { border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .box h4 { margin: 0 0 10px; font-size: 13px; color: var(--muted); font-weight: 500; }
+  .kv { display: grid; grid-template-columns: 120px 1fr; gap: 8px 12px; font-size: 13px; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 12px; background: #fff; }
+  .chip.on { border-color: #cfd3b8; background: #f3f4ea; color: var(--olive-dark); }
+  .persona { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #fafaf9; border: 1px solid var(--line); border-radius: 8px; padding: 12px; white-space: pre-wrap; color: #444; line-height: 1.6; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  td { padding: 12px 10px; border-bottom: 1px solid var(--line); }
+  .btn { border: 1px solid #dcdcda; border-radius: 8px; padding: 7px 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; background: #fff; }
+  .btn:hover { background: var(--hover); }
+  .btn.primary { background: var(--olive); color: #fff; border-color: var(--olive); }
+  .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .agent-hero { display: flex; gap: 16px; align-items: center; margin-bottom: 24px; }
+  .agent-hero .av { width: 56px; height: 56px; }
+  .ptabs { display: flex; gap: 18px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+  .ptabs button { padding: 10px 0; color: var(--soft); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .ptabs button.on { color: var(--text); border-color: var(--text); font-weight: 600; }
+
+  /* modal */
+  .modal-bg { position: absolute; inset: 0; background: rgba(20,20,18,.3); display: none; place-items: center; z-index: 20; }
+  .modal-bg.on { display: grid; }
+  .modal { width: 520px; background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+  .modal h3 { margin: 0 0 6px; }
+  .modal p { color: var(--soft); margin: 0 0 16px; }
+
+  /* dashboard */
+  .dash { flex: 1; overflow-y: auto; }
+  .dash-in { max-width: 1180px; margin: 0 auto; padding: 44px 48px 56px; }
+  .dash-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
+  .dash-date { color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+  .dash-date::first-letter { text-transform: uppercase; }
+  .dash h1 { font-family: 'Inter Tight'; font-weight: 600; font-size: 36px; letter-spacing: -0.035em; margin: 0; line-height: 1.1; }
+  .quick { display: flex; align-items: center; gap: 8px; width: 460px; border: 1px solid #dcdcda; border-radius: 12px; padding: 6px 6px 6px 14px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  .quick:focus-within { border-color: #c4c4c0; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+  .quick input { flex: 1; border: 0; outline: none; min-width: 0; }
+  .who-chip { display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 4px; border-radius: 8px; background: var(--hover); font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+  .who-chip:hover { background: var(--active); }
+  .quick .go { width: 32px; height: 32px; border-radius: 8px; background: var(--olive); color: #fff; display: grid; place-items: center; flex: none; }
+  .live { border: 1px solid var(--line); border-radius: 14px; padding: 6px; margin-bottom: 16px; background: linear-gradient(180deg, #fdfcf8, #fff); }
+  .live-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px 4px; font-size: 12.5px; color: var(--soft); font-weight: 600; }
+  .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--claude); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(217,119,87,.5); } 70%, 100% { box-shadow: 0 0 0 8px rgba(217,119,87,0); } }
+  .live-row { display: grid; grid-template-columns: 30px 1fr auto auto; gap: 14px; align-items: center; padding: 10px 12px; border-radius: 10px; cursor: pointer; }
+  .live-row:hover { background: var(--hover); }
+  .live-row .av { width: 30px; height: 30px; }
+  .live-row .what { min-width: 0; }
+  .live-row .what > div:not(.progress) { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+  .stage { font-size: 12px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px 2px 7px; background: #fff; color: var(--soft); display: flex; align-items: center; gap: 6px; }
+  .elapsed { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; width: 44px; text-align: right; }
+  .progress { height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 8px; max-width: 420px; }
+  .progress i { display: block; height: 100%; width: 35%; background: var(--claude); animation: indet 1.6s ease-in-out infinite; }
+  @keyframes indet { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  .kpi { border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+  .kpi .lbl { color: var(--soft); font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+  .kpi .val { font-family: 'Inter Tight'; font-size: 30px; font-weight: 600; letter-spacing: -0.03em; margin: 8px 0 2px; font-variant-numeric: tabular-nums; }
+  .kpi .val small { font-size: 15px; color: var(--muted); font-weight: 500; letter-spacing: 0; }
+  .kpi .delta { font-size: 12px; color: var(--muted); }
+  .kpi .delta.up { color: var(--ok); }
+  .dgrid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .dgrid3 { display: grid; grid-template-columns: 1.05fr 1fr .95fr; gap: 16px; }
+  .dcard { border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; min-width: 0; position: relative; }
+  .dcard-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .dcard-h h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  .dcard-h .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .link { color: var(--olive-dark); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .link:hover { text-decoration: underline; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--soft); align-items: center; }
+  .legend span { display: flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .chart text { font-size: 11px; fill: var(--muted); font-family: Inter, sans-serif; }
+  .chart svg :not(.band) { pointer-events: none; }
+  .chart .band { cursor: default; }
+  .tip { position: absolute; pointer-events: none; background: #1f2023; color: #f2f0ea; font-size: 12px; border-radius: 8px; padding: 8px 10px; box-shadow: 0 6px 20px rgba(0,0,0,.2); display: none; white-space: nowrap; z-index: 5; line-height: 1.6; }
+  .tip i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-right: 6px; }
+  .tip b { font-variant-numeric: tabular-nums; float: right; margin-left: 16px; }
+  .dtable { width: 100%; font-size: 12.5px; }
+  .dtable td, .dtable th { padding: 6px 8px; }
+  .attn { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); align-items: center; }
+  .attn:first-of-type { border-top: 0; padding-top: 2px; }
+  .attn .ico { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex: none; }
+  .attn .ico.err { background: #f9e9ef; color: var(--err); }
+  .attn .ico.warn { background: #faf1df; color: var(--warn); }
+  .attn .ico.off { background: #f0efec; color: var(--soft); }
+  .attn .tx { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; }
+  .attn .tx div { color: var(--muted); font-size: 12px; margin-top: 2px; font-weight: 400; }
+  .btn.sm { padding: 4px 10px; font-size: 12px; border-radius: 7px; white-space: nowrap; }
+  .done-note { font-size: 12px; color: var(--ok); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .hbar { display: grid; grid-template-columns: 175px 1fr; gap: 10px; align-items: center; margin: 12px 0; font-size: 13px; }
+  .hbar .nm { display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; }
+  .hbar .nm .av { width: 22px; height: 22px; }
+  .hbar .track { display: flex; align-items: center; gap: 8px; }
+  .hbar .bar { height: 14px; background: #6a7f2a; border-radius: 0 4px 4px 0; }
+  .hbar .v { font-size: 12px; color: var(--soft); font-variant-numeric: tabular-nums; }
+  .feed { list-style: none; margin: 0; padding: 0; }
+  .feed li { display: flex; gap: 10px; padding: 7px 0; font-size: 13px; align-items: flex-start; line-height: 1.45; }
+  .feed .d { width: 6px; height: 6px; border-radius: 50%; background: #c9c6bd; margin-top: 7px; flex: none; }
+  .feed .t { color: var(--muted); font-size: 12px; margin-left: auto; flex: none; padding-left: 8px; }
+  .conn-mini { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+  .conn-mini:first-of-type { border-top: 0; }
+  .conn-mini .nm { flex: 1; font-size: 13px; font-weight: 500; min-width: 0; }
+  .conn-mini .nm div { font-size: 12px; color: var(--muted); font-weight: 400; }
+  .lg { display: inline-block; flex: none; }
+  .lg svg { width: 100%; height: 100%; display: block; }
+
+  /* connections */
+  .flow { display: flex; align-items: center; gap: 10px; border: 1px dashed #d6d2c6; background: #fbfaf6; border-radius: 14px; padding: 14px 16px; margin-bottom: 30px; font-size: 13px; flex-wrap: wrap; }
+  .flow .step { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 7px 12px; }
+  .flow .arr { color: #bdb9ad; display: flex; }
+  .h-sec { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .conn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; margin-bottom: 34px; }
+  .conn { border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px; background: #fff; }
+  .conn.on { border-color: #cfd3b8; box-shadow: 0 0 0 3px #f3f4ea; }
+  .conn .top { display: flex; align-items: center; gap: 12px; }
+  .conn h4 { margin: 0; font-size: 15px; }
+  .conn .top .s { font-size: 12px; color: var(--muted); }
+  .pill { margin-left: auto; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 3px 9px; background: #f0efec; color: var(--soft); display: flex; align-items: center; gap: 6px; flex: none; }
+  .pill.ok { background: #e9f3ec; color: var(--ok); }
+  .conn p { margin: 0; color: var(--soft); font-size: 13px; line-height: 1.55; }
+  .conn .foot { display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap; }
+  .soon .conn { background: #fcfcfb; }
+  .soon .conn > * { opacity: .6; }
+  .wz-steps { display: flex; gap: 6px; margin: 16px 0 18px; }
+  .wz-steps span { flex: 1; height: 3px; border-radius: 3px; background: #e6e3da; }
+  .wz-steps span.done { background: var(--olive); }
+  .opt-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; cursor: pointer; }
+  .opt-row:hover { background: #fcfcfa; }
+  .opt-row.sel { border-color: var(--olive); background: #f6f7ef; }
+  .opt-row .sub { color: var(--muted); font-size: 12px; }
+  .perm { display: flex; gap: 10px; align-items: center; font-size: 13px; padding: 6px 0; }
+  .wz-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+  .draft { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--warn); font-weight: 500; }
+  .draft.sent { color: var(--ok); }
+  .draft .btn:not(.primary) { color: var(--text); }
+  /* tasks */
+  .tk { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
+  .tk-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding: 34px 32px 16px; }
+  .tk-head h1 { font-family: 'Inter Tight'; font-weight: 600; font-size: 30px; letter-spacing: -0.03em; margin: 0; line-height: 1.1; }
+  .crumb { color: var(--muted); font-size: 12.5px; margin-bottom: 5px; }
+  .tk-actions { display: flex; gap: 8px; align-items: center; }
+  .seg { display: flex; background: var(--hover); border-radius: 9px; padding: 3px; gap: 2px; }
+  .seg button { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 7px; font-size: 13px; color: var(--soft); }
+  .seg button.on { background: #fff; color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .live-tg { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--soft); border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px 5px 10px; }
+  .live-tg:hover { background: var(--hover); }
+  .live-tg.off .pulse { animation: none; background: #c4c4c0; }
+  .ag-strip { display: flex; gap: 10px; padding: 0 32px 14px; overflow-x: auto; flex: none; }
+  .ag { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; text-align: left; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-width: 260px; flex: 1; background: #fff; }
+  .ag:hover { border-color: #d8d8d4; }
+  .ag.working { background: linear-gradient(180deg, #fffaf6, #fff); border-color: #f0dcd2; }
+  .ag.on { border-color: var(--olive); box-shadow: 0 0 0 3px #eef0e3; }
+  .ag.dim { opacity: .5; }
+  .avw { position: relative; width: 34px; height: 34px; }
+  .avw .av { width: 34px; height: 34px; font-size: 15px; }
+  .avw .dot { position: absolute; right: -2px; bottom: -2px; width: 12px; height: 12px; border: 2px solid #fff; box-shadow: none; }
+  .ag-tx { min-width: 0; }
+  .ag-n { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ag-s { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .ag-s [data-open-task] { color: var(--soft); cursor: pointer; }
+  .ag-s [data-open-task]:hover { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+  .ag-s b { font-weight: 600; }
+  .ag-r { text-align: right; font-size: 11.5px; color: var(--muted); line-height: 1.5; white-space: nowrap; }
+  .ag-r .elapsed { width: auto; display: block; color: var(--claude); font-weight: 600; }
+  .ag-humans { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; flex: none; font-size: 12px; color: var(--muted); }
+  .ag-humans .stack { display: flex; }
+  .ag-humans .stack button { margin-left: -6px; border-radius: 50%; box-shadow: 0 0 0 2px #fff; }
+  .ag-humans .stack button:first-child { margin-left: 0; }
+  .ag-humans .stack button.on { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--olive); position: relative; }
+  .tk-tools { display: flex; align-items: center; gap: 10px; padding: 0 32px 14px; border-bottom: 1px solid var(--line); flex: none; }
+  .srch { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 9px; padding: 0 10px; height: 32px; width: 260px; color: var(--muted); }
+  .srch:focus-within { border-color: #c9c9c4; }
+  .srch input { border: 0; outline: 0; flex: 1; min-width: 0; font-size: 13px; }
+  .srch kbd { font: 11px Inter; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+  select.sel { height: 32px; border: 1px solid var(--line); border-radius: 9px; padding: 0 8px; font: inherit; font-size: 13px; background: #fff; color: var(--soft); }
+  .fchip { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px 0 10px; border-radius: 999px; background: #eef0e3; color: var(--olive-dark); font-size: 12.5px; font-weight: 500; }
+  .fchip button { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; }
+  .fchip button:hover { background: rgba(0,0,0,.06); }
+  .tk-count { margin-left: auto; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .tk-body { flex: 1; min-height: 0; overflow: auto; }
+  .board { display: flex; gap: 12px; padding: 16px 32px 20px; height: 100%; min-width: min-content; }
+  .col { flex: 1 1 0; min-width: 248px; max-width: 340px; display: flex; flex-direction: column; background: #f7f7f5; border-radius: 14px; min-height: 0; border: 1.5px solid transparent; transition: background .12s, border-color .12s; }
+  .col.over { border-color: var(--olive); background: #f2f3ea; }
+  .col-h { display: flex; align-items: center; gap: 8px; padding: 12px 10px 8px 14px; font-weight: 600; font-size: 13px; }
+  .col-h .n { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .col-h .n.over { color: var(--err); font-weight: 600; }
+  .col-h .icon-btn { margin-left: auto; width: 26px; height: 26px; }
+  .col-b { flex: 1; overflow-y: auto; padding: 2px 8px 10px; display: flex; flex-direction: column; gap: 8px; }
+  .col-empty { border: 1.5px dashed #e0dfda; border-radius: 10px; padding: 22px 12px; text-align: center; color: var(--muted); font-size: 12px; }
+  .tcard { background: #fff; border: 1px solid #e8e8e5; border-radius: 10px; padding: 10px 12px; cursor: grab; box-shadow: 0 1px 2px rgba(0,0,0,.03); flex: none; }
+  .tcard:hover { border-color: #d4d4cf; box-shadow: 0 3px 10px rgba(0,0,0,.05); }
+  .tcard.drag { opacity: .35; }
+  .tcard.run { border-color: #f0d3c6; box-shadow: 0 0 0 3px #fcf1ec; }
+  .tcard.sel { border-color: var(--olive); }
+  .tcard.done .tc-title { color: var(--soft); }
+  .tc-top { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); margin-bottom: 6px; }
+  .tc-top .tid { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .tc-top .sp { flex: 1; }
+  .tc-title { font-size: 13px; font-weight: 500; line-height: 1.42; }
+  .tc-live { display: flex; align-items: center; gap: 8px; margin-top: 9px; font-size: 11.5px; color: var(--soft); background: #fbf5f1; border-radius: 7px; padding: 5px 8px; }
+  .tc-live .stp { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
+  .tc-live .elapsed { width: auto; font-size: 11.5px; }
+  .tc-prog { display: flex; gap: 3px; margin-top: 7px; }
+  .tc-prog i { flex: 1; height: 3px; border-radius: 3px; background: #f0e3db; }
+  .tc-prog i.d { background: var(--claude); }
+  .tc-prog i.c { background: linear-gradient(90deg, var(--claude) 50%, #f0e3db 50%); background-size: 200% 100%; animation: fillp 1.4s linear infinite; }
+  @keyframes fillp { from { background-position: 100% 0; } to { background-position: 0 0; } }
+  .tc-note { display: flex; align-items: center; gap: 6px; margin-top: 9px; font-size: 11.5px; font-weight: 500; border-radius: 7px; padding: 5px 8px; }
+  .tc-note.blk { background: #f3f2ee; color: var(--soft); }
+  .tc-note.err { background: #f9e9ef; color: var(--err); }
+  .tc-note.rev { background: #faf3e3; color: #8a5d0c; justify-content: space-between; }
+  .tc-note.rev .btn.sm { padding: 2px 8px; font-size: 11.5px; }
+  .tc-note.hum { background: #f1f1f7; color: #4b4f8f; }
+  .tc-foot { display: flex; align-items: center; gap: 6px; margin-top: 9px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+  .tc-foot .m { display: flex; align-items: center; gap: 3px; }
+  .lbl { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--soft); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px 1px 6px; background: #fff; }
+  .lbl i { width: 6px; height: 6px; border-radius: 50%; }
+  .av-none { display: inline-block; border-radius: 50%; border: 1.5px dashed #c4c3bd; flex: none; }
+  /* list */
+  .tlist { padding: 4px 32px 32px; min-width: 900px; }
+  .tl-grp { display: flex; align-items: center; gap: 8px; padding: 18px 8px 8px; font-weight: 600; font-size: 13px; position: sticky; top: 0; background: #fff; z-index: 1; }
+  .tl-grp .n { color: var(--muted); font-weight: 500; }
+  .tl-row { display: grid; grid-template-columns: 18px 58px minmax(0, 1fr) 200px 210px 96px; gap: 12px; align-items: center; padding: 8px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+  .tl-row:hover { background: var(--hover); }
+  .tl-row .id { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .tl-row .ttl { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .tl-row .ttl > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tl-row .who { display: flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl-row .st { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl-row .st.run { color: var(--claude); font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+  .tl-row .pr { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--soft); }
+  /* workload */
+  .wl { padding: 8px 32px 32px; min-width: 980px; }
+  .wl-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 0 4px; }
+  .wl-top .sub { color: var(--muted); font-size: 12.5px; }
+  .wl-row { display: grid; grid-template-columns: 320px 1fr; gap: 28px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+  .wl-who { display: flex; gap: 12px; align-items: flex-start; }
+  .wl-who .avw, .wl-who .avw .av { width: 40px; height: 40px; }
+  .wl-who h4 { margin: 0; font-size: 14px; }
+  .wl-who .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .wl-stats { display: grid; grid-template-columns: repeat(4, auto); gap: 4px 16px; margin-top: 12px; font-size: 11.5px; color: var(--muted); justify-content: start; }
+  .wl-stats b { display: block; color: var(--text); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .wl-cur { display: flex; align-items: center; gap: 10px; border: 1px solid #f0d3c6; background: #fffaf7; border-radius: 10px; padding: 8px 12px; font-size: 13px; cursor: pointer; margin-bottom: 10px; }
+  .wl-cur:hover { border-color: #e8bfae; }
+  .wl-cur .t { flex: 1; min-width: 0; }
+  .wl-cur .t div { color: var(--muted); font-size: 11.5px; font-family: ui-monospace, Menlo, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+  .wl-idle { border: 1px dashed #dcdbd5; border-radius: 10px; padding: 9px 12px; font-size: 12.5px; color: var(--muted); margin-bottom: 10px; display: flex; gap: 8px; align-items: center; }
+  .wl-idle.off { background: #f7f6f3; }
+  .lane { position: relative; height: 30px; background: #f5f5f3; border-radius: 8px; }
+  .lane .blk { position: absolute; top: 5px; bottom: 5px; border-radius: 4px; min-width: 4px; box-shadow: 0 0 0 1px #f5f5f3; }
+  .lane .blk:hover { filter: brightness(1.08); top: 3px; bottom: 3px; }
+  .lane .blk.run { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.28) 0 5px, transparent 5px 10px); background-size: 14px 14px; animation: stripes .8s linear infinite; }
+  @keyframes stripes { to { background-position: 14px 0; } }
+  .lane .offz { position: absolute; top: 0; bottom: 0; right: 0; border-radius: 0 8px 8px 0; background: repeating-linear-gradient(135deg, transparent 0 5px, rgba(0,0,0,.07) 5px 6px); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--muted); }
+  .lane .now { position: absolute; right: -1px; top: -5px; bottom: -5px; width: 2px; background: var(--text); border-radius: 2px; }
+  .axis { position: relative; height: 18px; font-size: 11px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  .wl-q { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+  .wl-q .h { font-size: 11.5px; color: var(--muted); margin-right: 2px; }
+  .qchip { font-size: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; display: flex; gap: 6px; align-items: center; cursor: pointer; max-width: 280px; background: #fff; }
+  .qchip:hover { border-color: #d4d4cf; }
+  .qchip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .qchip .k { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; overflow: visible !important; }
+  /* drawer */
+  .drawer-bg { position: absolute; inset: 0; background: rgba(20,20,18,.16); display: none; z-index: 15; }
+  .drawer-bg.on { display: block; }
+  .drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 560px; max-width: 100%; background: #fff; border-left: 1px solid var(--line); box-shadow: -12px 0 40px rgba(0,0,0,.08); display: flex; flex-direction: column; animation: slidein .18s ease-out; }
+  @keyframes slidein { from { transform: translateX(28px); opacity: .5; } }
+  .dr-top { display: flex; align-items: center; gap: 8px; padding: 12px 14px 12px 22px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--muted); flex: none; }
+  .dr-top .sp { flex: 1; }
+  .dr-body { flex: 1; overflow-y: auto; padding: 22px 24px 28px; }
+  .dr-body h2 { font-size: 20px; letter-spacing: -0.02em; margin: 0 0 18px; line-height: 1.3; }
+  .props { display: grid; grid-template-columns: 104px 1fr; gap: 4px 12px; align-items: center; font-size: 13px; margin: 0 0 18px; }
+  .props dt { color: var(--muted); }
+  .props dd { margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 30px; }
+  .props select { border: 1px solid transparent; background: transparent; border-radius: 7px; padding: 4px 6px; font: inherit; font-size: 13px; margin-left: -7px; cursor: pointer; color: var(--text); }
+  .props select:hover { border-color: var(--line); background: var(--hover); }
+  .dsec { margin: 24px 0 10px; font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; display: flex; align-items: center; gap: 8px; }
+  .dsec .r { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .desc { font-size: 13.5px; line-height: 1.6; color: #2c2c2a; }
+  .desc p { margin: 0 0 8px; }
+  .runbox { border: 1px solid #f0d3c6; border-radius: 12px; overflow: hidden; }
+  .runbox-h { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #fdf6f2; font-size: 12.5px; flex-wrap: wrap; }
+  .runbox-h .sp { flex: 1; }
+  .runbox-h .elapsed { width: auto; font-weight: 600; color: var(--claude); }
+  .runlog { background: var(--code-bg); color: #cfccc2; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; padding: 10px 14px; line-height: 1.8; max-height: 220px; overflow-y: auto; }
+  .runlog div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .runlog .ok { color: #9cc78a; }
+  .runlog .cur { color: #f2b8a0; }
+  .runlog .tm { color: #6f6e69; margin-right: 8px; }
+  .runlog .tn { color: #e8e6df; font-weight: 600; margin-right: 6px; }
+  .revbox { border: 1px solid #ecdcb5; background: #fffbf1; border-radius: 12px; padding: 14px 16px; }
+  .revbox .h { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #8a5d0c; }
+  .revbox .out { background: #fff; border: 1px solid #efe8d6; border-radius: 10px; padding: 10px 12px; margin: 10px 0 12px; font-size: 13px; line-height: 1.55; }
+  .revbox .out p { margin: 0; }
+  .banner { display: flex; gap: 10px; align-items: center; border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+  .banner .sp { flex: 1; }
+  .banner.blk { background: #f4f3ef; color: var(--soft); }
+  .banner.err { background: #f9e9ef; color: var(--err); }
+  .banner.hum { background: #f1f1f7; color: #4b4f8f; }
+  .subs label { display: flex; gap: 10px; align-items: center; font-weight: 400; margin: 0; padding: 5px 0; font-size: 13px; cursor: pointer; }
+  .subs label.dn span { color: var(--muted); text-decoration: line-through; }
+  .subs input { accent-color: var(--olive); width: 15px; height: 15px; }
+  .runs td, .runs th { padding: 7px 8px; font-size: 12.5px; }
+  .runs td:first-child { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .act { list-style: none; padding: 0; margin: 0; }
+  .act li { display: flex; gap: 10px; padding: 6px 0; font-size: 13px; align-items: flex-start; line-height: 1.45; }
+  .act li > .av, .act li > .avw { width: 22px; height: 22px; font-size: 11px; margin-top: 1px; }
+  .act .bd { flex: 1; min-width: 0; color: var(--soft); }
+  .act .bd b { color: var(--text); font-weight: 600; }
+  .act .cm { background: var(--bubble-agent); border-radius: 10px; padding: 8px 10px; margin-top: 4px; color: var(--text); }
+  .act .cm p { margin: 0; }
+  .act .t { color: var(--muted); font-size: 12px; flex: none; padding-left: 8px; }
+  .cmt { display: flex; gap: 8px; margin-top: 12px; }
+  .cmt input { flex: 1; height: 36px; border: 1px solid var(--line); border-radius: 9px; padding: 0 12px; outline: 0; font-size: 13px; }
+  .cmt input:focus { border-color: #c9c9c4; }
+  .nt-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+  .nt-grid label { font-size: 12px; color: var(--muted); font-weight: 500; margin: 0; }
+  .nt-grid select { width: 100%; height: 36px; margin-top: 5px; border: 1px solid #d9d9d9; border-radius: 8px; padding: 0 8px; font: inherit; font-size: 13px; background: #fff; }
+  .nt-chk { display: flex; gap: 8px; align-items: center; font-weight: 400; font-size: 13px; margin: 14px 0 0; color: var(--soft); }
+  .nt-chk input { accent-color: var(--olive); }
+  .toast { position: absolute; left: 50%; bottom: 24px; transform: translate(-50%, 20px); background: #1f2023; color: #f2f0ea; font-size: 13px; padding: 10px 14px; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.25); display: flex; align-items: center; gap: 10px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 40; max-width: 560px; }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+  .toast .av { width: 22px; height: 22px; }
+  .toast b { font-weight: 600; }
+  .toast .lnk { color: #c9d39a; font-weight: 600; cursor: pointer; margin-left: 6px; white-space: nowrap; }
+  .switcher { position: fixed; left: 50%; transform: translateX(-50%); top: 22px; z-index: 50; display: flex; gap: 4px; background: rgba(30,30,28,.85); padding: 5px; border-radius: 10px; }
+  .switcher button { color: #ddd; font-size: 12px; padding: 5px 10px; border-radius: 6px; }
+  .switcher button.on { background: #fff; color: #111; }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="traffic"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+
+  <!-- LOGIN -->
+  <section class="screen" id="login">
+    <div class="hero">
+      <svg viewBox="0 0 700 900" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5d7ea6"/><stop offset=".55" stop-color="#b9c6cf"/><stop offset="1" stop-color="#e9dcc4"/></linearGradient>
+          <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fa7bb"/><stop offset="1" stop-color="#c9d3d6"/></linearGradient>
+        </defs>
+        <rect width="700" height="900" fill="url(#sky)"/>
+        <path d="M0 470 L120 400 L230 450 L340 380 L470 440 L560 400 L700 450 L700 520 L0 520Z" fill="#7d8ea6" opacity=".7"/>
+        <rect y="510" width="700" height="120" fill="url(#sea)"/>
+        <path d="M0 600 H700 V900 H0Z" fill="#e8dcc6"/>
+        <g fill="#efe5d2" stroke="#d4c4a8" stroke-width="2">
+          <rect x="40" y="250" width="260" height="380"/><rect x="300" y="180" width="320" height="450"/>
+          <rect x="0" y="630" width="700" height="270"/>
+        </g>
+        <path d="M290 180 L460 120 L630 180Z" fill="#b5553a"/>
+        <g fill="#c9b89a"><rect x="80" y="320" width="80" height="100" rx="4"/><rect x="350" y="250" width="110" height="120" rx="4"/><rect x="490" y="420" width="90" height="140" rx="45"/><rect x="60" y="700" width="160" height="120"/><rect x="420" y="700" width="200" height="130"/></g>
+        <g fill="#8a5a3c"><rect x="380" y="320" width="50" height="50"/><rect x="100" y="760" width="16" height="50"/><rect x="470" y="770" width="16" height="50"/></g>
+        <g fill="#6f7c4a"><circle cx="300" cy="170" r="40"/><circle cx="270" cy="200" r="30"/><circle cx="640" cy="640" r="44"/><circle cx="30" cy="640" r="36"/><circle cx="250" cy="600" r="26"/><ellipse cx="560" cy="880" rx="60" ry="30"/></g>
+        <g fill="#a95f3c"><rect x="280" y="205" width="24" height="26" rx="4"/><rect x="236" y="616" width="28" height="30" rx="5"/></g>
+      </svg>
+      <div class="brand"><svg width="16" height="16" viewBox="0 0 24 24"><g fill="#fff"><ellipse cx="12" cy="6" rx="3.2" ry="5"/><ellipse cx="12" cy="18" rx="3.2" ry="5"/><ellipse cx="6" cy="12" rx="5" ry="3.2"/><ellipse cx="18" cy="12" rx="5" ry="3.2"/></g></svg>Agent</div>
+    </div>
+    <div class="login-side">
+      <div class="login-box">
+        <h1>Welcome back,<br/>khanhpv.</h1>
+        <a href="#" class="notyou">Not you?</a>
+        <div class="card">
+          <div class="card-body">
+            <div class="sso">
+              <button title="Apple"><svg width="18" height="18" viewBox="0 0 24 24"><path fill="#111" d="M16.4 12.6c0-2.5 2-3.7 2.1-3.8-1.2-1.7-3-1.9-3.6-2-1.5-.2-3 .9-3.8.9-.8 0-2-.9-3.3-.9-1.7 0-3.3 1-4.1 2.5-1.8 3.1-.5 7.6 1.3 10.1.8 1.2 1.8 2.6 3.1 2.5 1.3-.1 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.4-1-2.4-4.1zM14 5.2c.7-.8 1.2-2 1-3.2-1 0-2.2.7-3 1.5-.6.7-1.2 1.9-1 3.1 1.1.1 2.3-.6 3-1.4z"/></svg></button>
+              <button title="Google"><svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.6 12.2c0-.8-.1-1.5-.2-2.2H12v4.2h5.9c-.3 1.4-1 2.5-2.2 3.3v2.7h3.6c2.1-1.9 3.3-4.7 3.3-8z"/><path fill="#34A853" d="M12 23c3 0 5.5-1 7.3-2.7l-3.6-2.7c-1 .7-2.2 1.1-3.7 1.1-2.9 0-5.3-1.9-6.2-4.5H2.1v2.8C3.9 20.6 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.8 14.2c-.2-.7-.4-1.4-.4-2.2s.1-1.5.4-2.2V7H2.1C1.4 8.5 1 10.2 1 12s.4 3.5 1.1 5l3.7-2.8z"/><path fill="#EA4335" d="M12 5.4c1.6 0 3.1.6 4.2 1.6l3.2-3.2C17.5 2 15 1 12 1 7.7 1 3.9 3.4 2.1 7l3.7 2.8C6.7 7.2 9.1 5.4 12 5.4z"/></svg></button>
+              <button title="Microsoft"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="#F25022" d="M1 1h10v10H1z"/><path fill="#7FBA00" d="M13 1h10v10H13z"/><path fill="#00A4EF" d="M1 13h10v10H1z"/><path fill="#FFB900" d="M13 13h10v10H13z"/></svg></button>
+            </div>
+            <div class="or">or</div>
+            <label for="email">Email address</label>
+            <input id="email" class="field" placeholder="Enter your email address" value="" />
+            <button class="btn-olive" onclick="go('onboard')">Continue&nbsp;&nbsp;›</button>
+          </div>
+          <div class="card-foot">Don't have an account? <a href="#">Sign up</a></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ONBOARDING: connect computer -->
+  <section class="screen" id="onboard">
+    <div class="ob">
+      <div class="steps"><span class="done"></span><span class="done"></span><span class="done" id="st3"></span><span></span></div>
+      <h2>Connect this computer</h2>
+      <p class="lead">Agent chạy Claude Code ngay trên máy của bạn. Cài CLI để máy này nhận việc khi có người @mention agent trong room.</p>
+      <div class="cmd"><span style="color:#888">$</span><code>npx @agent/cli connect --workspace khanhpv</code><button title="Copy" onclick="this.innerHTML=ic('check')" data-i="copy"></button></div>
+      <ol>
+        <li>Mở Terminal và chạy lệnh trên.</li>
+        <li>Đăng nhập trong trình duyệt khi CLI hỏi.</li>
+        <li>Giữ CLI chạy nền, máy sẽ hiện <b>online</b> bên dưới.</li>
+      </ol>
+      <div class="status" id="obStatus"><div class="spinner"></div><span>Đang chờ máy kết nối…</span></div>
+      <button class="btn-olive" id="obNext" disabled onclick="go('app')">Tạo agent đầu tiên&nbsp;&nbsp;›</button>
+      <button class="skip" onclick="go('app')">Bỏ qua, làm sau</button>
+    </div>
+  </section>
+
+  <!-- APP -->
+  <section class="screen" id="app">
+    <nav class="rail">
+      <div class="logo"><svg width="22" height="22" viewBox="0 0 24 24"><g fill="#5f6a3a"><ellipse cx="12" cy="6" rx="3.2" ry="5"/><ellipse cx="12" cy="18" rx="3.2" ry="5"/><ellipse cx="6" cy="12" rx="5" ry="3.2"/><ellipse cx="18" cy="12" rx="5" ry="3.2"/></g><circle cx="12" cy="12" r="2.2" fill="#fafafa"/></svg></div>
+      <button class="ri" title="New message" data-i="pen"></button>
+      <button class="ri" title="Search" data-i="search"></button>
+      <hr/>
+      <button class="ri on" data-nav="dashboard" title="Dashboard" data-i="dash"></button>
+      <button class="ri" data-nav="tasks" title="Tasks" data-i="kanban"></button>
+      <button class="ri" data-nav="chat" title="Chat" data-i="chat"></button>
+      <button class="ri" data-nav="members" title="Members & Agents" data-i="users"></button>
+      <div class="spacer"></div>
+      <button class="ri" data-nav="connections" title="Connections" data-i="plug"></button>
+      <button class="ri" data-nav="computers" title="Computers" data-i="monitor"></button>
+      <button class="ri" data-nav="settings" title="Settings" data-i="sliders"></button>
+      <div class="me">k</div>
+    </nav>
+
+    <aside class="panel" id="panel"></aside>
+    <main class="main" id="main"></main>
+
+    <div class="modal-bg" id="modal" onclick="if(event.target===this)this.classList.remove('on')">
+      <div class="modal">
+        <h3>Connect a computer</h3>
+        <p>Chạy lệnh sau trên máy muốn kết nối. Máy sẽ xuất hiện trong danh sách khi CLI online.</p>
+        <div class="cmd"><span style="color:#888">$</span><code>npx @agent/cli connect --workspace khanhpv</code></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px"><button class="btn" onclick="modal.classList.remove('on')">Đóng</button></div>
+      </div>
+    </div>
+    <div class="modal-bg" id="tkm" onclick="if(event.target===this)this.classList.remove('on')"><div class="modal"></div></div>
+    <div class="toast" id="toast"></div>
+    <div class="modal-bg" id="wz" onclick="if(event.target===this)this.classList.remove('on')"><div class="modal"></div></div>
+  </section>
+</div>
+
+<div class="switcher">
+  <button data-go="login">Login</button><button data-go="onboard">Onboarding</button><button data-go="app" class="on">App</button>
+</div>
+
+<script>
+/* ---------- icons (lucide paths) ---------- */
+const P = {
+  pen: '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a1 1 0 0 1 3 3l-9 9a2 2 0 0 1-.9.5l-2.9.8a.5.5 0 0 1-.6-.6l.8-2.9a2 2 0 0 1 .5-.9z"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>',
+  sliders: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"/>',
+  plus: '<path d="M5 12h14M12 5v14"/>',
+  chev: '<path d="m6 9 6 6 6-6"/>',
+  sparkles: '<path d="M9.9 15.5a2 2 0 0 0-1.4-1.4l-6.1-1.6a.5.5 0 0 1 0-1l6.1-1.6a2 2 0 0 0 1.4-1.4l1.6-6.1a.5.5 0 0 1 1 0l1.6 6.1a2 2 0 0 0 1.4 1.4l6.1 1.6a.5.5 0 0 1 0 1l-6.1 1.6a2 2 0 0 0-1.4 1.4l-1.6 6.1a.5.5 0 0 1-1 0z"/>',
+  lock: '<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  hourglass: '<path d="M5 22h14M5 2h14M17 22v-4.2a2 2 0 0 0-.6-1.4L12 12l-4.4 4.4a2 2 0 0 0-.6 1.4V22M7 2v4.2a2 2 0 0 0 .6 1.4L12 12l4.4-4.4a2 2 0 0 0 .6-1.4V2"/>',
+  mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/>',
+  send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+  more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  terminal: '<path d="m4 17 6-6-6-6M12 19h8"/>',
+  file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  dash: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+  plug: '<path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  arrow: '<path d="M5 12h14M12 5l7 7-7 7"/>',
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+  refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  table: '<path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M3 15h18"/>',
+  chart: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
+  kanban: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 7v7M12 7v4M16 7v9"/>',
+  list: '<path d="M3 12h.01M3 18h.01M3 6h.01M8 12h13M8 18h13M8 6h13"/>',
+  gantt: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 7h8M10 12h9M7 17h5"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/>',
+  stop: '<rect width="14" height="14" x="5" y="5" rx="2"/>',
+  play: '<path d="M6 3l14 9-14 9z"/>',
+};
+const ic = (n, s = 18) => `<svg class="i" style="width:${s}px;height:${s}px" viewBox="0 0 24 24">${P[n]}</svg>`;
+const hydrateIcons = (root = document) => root.querySelectorAll('[data-i]').forEach(el => { if (!el.innerHTML.trim()) el.innerHTML = ic(el.dataset.i); });
+
+/* agent avatar (original creature, not Kylon art) */
+const agentAv = (hue = 0) => `<svg viewBox="0 0 40 40" width="100%" height="100%"><rect width="40" height="40" fill="${['#d8f0ec','#f3e6d4','#e5e3f5'][hue]}"/><ellipse cx="20" cy="13" rx="9" ry="7" fill="${['#f4a6c7','#e9b46b','#a8a2e6'][hue]}"/><path d="M5 32c0-8 7-12 15-12s15 4 15 12v8H5z" fill="${['#1f6f7a','#7a5a1f','#3f3a8a'][hue]}"/><ellipse cx="14.5" cy="27" rx="4" ry="3.2" fill="#fff"/><ellipse cx="25.5" cy="27" rx="4" ry="3.2" fill="#fff"/><circle cx="15.5" cy="27.6" r="1.6" fill="#111"/><circle cx="26.5" cy="27.6" r="1.6" fill="#111"/></svg>`;
+
+/* ---------- mock data ---------- */
+const db = {
+  me: { id: 'u1', name: 'khanhpv', initial: 'k' },
+  humans: [
+    { id: 'u1', name: 'khanhpv', role: 'Owner', initial: 'k' },
+    { id: 'u2', name: 'Hằng', role: 'Member', initial: 'h', color: '#b0516f' },
+    { id: 'u3', name: 'Minh', role: 'Admin', initial: 'm', color: '#3d8a6a' },
+  ],
+  computers: [
+    { id: 'c1', name: 'khanhpv-MacBook-Pro', os: 'macOS 26.1 · arm64', status: 'online', hb: 2, cli: '0.14.2', keepAwake: true },
+    { id: 'c2', name: 'build-box', os: 'Ubuntu 24.04 · x64', status: 'offline', hb: 7240, cli: '0.13.9', keepAwake: false },
+  ],
+  agents: [
+    { id: 'a1', name: "khanhpv's Claude", hue: 0, computer: 'c1', status: 'idle', workdir: '~/.agent/agents/a1',
+      skills: ['browser-use','build-app','deploy-app','email-processor','web-research','website-migration','code-review','git-ops','pdf-reader','sheet-analyst','slack-digest','calendar','image-gen','summarize','translate','sql-query','test-writer','docs-writer','jira-sync','notion-sync','scraper','scheduler','memory'],
+      enabled: 18 },
+    { id: 'a2', name: 'Research Bot', hue: 1, computer: 'c1', status: 'idle', workdir: '~/.agent/agents/a2', skills: ['web-research','summarize','pdf-reader','translate'], enabled: 4 },
+    { id: 'a3', name: 'Deployer', hue: 2, computer: 'c2', status: 'offline', workdir: '/srv/agent/a3', skills: ['deploy-app','git-ops','build-app'], enabled: 3 },
+  ],
+  rooms: [
+    { id: 'dm-a1', kind: 'dm', agent: 'a1', name: "khanhpv's Claude", time: '23h' },
+    { id: 'all', kind: 'channel', icon: 'users', name: 'all-members', threads: [] },
+    { id: 'welcome', kind: 'channel', icon: 'sparkles', name: 'welcome-khanhpv', private: true, threads: [] },
+    { id: 'test', kind: 'channel', icon: 'hourglass', name: 'test', threads: [{ id: 't-hello', name: 'Hello', time: '23h', unread: 0 }] },
+  ],
+  messages: {
+    'dm-a1': [
+      { by: 'a1', md: 'Sáng nay có **3 email** cần chú ý, 2 pipeline GitLab failed và 1 MR chờ review.\n\nAnh/chị muốn em đào sâu cái nào: mở chi tiết email bảo mật, xem log pipeline failed, hay soạn trả lời cho MR trên GitLab?' },
+      { by: 'u1', md: '@Hằng hello' },
+      { by: 'a1', md: 'Hình như anh/chị đang muốn nhắc tới ai đó tên "Hằng", nhưng phòng này là DM riêng giữa anh/chị với em thôi. Không có thành viên nào tên Hằng ở đây, nên mention đó sẽ không tới được ai.\n\nNếu muốn nhắn cho Hằng, mình cần tạo một phòng chung có người đó, hoặc em gửi tin nhắn tới phòng khác giúp. Anh/chị muốn em làm cách nào?' },
+      { by: 'u1', md: 'lam sao de toi metion Agent khac' },
+      { by: 'a1', md: 'Để mention một Agent khác, điều kiện cốt lõi là: **Agent đó phải là thành viên cùng phòng với anh/chị.** Chỉ thành viên trong phòng mới nhận được mention.\n\nPhòng này là DM riêng (chỉ có anh/chị + em), nên không mention được ai khác ở đây. Hai cách làm:\n\n1. **Tạo một phòng chung** rồi thêm Agent đó vào, xong thì gõ `@` và chọn tên Agent từ danh sách gợi ý, nó sẽ được "đánh thức" để trả lời.\n2. Nếu anh/chị cho em biết **tên hoặc ID của Agent** muốn gọi, em tra trong workspace xem có Agent đó không, rồi tạo phòng và thêm vào giúp.\n\nAnh/chị muốn gọi Agent nào? Cho em tên là em lo phần còn lại.' },
+    ],
+    't-hello': [
+      { by: 'u1', md: 'Hello @Research Bot' },
+      { by: 'a2', md: 'Chào khanhpv! Research Bot đã sẵn sàng. Gửi em một chủ đề, em sẽ tìm và tóm tắt nguồn cho anh/chị.' },
+    ],
+  },
+};
+const findAgent = id => db.agents.find(a => a.id === id);
+const findHuman = id => db.humans.find(h => h.id === id);
+
+/* channel logos (simplified marks, for the mockup only) */
+const LOGO = {
+  zalo: `<svg viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#0068ff"/><path d="M13 13h22a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H23l-8 5v-5h-2a5 5 0 0 1-5-5V18a5 5 0 0 1 5-5z" fill="#fff"/><text x="24" y="27" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-weight="700" font-size="9.5" fill="#0068ff">Zalo</text></svg>`,
+  facebook: `<svg viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#1877f2"/><path d="M26.6 39V26.4h4.2l.6-4.9h-4.8v-3.1c0-1.4.4-2.4 2.4-2.4h2.6v-4.4c-.4-.1-2-.2-3.8-.2-3.7 0-6.3 2.3-6.3 6.5v3.6h-4.2v4.9h4.2V39z" fill="#fff"/></svg>`,
+  gmail: `<svg viewBox="0 0 48 48"><rect x=".5" y=".5" width="47" height="47" rx="11.5" fill="#fff" stroke="#e6e6e6"/><path d="M11 17.5V34h5.5V22.6L24 28.2l7.5-5.6V34H37V17.5L34 15l-10 7.5L14 15z" fill="#ea4335"/><path d="M11 17.5V34h5.5V22.6z" fill="#4285f4"/><path d="M31.5 22.6V34H37V17.5z" fill="#34a853"/><path d="M37 17.5 34 15l-2.5 1.9v5.7z" fill="#fbbc04"/><path d="M11 17.5l3-2.5 2.5 1.9v5.7z" fill="#c5221f"/></svg>`,
+};
+const letterLogo = (bg, fg, t) => `<svg viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="${bg}"/><text x="24" y="31" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-weight="700" font-size="${t.length > 1 ? 15 : 20}" fill="${fg}">${t}</text></svg>`;
+
+db.connections = [
+  { id: 'zalo', name: 'Zalo OA', short: 'Zalo', color: '#0068ff', status: 'off', room: 'zalo-inbox',
+    desc: 'Nhận tin nhắn gửi tới Official Account. Agent đọc, soạn trả lời và gửi lại khách trên Zalo.',
+    caps: ['Tin nhắn OA', 'Trả lời khách', 'Người quan tâm'],
+    perms: ['Đọc tin nhắn gửi tới Official Account', 'Gửi tin nhắn trả lời thay OA', 'Xem tên và ảnh đại diện người quan tâm'],
+    accountLabel: 'Official Account', accounts: [{ name: 'Holatech OA', sub: '1.240 người quan tâm' }, { name: 'Hola Shop', sub: '386 người quan tâm' }],
+    sample: { from: 'Nguyễn Lan', text: 'Shop ơi áo polo size M còn màu trắng không ạ? Ship về Đà Nẵng mất mấy ngày?', reply: 'Dạ chào chị Lan, áo polo size M màu trắng bên em **còn 6 chiếc** ạ. Ship về Đà Nẵng khoảng **2–3 ngày**, đơn từ 300k được miễn phí ship. Chị muốn em giữ hàng luôn không ạ?' } },
+  { id: 'facebook', name: 'Facebook Messenger', short: 'Facebook', color: '#1877f2', status: 'off', room: 'facebook-inbox',
+    desc: 'Nối Fanpage để agent xử lý inbox Messenger và comment dưới bài viết.',
+    caps: ['Messenger', 'Comment', 'Trả lời khách'],
+    perms: ['Đọc tin nhắn Messenger của Page', 'Trả lời tin nhắn và comment', 'Xem thông tin công khai của Page'],
+    accountLabel: 'Fanpage', accounts: [{ name: 'Holatech', sub: 'Page · 5,2K người theo dõi' }, { name: 'Hola Shop', sub: 'Page · 820 người theo dõi' }],
+    sample: { from: 'Trần Huy', text: 'Cho mình hỏi gói Pro giá bao nhiêu, có dùng thử không?', reply: 'Chào anh Huy, gói Pro là **$20/tháng** và có **14 ngày dùng thử miễn phí**, không cần thẻ. Em gửi anh link đăng ký nhé?' } },
+  { id: 'gmail', name: 'Gmail', short: 'Google', color: '#ea4335', status: 'off', room: 'gmail-inbox',
+    desc: 'Agent đọc email mới, tóm tắt, gắn nhãn và soạn nháp trả lời. Chỉ gửi khi bạn cho phép.',
+    caps: ['Đọc email', 'Soạn nháp', 'Gửi', 'Nhãn'],
+    perms: ['Đọc email trong hộp thư đến', 'Tạo bản nháp trả lời', 'Gửi email khi bạn cho phép', 'Thêm và gỡ nhãn'],
+    accountLabel: 'hộp thư', accounts: [{ name: 'khanhpv@holatech.tech', sub: 'Google Workspace' }],
+    sample: { from: 'Phòng kế toán', text: '**Re: Hoá đơn tháng 9**\nAnh gửi giúp em bản xác nhận thanh toán AWS tháng 9 trước thứ Sáu nhé.', reply: 'Em đã tìm thấy email hoá đơn AWS tháng 9 (**$412,80**) và soạn nháp trả lời kèm file PDF. Anh xem rồi bấm gửi giúp em.' } },
+];
+const SOON = [
+  ['Telegram', 'Bot nhận tin trong group và chat riêng', letterLogo('#29a9eb', '#fff', 'T')],
+  ['Slack', 'Đồng bộ channel giữa Slack và room', letterLogo('#4a154b', '#fff', 'S')],
+  ['Google Calendar', 'Agent xếp lịch và nhắc họp', letterLogo('#1a73e8', '#fff', '31')],
+  ['Notion', 'Đọc và cập nhật trang, database', letterLogo('#191919', '#fff', 'N')],
+  ['Instagram', 'Trả lời DM và comment', letterLogo('#d62976', '#fff', 'Ig')],
+  ['Webhook', 'Đẩy sự kiện bất kỳ vào room', letterLogo('#efede6', '#5c5c58', '{}')],
+];
+
+/* ---------- tiny markdown ---------- */
+const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function inline(s) {
+  s = esc(s);
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  const names = [...db.agents.map(a => a.name), ...db.humans.map(h => h.name)].sort((a, b) => b.length - a.length);
+  for (const n of names) s = s.split('@' + esc(n)).join(`<span class="mention">@${esc(n)}</span>`);
+  return s;
+}
+function md(src) {
+  const out = []; const lines = src.split('\n'); let i = 0;
+  while (i < lines.length) {
+    const l = lines[i];
+    if (l.startsWith('```')) { const buf = []; i++; while (i < lines.length && !lines[i].startsWith('```')) buf.push(lines[i++]); i++; out.push(`<pre><code>${esc(buf.join('\n'))}</code></pre>`); continue; }
+    if (/^\d+\. /.test(l)) { const buf = []; while (i < lines.length && /^\d+\. /.test(lines[i])) buf.push(`<li>${inline(lines[i++].replace(/^\d+\. /, ''))}</li>`); out.push(`<ol>${buf.join('')}</ol>`); continue; }
+    if (/^- /.test(l)) { const buf = []; while (i < lines.length && /^- /.test(lines[i])) buf.push(`<li>${inline(lines[i++].slice(2))}</li>`); out.push(`<ul>${buf.join('')}</ul>`); continue; }
+    if (l.trim()) { const buf = []; while (i < lines.length && lines[i].trim() && !/^(\d+\. |- |```)/.test(lines[i])) buf.push(inline(lines[i++])); out.push(`<p>${buf.join('<br/>')}</p>`); continue; }
+    i++;
+  }
+  return out.join('');
+}
+
+/* ---------- state ---------- */
+const state = { screen: 'app', nav: 'dashboard', tab: 'Home', open: null, closed: new Set(), agentTab: 'Overview' };
+const panel = document.getElementById('panel');
+const main = document.getElementById('main');
+const modal = document.getElementById('modal');
+
+function go(screen) {
+  state.screen = screen;
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === screen));
+  document.querySelectorAll('.switcher button').forEach(b => b.classList.toggle('on', b.dataset.go === screen));
+  if (screen === 'onboard') runOnboarding();
+  if (screen === 'app') render();
+}
+
+function runOnboarding() {
+  const st = document.getElementById('obStatus'); const next = document.getElementById('obNext');
+  st.innerHTML = '<div class="spinner"></div><span>Đang chờ máy kết nối…</span>'; next.disabled = true;
+  setTimeout(() => {
+    st.innerHTML = `<span class="dot on"></span><div><b>khanhpv-MacBook-Pro</b> đã kết nối<div style="color:var(--muted);font-size:12px">macOS 26.1 · CLI 0.14.2 · heartbeat 1s trước</div></div>`;
+    next.disabled = false;
+  }, 2600);
+}
+
+/* ---------- panel ---------- */
+function renderPanel() {
+  if (state.nav === 'chat') {
+    const dmRooms = db.rooms.filter(r => r.kind === 'dm');
+    const chans = db.rooms.filter(r => r.kind === 'channel');
+    const sec = (id, icon, title, body, extra = '') => {
+      const closed = state.closed.has(id);
+      return `<div class="sec ${closed ? 'closed' : ''}" data-sec="${id}"><svg class="i chev" viewBox="0 0 24 24">${P.chev}</svg>${ic(icon, 16)}<span>${title}</span>${extra}</div>${closed ? '' : body}`;
+    };
+    const lastPrev = id => { const m = (db.messages[id] || []).at(-1); return m ? m.md.replace(/\*\*|`/g, '').split('\n')[0] : ''; };
+    let html = `<div class="panel-head"><h3>Chat</h3><button class="icon-btn" title="New">${ic('plus')}</button></div>
+      <div class="tabs">${['Home', 'Recent', 'Unread', '@me'].map(t => `<button class="${t === state.tab ? 'on' : ''}" data-tab="${t}">${t}</button>`).join('')}</div><div class="panel-body">`;
+    html += sec('dm', 'user', 'Direct messages', dmRooms.map(r => {
+      const a = findAgent(r.agent);
+      return `<div class="item ${state.open === r.id ? 'on' : ''}" data-open="${r.id}"><div class="av">${agentAv(a.hue)}</div><div class="meta"><div class="row"><span class="name">${a.name}</span><span class="time">${r.time}</span></div><div class="prev">${esc(lastPrev(r.id))}</div></div></div>`;
+    }).join(''));
+    for (const c of chans) {
+      const body = c.threads.length ? c.threads.map(t => `<div class="item ${state.open === t.id ? 'on' : ''}" data-open="${t.id}"><div class="av human" style="${(c => c ? 'background:' + c.color : '')(db.connections.find(x => 't-' + x.id === t.id))}">${t.name[0].toUpperCase()}</div><div class="meta"><div class="row"><span class="name">${t.name}</span><span class="time">${t.time}</span></div><div class="prev">${esc(lastPrev(t.id))}</div></div></div>`).join('')
+        : `<div class="empty-line">No participating threads yet.</div>`;
+      html += sec(c.id, c.icon, c.name, body, c.private ? `<span style="color:var(--muted);display:flex">${ic('lock', 13)}</span>` : '');
+    }
+    panel.innerHTML = html + '</div>';
+  } else if (state.nav === 'members') {
+    const row = (id, av, name, sub, dot) => `<div class="item ${state.open === id ? 'on' : ''}" data-open="${id}"><div class="av ${av.cls || ''}" style="${av.style || ''}">${av.html}</div><div class="meta"><div class="row"><span class="name">${name}</span>${dot}</div><div class="prev">${sub}</div></div></div>`;
+    const st = s => `<span class="dot ${s === 'online' || s === 'idle' ? 'on' : s === 'working' ? 'busy' : 'off'}" style="margin-top:6px"></span>`;
+    panel.innerHTML = `<div class="panel-head"><h3>People & Agents</h3><button class="icon-btn" title="Invite">${ic('plus')}</button></div><div class="panel-body">
+      <div class="sec">${ic('sparkles', 16)}<span>Agents</span></div>
+      ${db.agents.map(a => row('agent:' + a.id, { html: agentAv(a.hue) }, a.name, `${db.computers.find(c => c.id === a.computer).name} · ${a.enabled} skills`, st(a.status))).join('')}
+      <div class="sec" style="margin-top:8px">${ic('users', 16)}<span>Members</span></div>
+      ${db.humans.map(h => row('human:' + h.id, { cls: 'human', style: h.color ? `background:${h.color}` : '', html: h.initial }, h.name, h.role, '')).join('')}
+    </div>`;
+  } else if (state.nav === 'computers') {
+    panel.innerHTML = `<div class="panel-head"><h3>Computers</h3><button class="icon-btn" title="Connect" onclick="modal.classList.add('on')">${ic('plus')}</button></div><div class="panel-body">
+      ${db.computers.map(c => `<div class="item ${state.open === 'pc:' + c.id ? 'on' : ''}" data-open="pc:${c.id}"><div class="av" style="background:#f0efe9;color:#555">${ic('monitor', 20)}</div><div class="meta"><div class="row"><span class="name">${c.name}</span><span class="dot ${c.status === 'online' ? 'on' : 'off'}" style="margin-top:6px"></span></div><div class="prev">${c.os}</div></div></div>`).join('')}
+    </div>`;
+  } else {
+    const items = ['Profile', 'Members', 'Notifications', 'Billing', 'Desktop'];
+    panel.innerHTML = `<div class="panel-head"><h3>Settings</h3></div><div class="panel-body">${items.map(n => `<div class="item ${state.open === 'set:' + n ? 'on' : ''}" data-open="set:${n}" style="align-items:center"><div class="meta"><span class="name" style="font-weight:500">${n}</span></div></div>`).join('')}</div>`;
+  }
+}
+
+/* ---------- main ---------- */
+const emptyArt = `<svg width="220" height="200" viewBox="0 0 220 200"><defs><radialGradient id="v" cx=".5" cy=".5" r=".5"><stop offset=".7" stop-color="#000"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient><mask id="m"><rect width="220" height="200" fill="url(#v)"/></mask></defs>
+  <g mask="url(#m)"><rect width="220" height="200" fill="#e7ecf1"/><path d="M0 95 L50 70 L90 88 L140 62 L220 90 V110 H0Z" fill="#b8c2d3"/><rect y="105" width="220" height="40" fill="#cdd9e3"/><rect y="104" width="220" height="3" fill="#f5efd9" opacity=".8"/><rect y="140" width="220" height="60" fill="#efe7d8"/><rect y="128" width="70" height="20" fill="#f4efe6"/>
+  <g stroke="#8a5a34" stroke-width="4" stroke-linecap="round" fill="none"><path d="M120 95 V160 M150 95 V170 M120 130 H150 M118 132 L112 172 M152 130 L156 176"/><path d="M120 102 H150 M120 112 H150" stroke-width="3"/></g></g></svg>`;
+
+function renderMain() {
+  if (state.nav === 'dashboard') return renderDashboard();
+  if (state.nav === 'connections') return renderConnections();
+  if (state.nav === 'tasks') return renderTasks();
+  const o = state.open;
+  if (!o) { main.innerHTML = `<div class="empty-state">${emptyArt}</div>`; return; }
+  if (o.startsWith('agent:')) return renderAgent(findAgent(o.slice(6)));
+  if (o.startsWith('human:')) { const h = findHuman(o.slice(6)); main.innerHTML = `<div class="page"><div class="agent-hero"><div class="av human" style="width:56px;height:56px;${h.color ? 'background:' + h.color : ''}">${h.initial}</div><div><h2>${h.name}</h2><div class="lead" style="margin:0">${h.role}</div></div></div><button class="btn">${ic('chat', 16)} Nhắn tin</button></div>`; return; }
+  if (o.startsWith('pc:')) return renderComputers(o.slice(3));
+  if (o.startsWith('set:')) return renderSettings(o.slice(4));
+  renderChat(o);
+}
+
+function authorOf(by) {
+  if (by.startsWith('ext:')) { const [, ch, name] = by.split(':'); const c = db.connections.find(x => x.id === ch); return { agent: false, name: `${name} <span style="color:var(--muted);font-weight:400">qua ${c.short}</span>`, av: `<div class="av" style="background:${c.color}">${name[0]}</div>` }; }
+  const a = findAgent(by); return a ? { agent: true, name: a.name, av: `<div class="av">${agentAv(a.hue)}</div>` } : (h => ({ agent: false, name: h.name, av: `<div class="av human" style="${h.color ? 'background:' + h.color : ''}">${h.initial}</div>` }))(findHuman(by)); }
+function msgHtml(m) {
+  const au = authorOf(m.by);
+  return `<div class="msg ${au.agent ? 'agent' : 'human'}">${au.av}<div style="min-width:0;flex:1"><div class="who">${au.name}${au.agent ? '<span class="spark">✳</span>' : ''}</div>${m.pre || ''}<div class="bubble">${md(m.md)}</div>${m.post || ''}</div></div>`;
+}
+
+function roomInfo(id) {
+  const dm = db.rooms.find(r => r.id === id);
+  if (dm) { const a = findAgent(dm.agent); return { title: a.name, av: `<div class="av" style="width:26px;height:26px">${agentAv(a.hue)}</div>`, agents: [a], spark: true }; }
+  const ch = db.rooms.find(r => r.threads?.some(t => t.id === id)); const t = ch.threads.find(t => t.id === id);
+  return { title: t.name, sub: '# ' + ch.name, av: '', agents: db.agents.filter(a => a.status !== 'offline'), spark: false };
+}
+
+function renderChat(id) {
+  const info = roomInfo(id);
+  main.innerHTML = `<div class="chat-head">${info.av}<div><div class="title">${info.title} ${info.spark ? '<span class="spark">✳</span>' : ''}</div>${info.sub ? `<div class="sub">${info.sub}</div>` : ''}</div>
+      <div class="right"><button class="icon-btn" title="Call">${ic('phone', 17)}</button><button class="icon-btn" title="More">${ic('more')}</button></div></div>
+    <div class="timeline" id="tl">${(db.messages[id] || []).map(msgHtml).join('')}</div>
+    <div class="composer-wrap"><div class="mention-pop" id="mp"></div>
+      <div class="composer"><textarea id="ta" rows="1" placeholder="Message…"></textarea>
+        <div class="bar"><button class="icon-btn" title="Attach">${ic('plus')}</button><span class="hint">Gõ <code>@</code> để gọi agent · Enter để gửi</span><span class="sp"></span><button class="icon-btn" title="Voice">${ic('mic', 17)}</button><button class="icon-btn" id="sendBtn" title="Send">${ic('send', 17)}</button></div></div></div>`;
+  const tl = document.getElementById('tl'); tl.scrollTop = tl.scrollHeight;
+  wireComposer(id, info);
+}
+
+/* composer + @mention */
+function wireComposer(roomId, info) {
+  const ta = document.getElementById('ta'), mp = document.getElementById('mp');
+  let sel = 0, opts = [];
+  const close = () => mp.classList.remove('on');
+  const update = () => {
+    ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
+    const m = ta.value.slice(0, ta.selectionStart).match(/@([\w\s']*)$/);
+    if (!m) return close();
+    const q = m[1].toLowerCase();
+    opts = [...info.agents.map(a => ({ name: a.name, html: agentAv(a.hue), sub: 'agent' })), ...db.humans.filter(h => h.id !== 'u1').map(h => ({ name: h.name, html: h.initial, human: h, sub: 'member' }))].filter(o => o.name.toLowerCase().includes(q));
+    if (!opts.length) return close();
+    sel = Math.min(sel, opts.length - 1);
+    mp.innerHTML = `<div class="h">Mention</div>` + opts.map((o, i) => `<div class="opt ${i === sel ? 'sel' : ''}" data-k="${i}"><div class="av ${o.human ? 'human' : ''}" style="${o.human?.color ? 'background:' + o.human.color : ''}">${o.html}</div>${o.name}<small>${o.sub}</small></div>`).join('');
+    mp.classList.add('on');
+    mp.querySelectorAll('.opt').forEach(el => el.onmousedown = e => { e.preventDefault(); pick(+el.dataset.k); });
+  };
+  const pick = k => {
+    const before = ta.value.slice(0, ta.selectionStart).replace(/@([\w\s']*)$/, '@' + opts[k].name + ' ');
+    ta.value = before + ta.value.slice(ta.selectionStart); ta.focus(); ta.selectionStart = ta.selectionEnd = before.length; close();
+  };
+  ta.addEventListener('input', update);
+  ta.addEventListener('keydown', e => {
+    if (mp.classList.contains('on')) {
+      if (e.key === 'ArrowDown') { sel = (sel + 1) % opts.length; update(); e.preventDefault(); return; }
+      if (e.key === 'ArrowUp') { sel = (sel - 1 + opts.length) % opts.length; update(); e.preventDefault(); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { pick(sel); e.preventDefault(); return; }
+      if (e.key === 'Escape') { close(); return; }
+    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+  document.getElementById('sendBtn').onclick = send;
+  function send() {
+    const text = ta.value.trim(); if (!text) return;
+    ta.value = ''; update();
+    (db.messages[roomId] ||= []).push({ by: 'u1', md: text });
+    document.getElementById('tl').insertAdjacentHTML('beforeend', msgHtml({ by: 'u1', md: text }));
+    scrollEnd();
+    const target = info.agents.find(a => text.includes('@' + a.name)) || (info.spark ? info.agents[0] : null);
+    if (target) runAssignment(roomId, target, text);
+    renderPanel();
+  }
+}
+const scrollEnd = () => { const tl = document.getElementById('tl'); if (tl) tl.scrollTop = tl.scrollHeight; };
+
+/* ---------- mock assignment + streaming ---------- */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function replyFor(text) {
+  if (/sort|hàm|code|function/i.test(text)) return 'Em viết hàm sort ổn định theo nhiều khoá, có test kèm theo:\n\n```ts\nexport function sortBy<T>(items: T[], ...keys: ((x: T) => string | number)[]) {\n  return [...items].sort((a, b) => {\n    for (const k of keys) {\n      const d = k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0;\n      if (d) return d;\n    }\n    return 0;\n  });\n}\n```\n\nĐã chạy `pnpm test`: **4/4 pass**. Anh/chị muốn em commit vào nhánh mới không?';
+  return 'Em đã xem qua repo và lịch sử gần đây. Tóm tắt nhanh:\n\n1. **apps/fe** là Tauri 2 + React 19, đang có trang Todos mẫu.\n2. **apps/be** là NestJS 12 + TypeORM 1, healthcheck chạy ổn.\n3. Chưa có commit nào trên `main`.\n\nBước tiếp theo em đề xuất là dựng AppShell và mock MSW. Anh/chị muốn em bắt đầu luôn không?';
+}
+async function runAssignment(roomId, agent, text) {
+  const tl = document.getElementById('tl');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg agent';
+  wrap.innerHTML = `<div class="av">${agentAv(agent.hue)}</div><div style="min-width:0;flex:1"><div class="who">${agent.name}<span class="spark">✳</span></div><div class="assign"><div class="mini-spin"></div><span>assignment</span><span class="st">pending</span></div><div class="tools"></div><div class="bubble" style="display:none"></div></div>`;
+  tl.appendChild(wrap); scrollEnd();
+  const chip = wrap.querySelector('.assign'), st = chip.querySelector('.st'), tools = wrap.querySelector('.tools'), bubble = wrap.querySelector('.bubble');
+  for (const s of ['offered', 'claimed', 'running']) { await sleep(450); st.textContent = s; }
+  agent.status = 'working'; if (state.nav === 'members') renderPanel();
+
+  const calls = /sort|hàm|code|function/i.test(text)
+    ? [['Write', 'src/utils/sortBy.ts', 'Wrote 11 lines'], ['Bash', 'pnpm test -- sortBy', '✓ sortBy › single key\n✓ sortBy › multi key\n✓ sortBy › stable\n✓ sortBy › empty\nTests: 4 passed']]
+    : [['Bash', 'git log --oneline -5', '(no commits yet)'], ['Read', 'apps/fe/package.json', '"react": "^19.3.1", "vite": "^8.3.4" …']];
+  for (const [name, arg, out] of calls) {
+    const d = document.createElement('details'); d.className = 'tool';
+    d.innerHTML = `<summary>${ic(name === 'Bash' ? 'terminal' : 'file', 15)}<span class="nm">${name}</span><span class="arg">${arg}</span><span class="r"><div class="mini-spin"></div></span></summary><pre>${esc(out)}</pre>`;
+    tools.appendChild(d); scrollEnd();
+    await sleep(900);
+    d.querySelector('.r').innerHTML = `<span style="color:var(--ok)">${ic('check', 14)}</span>`;
+  }
+
+  const full = replyFor(text); bubble.style.display = 'inline-block';
+  let shown = 0;
+  while (shown < full.length) {
+    shown = Math.min(full.length, shown + 3 + Math.floor(Math.random() * 6));
+    bubble.innerHTML = md(full.slice(0, shown)) + '<span class="caret"></span>';
+    scrollEnd(); await sleep(28);
+  }
+  bubble.innerHTML = md(full);
+  chip.className = 'assign completed'; chip.innerHTML = `<span style="color:var(--ok);display:flex">${ic('check', 13)}</span><span>assignment</span><span class="st">completed</span><span style="color:var(--muted)">· ${calls.length} tool calls · 2 turns</span>`;
+  db.messages[roomId].push({ by: agent.id, md: full });
+  agent.status = 'idle'; renderPanel();
+}
+
+/* ---------- agent / computers / settings pages ---------- */
+function renderAgent(a) {
+  const pc = db.computers.find(c => c.id === a.computer);
+  const tabs = ['Overview', 'Persona', 'Skills', 'Activity'];
+  let body = '';
+  if (state.agentTab === 'Overview') body = `<div class="grid2">
+      <div class="box"><h4>Runtime</h4><dl class="kv"><dt>Provider</dt><dd>claude-code</dd><dt>Computer</dt><dd><span class="dot ${pc.status === 'online' ? 'on' : 'off'}"></span> ${pc.name}</dd><dt>Workdir</dt><dd><code>${a.workdir}</code></dd><dt>Max turns</dt><dd>40</dd></dl></div>
+      <div class="box"><h4>Hôm nay</h4><dl class="kv"><dt>Assignments</dt><dd>12 completed · 1 failed</dd><dt>Thời gian chạy</dt><dd>38 phút</dd><dt>Rooms</dt><dd>3</dd></dl></div></div>`;
+  if (state.agentTab === 'Persona') body = `<div class="persona">You are an agent on this workspace, an AI-native place where people and agents work together.\n\nBe concise. Reply in the user's language. When you are mentioned in a room, read recent history before answering. Use tools when needed and report what you ran.</div>`;
+  if (state.agentTab === 'Skills') body = `<div class="chips">${a.skills.map((s, i) => `<span class="chip ${i < a.enabled ? 'on' : ''}">${s}</span>`).join('')}</div><p style="color:var(--muted);font-size:12.5px;margin-top:14px">${a.enabled}/${a.skills.length} skill đang bật. Bấm để bật/tắt (mock).</p>`;
+  if (state.agentTab === 'Activity') body = `<table><thead><tr><th>Room</th><th>Yêu cầu</th><th>Trạng thái</th><th>Thời gian</th></tr></thead><tbody>
+      ${[['DM', 'lam sao de toi metion Agent khac', 'completed', '23h'], ['#test › Hello', 'Hello', 'completed', '23h'], ['DM', 'tóm tắt email sáng nay', 'completed', '1d'], ['#all-members', 'deploy staging', 'failed', '2d'], ['DM', 'review MR !42', 'expired', '3d']].map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td><span style="color:${r[2] === 'completed' ? 'var(--ok)' : r[2] === 'failed' ? 'var(--err)' : 'var(--muted)'};font-weight:600">${r[2]}</span></td><td style="color:var(--muted)">${r[3]}</td></tr>`).join('')}</tbody></table>`;
+  main.innerHTML = `<div class="page"><div class="page-head"><div class="agent-hero"><div class="av">${agentAv(a.hue)}</div><div><h2>${a.name} <span class="spark">✳</span></h2><div style="color:var(--muted);display:flex;gap:8px;align-items:center"><span class="dot ${a.status === 'offline' ? 'off' : a.status === 'working' ? 'busy' : 'on'}"></span>${a.status} · claude-code</div></div></div>
+    <div style="display:flex;gap:8px"><button class="btn" onclick="state.nav='chat';state.open='dm-a1';render()">${ic('chat', 16)} Nhắn tin</button><button class="btn">${ic('more', 16)}</button></div></div>
+    <div class="ptabs">${tabs.map(t => `<button class="${t === state.agentTab ? 'on' : ''}" data-atab="${t}">${t}</button>`).join('')}</div>${body}</div>`;
+  main.querySelectorAll('[data-atab]').forEach(b => b.onclick = () => { state.agentTab = b.dataset.atab; renderAgent(a); });
+  main.querySelectorAll('.chip').forEach(c => c.onclick = () => c.classList.toggle('on'));
+}
+
+function ago(s) { return s < 60 ? `${s}s trước` : s < 3600 ? `${Math.floor(s / 60)} phút trước` : `${Math.floor(s / 3600)} giờ trước`; }
+function renderComputers(focus) {
+  main.innerHTML = `<div class="page"><div class="page-head"><div><h2>Computers</h2><p class="lead">Máy đã kết nối vào workspace. Agent chạy Claude Code trên các máy này.</p></div><button class="btn primary" onclick="modal.classList.add('on')">${ic('plus', 16)} Connect a computer</button></div>
+    <table><thead><tr><th>Tên</th><th>Trạng thái</th><th>Heartbeat</th><th>Agents</th><th>CLI</th><th>Keep awake</th></tr></thead><tbody>
+    ${db.computers.map(c => `<tr style="${c.id === focus ? 'background:#fafaf7' : ''}"><td><b>${c.name}</b><div style="color:var(--muted);font-size:12px">${c.os}</div></td><td><span class="dot ${c.status === 'online' ? 'on' : 'off'}"></span> ${c.status}</td><td style="color:var(--muted)" data-hb="${c.id}">${ago(c.hb)}</td><td>${db.agents.filter(a => a.computer === c.id).map(a => a.name).join(', ')}</td><td><code>${c.cli}</code></td><td>${c.keepAwake ? 'On' : 'Off'}</td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+function renderSettings(name) {
+  const blocks = {
+    Profile: `<div class="box" style="max-width:520px"><label>Tên hiển thị</label><input class="field" value="khanhpv"/><label style="margin-top:14px">Email</label><input class="field" value="khanhpv@holatech.tech" disabled/></div>`,
+    Members: `<table><thead><tr><th>Thành viên</th><th>Role</th><th></th></tr></thead><tbody>${db.humans.map(h => `<tr><td>${h.name}</td><td>${h.role}</td><td style="text-align:right"><button class="btn">Đổi role</button></td></tr>`).join('')}</tbody></table><div style="margin-top:14px"><button class="btn primary">${ic('plus', 16)} Mời thành viên</button></div>`,
+    Notifications: `<div class="box" style="max-width:520px">${['Thông báo khi agent trả lời xong', 'Thông báo khi được @mention', 'Badge số chưa đọc trên Dock'].map((t, i) => `<label style="display:flex;gap:10px;font-weight:400;margin:10px 0"><input type="checkbox" ${i < 3 ? 'checked' : ''}/> ${t}</label>`).join('')}</div>`,
+    Billing: `<div class="grid2">${[['Free', '$0', '1 computer · 1 agent'], ['Pro', '$20/tháng', '3 computers · agent không giới hạn'], ['Team', '$40/người', 'SSO · audit log']].map((p, i) => `<div class="box" style="${i === 0 ? 'border-color:var(--olive)' : ''}"><h4>${p[0]}${i === 0 ? ' · Hiện tại' : ''}</h4><div style="font-size:22px;font-weight:600">${p[1]}</div><p style="color:var(--soft)">${p[2]}</p><button class="btn ${i === 1 ? 'primary' : ''}">${i === 0 ? 'Đang dùng' : 'Nâng cấp'}</button></div>`).join('')}</div>`,
+    Desktop: `<div class="box" style="max-width:520px"><dl class="kv"><dt>Phiên bản</dt><dd>0.1.0 (mới nhất)</dd><dt>Auto-update</dt><dd>Bật</dd><dt>URL scheme</dt><dd><code>agent://</code></dd></dl><div style="margin-top:14px;display:flex;gap:8px"><button class="btn">Kiểm tra cập nhật</button><button class="btn">Gửi log cho support</button></div></div>`,
+  };
+  main.innerHTML = `<div class="page"><h2>${name}</h2><p class="lead"> </p>${blocks[name]}</div>`;
+}
+
+/* ---------- wiring ---------- */
+function render() {
+  document.querySelectorAll('.rail [data-nav]').forEach(b => b.classList.toggle('on', b.dataset.nav === state.nav));
+  const full = state.nav === 'dashboard' || state.nav === 'connections' || state.nav === 'tasks';
+  panel.style.display = full ? 'none' : '';
+  if (!full) renderPanel();
+  renderMain();
+}
+function navTo(nav) {
+  state.nav = nav;
+  state.open = { chat: null, members: 'agent:a1', computers: 'pc:c1', settings: 'set:Profile' }[nav] ?? null;
+  render();
+}
+
+/* ---------- dashboard ---------- */
+const C_DONE = '#6a7f2a', C_FAIL = '#c04a7a'; // validated pair (dataviz validator: all checks pass)
+const dash = {
+  days: Array.from({ length: 14 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (13 - i)); return d; }),
+  done: [6, 9, 7, 11, 8, 4, 3, 10, 12, 9, 14, 11, 10, 13],
+  fail: [1, 0, 2, 1, 0, 0, 1, 1, 0, 2, 1, 0, 1, 1],
+  byAgent: [['a1', 55], ['a2', 24], ['a3', 6]],
+  table: false,
+  get live() {
+    return tasks.filter(t => t.status === 'doing' && t.start && findAgent(t.who)).map(t => {
+      const st = stepsFor(t)[Math.min(t.step, stepsFor(t).length - 1)];
+      return { agent: t.who, task: t.id, title: t.title, room: t.room, where: roomLabel(t.room), stage: 'running', step: `${st[0]} · ${st[1]}`, start: t.start };
+    });
+  },
+  attention: [
+    { kind: 'err', icon: 'x', title: 'deploy staging thất bại', meta: 'Deployer · #all-members · 2 ngày trước', action: 'Chạy lại' },
+    { kind: 'warn', icon: 'clock', title: 'review MR !42 hết hạn lease', meta: "khanhpv's Claude · DM · 3 ngày trước", action: 'Giao lại' },
+    { kind: 'off', icon: 'monitor', title: 'build-box offline 2 giờ', meta: 'Deployer không nhận được việc mới', action: 'Hướng dẫn' },
+  ],
+  feed: [
+    ["khanhpv's Claude", 'trả lời <b>cách mention agent khác</b>', '23h'],
+    ['Research Bot', 'chào bạn trong <b>#test › Hello</b>', '23h'],
+    ['Minh', 'tham gia workspace', '1 ngày'],
+    ['Deployer', '<span style="color:var(--err)">thất bại</span> ở <b>deploy staging</b>', '2 ngày'],
+    ['khanhpv', 'kết nối máy <b>khanhpv-MacBook-Pro</b>', '3 ngày'],
+  ],
+};
+const mmss = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const sum = a => a.reduce((x, y) => x + y, 0);
+const quickAgents = () => db.agents.filter(a => a.status !== 'offline');
+let quickAgent = 0;
+const dayLabel = (i) => i === dash.days.length - 1 ? 'Hôm nay' : `${dash.days[i].getDate()}/${dash.days[i].getMonth() + 1}`;
+
+function renderDashboard() {
+  const h = new Date().getHours();
+  const hello = h < 12 ? 'Chào buổi sáng' : h < 18 ? 'Chào buổi chiều' : 'Chào buổi tối';
+  const date = new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long' });
+  const n = dash.done.length - 1;
+  const today = dash.done[n] + dash.fail[n], yday = dash.done[n - 1] + dash.fail[n - 1];
+  const d7 = sum(dash.done.slice(-7)), f7 = sum(dash.fail.slice(-7));
+  const online = db.computers.filter(c => c.status === 'online').length;
+  const qa = quickAgents()[quickAgent];
+  const maxA = Math.max(...dash.byAgent.map(x => x[1]));
+
+  main.innerHTML = `<div class="dash"><div class="dash-in">
+    <div class="dash-top">
+      <div><div class="dash-date">${date}</div><h1>${hello}, khanhpv.</h1></div>
+      <form class="quick" id="quick"><input id="qin" placeholder="Giao việc nhanh cho agent…" autocomplete="off"/>
+        <button type="button" class="who-chip" id="qwho" title="Đổi agent"><span class="av" style="width:20px;height:20px">${agentAv(qa.hue)}</span>${qa.name}</button>
+        <button class="go" title="Giao việc">${ic('arrow', 16)}</button></form>
+    </div>
+
+    <div class="live"><div class="live-head"><span class="pulse"></span>Đang chạy · ${dash.live.length}<span class="link" style="margin-left:auto" data-go-nav="tasks">Mở board Tasks</span></div>
+      ${dash.live.map((l, i) => { const a = findAgent(l.agent); return `<div class="live-row" data-live="${i}"><div class="av">${agentAv(a.hue)}</div>
+        <div class="what"><b>${l.title}</b><div>${a.name} · ${l.where} · <code style="font-size:11.5px">${esc(l.step)}</code></div><div class="progress"><i></i></div></div>
+        <span class="stage"><span class="mini-spin"></span>${l.stage}</span><span class="elapsed" data-since="${l.start}">${mmss(Date.now() - l.start)}</span></div>`; }).join('')}
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="lbl">${ic('zap', 14)} Assignments hôm nay</div><div class="val">${today}</div><div class="delta up">+${today - yday} so với hôm qua</div></div>
+      <div class="kpi"><div class="lbl">${ic('check', 14)} Hoàn thành · 7 ngày</div><div class="val">${(d7 / (d7 + f7) * 100).toFixed(1).replace('.', ',')}<small>%</small></div><div class="delta">${d7} xong · ${f7} lỗi</div></div>
+      <div class="kpi"><div class="lbl">${ic('clock', 14)} Agent làm hôm nay</div><div class="val">38<small> phút</small></div><div class="delta">trung bình 2,7 phút mỗi việc</div></div>
+      <div class="kpi"><div class="lbl">${ic('monitor', 14)} Máy online</div><div class="val">${online}<small>/${db.computers.length}</small></div><div class="delta">heartbeat <span data-hb="c1">${ago(db.computers[0].hb)}</span></div></div>
+    </div>
+
+    <div class="dgrid">
+      <div class="dcard" id="chartCard">
+        <div class="dcard-h"><div><h3>Assignments 14 ngày</h3><div class="sub">Mọi room và DM, theo ngày</div></div>
+          <div class="legend"><span><i style="background:${C_DONE}"></i>Hoàn thành</span><span><i style="background:${C_FAIL}"></i>Lỗi</span>
+          <button class="icon-btn" id="tblBtn" title="${dash.table ? 'Xem biểu đồ' : 'Xem bảng'}">${ic(dash.table ? 'chart' : 'table', 16)}</button></div></div>
+        <div id="chart" class="chart"></div><div class="tip" id="tip"></div>
+      </div>
+      <div class="dcard"><div class="dcard-h"><h3>Cần chú ý</h3><span class="sub">${dash.attention.length} việc</span></div>
+        ${dash.attention.map((x, i) => `<div class="attn"><div class="ico ${x.kind}">${ic(x.icon, 16)}</div><div class="tx">${x.title}<div>${x.meta}</div></div><span data-attn-wrap="${i}"><button class="btn sm" data-attn="${i}">${x.action}</button></span></div>`).join('')}
+      </div>
+    </div>
+
+    <div class="dgrid3">
+      <div class="dcard"><div class="dcard-h"><div><h3>Agents</h3><div class="sub">Assignments 7 ngày</div></div><span class="link" data-go-nav="members">Tất cả</span></div>
+        ${dash.byAgent.map(([id, v]) => { const a = findAgent(id); return `<div class="hbar"><div class="nm"><span class="av">${agentAv(a.hue)}</span><span style="overflow:hidden;text-overflow:ellipsis">${a.name}</span><span class="dot ${a.status === 'offline' ? 'off' : a.status === 'working' ? 'busy' : 'on'}"></span></div><div class="track"><div class="bar" style="width:calc(${v / maxA} * (100% - 32px))"></div><span class="v">${v}</span></div></div>`; }).join('')}
+      </div>
+      <div class="dcard"><div class="dcard-h"><h3>Hoạt động gần đây</h3></div>
+        <ul class="feed">${dash.feed.map(f => `<li><span class="d"></span><span><b style="font-weight:600">${f[0]}</b> ${f[1]}</span><span class="t">${f[2]}</span></li>`).join('')}</ul>
+      </div>
+      <div class="dcard"><div class="dcard-h"><div><h3>Kênh kết nối</h3><div class="sub">${db.connections.filter(c => c.status === 'on').length}/${db.connections.length} đang hoạt động</div></div><span class="link" data-go-nav="connections">Quản lý</span></div>
+        ${db.connections.map(c => `<div class="conn-mini"><span class="lg" style="width:28px;height:28px">${LOGO[c.id]}</span><div class="nm">${c.name}<div>${c.status === 'on' ? '→ #' + c.roomName : 'Chưa kết nối'}</div></div>${c.status === 'on' ? '<span class="dot on"></span>' : `<button class="btn sm" data-connect="${c.id}">Kết nối</button>`}</div>`).join('')}
+      </div>
+    </div>
+  </div></div>`;
+
+  drawChart();
+  document.getElementById('tblBtn').onclick = () => { dash.table = !dash.table; renderDashboard(); };
+  document.getElementById('qwho').onclick = () => { quickAgent = (quickAgent + 1) % quickAgents().length; renderDashboard(); document.getElementById('qin').focus(); };
+  document.getElementById('quick').onsubmit = e => {
+    e.preventDefault();
+    const v = document.getElementById('qin').value.trim(); if (!v) return;
+    const a = quickAgents()[quickAgent];
+    const room = a.id === 'a1' ? 'dm-a1' : 't-hello';
+    const text = a.id === 'a1' ? v : `@${a.name} ${v}`;
+    state.nav = 'chat'; state.open = room; render();
+    db.messages[room].push({ by: 'u1', md: text });
+    document.getElementById('tl').insertAdjacentHTML('beforeend', msgHtml({ by: 'u1', md: text }));
+    scrollEnd(); runAssignment(room, a, text);
+  };
+  main.querySelectorAll('[data-live]').forEach(el => el.onclick = () => { navTo('tasks'); openTask(dash.live[+el.dataset.live].task); });
+  main.querySelectorAll('[data-go-nav]').forEach(el => el.onclick = () => navTo(el.dataset.goNav));
+  main.querySelectorAll('[data-connect]').forEach(el => el.onclick = () => openWizard(el.dataset.connect));
+  main.querySelectorAll('[data-attn]').forEach(el => el.onclick = () => {
+    const i = +el.dataset.attn;
+    if (dash.attention[i].kind === 'off') return modal.classList.add('on');
+    main.querySelector(`[data-attn-wrap="${i}"]`).innerHTML = `<span class="done-note">${ic('check', 13)} Đã ${dash.attention[i].action.toLowerCase()}</span>`;
+  });
+}
+
+function drawChart() {
+  const el = document.getElementById('chart'); if (!el) return;
+  const n = dash.done.length;
+  if (dash.table) {
+    el.innerHTML = `<div style="max-height:230px;overflow:auto"><table class="dtable"><thead><tr><th>Ngày</th><th style="text-align:right">Hoàn thành</th><th style="text-align:right">Lỗi</th><th style="text-align:right">Tổng</th></tr></thead><tbody>
+      ${dash.done.map((d, i) => `<tr><td>${dayLabel(i)}</td><td style="text-align:right">${d}</td><td style="text-align:right">${dash.fail[i]}</td><td style="text-align:right"><b>${d + dash.fail[i]}</b></td></tr>`).reverse().join('')}</tbody></table></div>`;
+    return;
+  }
+  const W = el.clientWidth, H = 230, L = 28, B = 26, T = 22, max = 20;
+  const slot = (W - L) / n, bw = Math.min(24, slot * 0.56), y = v => T + (H - T - B) * (1 - v / max);
+  const topRound = (x, y0, w, h, r) => `M${x} ${y0 + h}V${y0 + r}Q${x} ${y0} ${x + r} ${y0}H${x + w - r}Q${x + w} ${y0} ${x + w} ${y0 + r}V${y0 + h}Z`;
+  let s = '';
+  for (const t of [0, 5, 10, 15, 20]) s += `<line x1="${L}" x2="${W}" y1="${y(t)}" y2="${y(t)}" stroke="${t ? '#f0efec' : '#d9d7d0'}" stroke-width="1"/><text x="${L - 8}" y="${y(t) + 4}" text-anchor="end">${t}</text>`;
+  dash.done.forEach((d, i) => s += `<rect class="band" data-i="${i}" x="${L + slot * i}" y="${T - 10}" width="${slot}" height="${H - T - B + 10}" fill="transparent" rx="6"/>`);
+  dash.done.forEach((d, i) => {
+    const f = dash.fail[i], cx = L + slot * i + slot / 2, x = cx - bw / 2, yd = y(d), hd = y(0) - yd;
+    s += f ? `<rect x="${x}" y="${yd}" width="${bw}" height="${hd}" fill="${C_DONE}"/>` : `<path d="${topRound(x, yd, bw, hd, 4)}" fill="${C_DONE}"/>`;
+    if (f) { const hf = y(0) - y(f); s += `<path d="${topRound(x, y(d + f) - 2, bw, hf, Math.min(4, hf / 2))}" fill="${C_FAIL}"/>`; }
+    if (i === n - 1) s += `<text x="${cx}" y="${y(d + f) - 9}" text-anchor="middle" style="fill:var(--text);font-weight:600">${d + f}</text>`;
+    if (i % 2 === 1) s += `<text x="${cx}" y="${H - 6}" text-anchor="middle" ${i === n - 1 ? 'style="fill:var(--text);font-weight:500"' : ''}>${dayLabel(i)}</text>`;
+  });
+  el.innerHTML = `<svg width="${W}" height="${H}">${s}</svg>`;
+  const tip = document.getElementById('tip'), card = document.getElementById('chartCard');
+  el.querySelectorAll('.band').forEach(b => {
+    b.onmouseenter = () => {
+      const i = +b.dataset.i, d = dash.done[i], f = dash.fail[i];
+      b.setAttribute('fill', '#f5f4ef');
+      tip.innerHTML = `<div style="color:#bdbab1;margin-bottom:2px">${dayLabel(i)}</div><div><i style="background:${C_DONE}"></i>Hoàn thành<b>${d}</b></div><div><i style="background:${C_FAIL}"></i>Lỗi<b>${f}</b></div><div style="border-top:1px solid #3a3b3f;margin-top:4px;padding-top:4px">Tổng<b>${d + f}</b></div>`;
+      tip.style.display = 'block';
+      const cx = el.offsetLeft + L + slot * i + slot / 2;
+      const left = cx + 16 + tip.offsetWidth > card.clientWidth ? cx - 16 - tip.offsetWidth : cx + 16;
+      tip.style.left = left + 'px'; tip.style.top = (el.offsetTop + 20) + 'px';
+    };
+    b.onmouseleave = () => { b.setAttribute('fill', 'transparent'); tip.style.display = 'none'; };
+  });
+}
+
+/* ---------- connections ---------- */
+function connCard(c) {
+  if (c.status !== 'on') return `<div class="conn"><div class="top"><span class="lg" style="width:44px;height:44px">${LOGO[c.id]}</span><div><h4>${c.name}</h4><div class="s">${c.accountLabel}</div></div><span class="pill">Chưa kết nối</span></div>
+    <p>${c.desc}</p><div class="chips">${c.caps.map(x => `<span class="chip">${x}</span>`).join('')}</div>
+    <div class="foot"><button class="btn primary" data-connect="${c.id}">${ic('plug', 15)} Kết nối ${c.short}</button></div></div>`;
+  const ag = findAgent(c.agent);
+  return `<div class="conn on"><div class="top"><span class="lg" style="width:44px;height:44px">${LOGO[c.id]}</span><div><h4>${c.name}</h4><div class="s">${c.account}</div></div><span class="pill ok"><span class="dot on" style="box-shadow:none"></span>Đang hoạt động</span></div>
+    <dl class="kv"><dt>Room nhận tin</dt><dd><span class="link" data-openroom="${c.id}">#${c.roomName}</span></dd><dt>Agent phụ trách</dt><dd>${ag.name}</dd><dt>Cách trả lời</dt><dd>${c.mode === 'draft' ? 'Soạn nháp, bạn duyệt rồi gửi' : 'Agent tự trả lời'}</dd><dt>Hôm nay</dt><dd>1 tin đến · 1 nháp</dd></dl>
+    <div class="foot"><button class="btn" data-openroom="${c.id}">${ic('inbox', 15)} Mở room</button><button class="btn" data-connect="${c.id}">Cấu hình</button><button class="btn" data-disconnect="${c.id}" style="color:var(--err)">Ngắt kết nối</button></div></div>`;
+}
+
+function renderConnections() {
+  main.innerHTML = `<div class="dash"><div class="dash-in">
+    <div class="page-head"><div><div class="dash-date">Workspace · khanhpv</div><h1 style="font-family:'Inter Tight';font-size:36px;letter-spacing:-0.035em;margin:0 0 8px">Connections</h1>
+      <p style="color:var(--soft);margin:0 0 22px;max-width:640px;line-height:1.55">Nối kênh bên ngoài vào workspace. Tin nhắn mới đổ vào một room riêng, agent đọc và soạn câu trả lời, rồi gửi ngược lại đúng kênh.</p></div></div>
+    <div class="flow">
+      <div class="step"><span style="display:flex;gap:4px">${['zalo', 'facebook', 'gmail'].map(k => `<span class="lg" style="width:20px;height:20px">${LOGO[k]}</span>`).join('')}</span>Khách nhắn tin</div><span class="arr">${ic('arrow', 15)}</span>
+      <div class="step">${ic('inbox', 16)}Vào room <code>#…-inbox</code></div><span class="arr">${ic('arrow', 15)}</span>
+      <div class="step"><span class="av" style="width:20px;height:20px">${agentAv(0)}</span>Agent soạn trả lời</div><span class="arr">${ic('arrow', 15)}</span>
+      <div class="step">${ic('check', 16)}Bạn duyệt <span style="color:var(--muted)">(tuỳ chọn)</span></div><span class="arr">${ic('arrow', 15)}</span>
+      <div class="step">${ic('send', 15)}Gửi lại đúng kênh</div>
+    </div>
+    <div class="h-sec">Kênh tin nhắn</div>
+    <div class="conn-grid">${db.connections.map(connCard).join('')}</div>
+    <div class="h-sec">Sắp có</div>
+    <div class="conn-grid soon">${SOON.map(([n, d, l]) => `<div class="conn"><div class="top"><span class="lg" style="width:44px;height:44px">${l}</span><div><h4>${n}</h4><div class="s">${d}</div></div><span class="pill">Sắp có</span></div></div>`).join('')}</div>
+  </div></div>`;
+  main.querySelectorAll('[data-connect]').forEach(el => el.onclick = () => openWizard(el.dataset.connect));
+  main.querySelectorAll('[data-openroom]').forEach(el => el.onclick = () => { state.nav = 'chat'; state.open = 't-' + el.dataset.openroom; render(); });
+  main.querySelectorAll('[data-disconnect]').forEach(el => el.onclick = () => {
+    const c = db.connections.find(x => x.id === el.dataset.disconnect);
+    c.status = 'off'; db.rooms = db.rooms.filter(r => r.id !== c.id + '-room'); renderConnections();
+  });
+}
+
+/* connect wizard (mock OAuth → choose account → routing) */
+const wzModal = document.getElementById('wz');
+let wz = null;
+function openWizard(id) {
+  const c = db.connections.find(x => x.id === id);
+  wz = { c, step: c.status === 'on' ? 3 : 1, account: Math.max(0, c.accounts.findIndex(a => a.name === c.account)), agent: c.agent || 'a1', mode: c.mode || 'draft', room: c.roomName || c.room, busy: false };
+  renderWizard(); wzModal.classList.add('on');
+}
+function renderWizard() {
+  const { c, step } = wz;
+  let body = '';
+  if (step === 1) body = `<p>Đăng nhập ${c.short} trong trình duyệt để cấp quyền. Agent chỉ dùng các quyền dưới đây, bạn thu hồi được bất cứ lúc nào.</p>
+    ${c.perms.map(p => `<div class="perm"><span style="color:var(--ok);display:flex">${ic('shield', 16)}</span>${p}</div>`).join('')}
+    <div class="wz-foot"><button class="btn" data-wz="cancel">Huỷ</button><button class="btn primary" data-wz="auth" ${wz.busy ? 'disabled' : ''}>${wz.busy ? '<span class="spinner" style="width:14px;height:14px;border-color:rgba(255,255,255,.35);border-top-color:#fff"></span> Đang chờ trình duyệt…' : 'Đăng nhập ' + c.short}</button></div>`;
+  if (step === 2) body = `<p>Chọn ${c.accountLabel} sẽ nối vào workspace.</p>
+    ${c.accounts.map((a, i) => `<div class="opt-row ${i === wz.account ? 'sel' : ''}" data-acc="${i}"><span class="lg" style="width:30px;height:30px">${LOGO[c.id]}</span><div><b>${a.name}</b><div class="sub">${a.sub}</div></div></div>`).join('')}
+    <div class="wz-foot"><button class="btn" data-wz="back">Quay lại</button><button class="btn primary" data-wz="next">Tiếp tục</button></div>`;
+  if (step === 3) body = `<label>Room nhận tin</label><input class="field" id="wzRoom" value="${wz.room}"/>
+    <label style="margin-top:14px">Agent phụ trách</label><select class="field" id="wzAgent">${quickAgents().map(a => `<option value="${a.id}" ${a.id === wz.agent ? 'selected' : ''}>${a.name}</option>`).join('')}</select>
+    <label style="margin-top:14px">Cách trả lời</label>
+    <div class="opt-row ${wz.mode === 'draft' ? 'sel' : ''}" data-mode="draft"><span style="display:flex;color:var(--olive)">${ic('shield', 18)}</span><div><b>Soạn nháp, bạn duyệt rồi gửi</b><div class="sub">An toàn khi mới bắt đầu. Khuyên dùng.</div></div></div>
+    <div class="opt-row ${wz.mode === 'auto' ? 'sel' : ''}" data-mode="auto"><span style="display:flex;color:var(--claude)">${ic('zap', 18)}</span><div><b>Agent tự trả lời</b><div class="sub">Gửi ngay, bạn xem lại trong room.</div></div></div>
+    <div class="wz-foot">${c.status === 'on' ? '<button class="btn" data-wz="cancel">Huỷ</button>' : '<button class="btn" data-wz="back">Quay lại</button>'}<button class="btn primary" data-wz="finish">${c.status === 'on' ? 'Lưu' : 'Hoàn tất'}</button></div>`;
+  wzModal.querySelector('.modal').innerHTML = `<div style="display:flex;align-items:center;gap:12px"><span class="lg" style="width:38px;height:38px">${LOGO[c.id]}</span>
+    <div><h3 style="margin:0">${c.status === 'on' ? 'Cấu hình' : 'Kết nối'} ${c.name}</h3><div style="color:var(--muted);font-size:12px">Bước ${step}/3 · ${['Ủy quyền', 'Chọn tài khoản', 'Định tuyến'][step - 1]}</div></div>
+    <button class="icon-btn" data-wz="cancel" style="margin-left:auto">${ic('x', 16)}</button></div>
+    <div class="wz-steps">${[1, 2, 3].map(i => `<span class="${i <= step ? 'done' : ''}"></span>`).join('')}</div>${body}`;
+}
+wzModal.addEventListener('click', e => {
+  const t = e.target.closest('[data-wz],[data-acc],[data-mode]'); if (!t) return;
+  if (t.dataset.acc) { wz.account = +t.dataset.acc; return renderWizard(); }
+  if (t.dataset.mode) { wz.room = document.getElementById('wzRoom').value; wz.agent = document.getElementById('wzAgent').value; wz.mode = t.dataset.mode; return renderWizard(); }
+  const a = t.dataset.wz;
+  if (a === 'cancel') return wzModal.classList.remove('on');
+  if (a === 'back') { wz.step--; return renderWizard(); }
+  if (a === 'next') { wz.step++; return renderWizard(); }
+  if (a === 'auth') { wz.busy = true; renderWizard(); setTimeout(() => { wz.busy = false; wz.step = 2; renderWizard(); }, 1500); return; }
+  if (a === 'finish') finishConnect();
+});
+function finishConnect() {
+  const c = wz.c;
+  c.roomName = document.getElementById('wzRoom').value.trim() || c.room;
+  c.agent = document.getElementById('wzAgent').value; c.mode = wz.mode; c.account = c.accounts[wz.account].name;
+  const wasOn = c.status === 'on'; c.status = 'on';
+  db.rooms = db.rooms.filter(r => r.id !== c.id + '-room');
+  db.rooms.push({ id: c.id + '-room', kind: 'channel', icon: 'inbox', name: c.roomName, threads: [{ id: 't-' + c.id, name: c.sample.from, time: 'now' }] });
+  if (!wasOn) {
+    const post = c.mode === 'draft'
+      ? `<div class="draft">${ic('clock', 13)} Nháp chờ duyệt <button class="btn sm primary" onclick="this.parentElement.className='draft sent';this.parentElement.innerHTML='✓ Đã gửi qua ${c.short}'">Gửi</button><button class="btn sm">Sửa</button></div>`
+      : `<div class="draft sent">✓ Đã gửi qua ${c.short}</div>`;
+    db.messages['t-' + c.id] = [{ by: `ext:${c.id}:${c.sample.from}`, md: c.sample.text }, { by: c.agent, md: c.sample.reply, post }];
+  }
+  wzModal.classList.remove('on');
+  render();
+}
+/* ---------- tasks ---------- */
+const C_RUN = '#3a74b8'; // timeline "đang chạy" (validator: pass cùng C_DONE/C_FAIL, all-pairs)
+const MIN = 60000, HOUR = 60 * MIN, T0 = Date.now();
+const COLS = [
+  { id: 'backlog', name: 'Backlog', hint: 'Ý tưởng, chưa lên lịch' },
+  { id: 'todo', name: 'Cần làm', hint: 'Agent sẽ tự nhận khi rảnh' },
+  { id: 'doing', name: 'Đang làm', wip: 4 },
+  { id: 'review', name: 'Chờ duyệt', hint: 'Agent xong, chờ người duyệt' },
+  { id: 'done', name: 'Xong' },
+];
+const colName = id => COLS.find(c => c.id === id).name;
+const PRIO = { urgent: 'Khẩn', high: 'Cao', med: 'Trung bình', low: 'Thấp' };
+const PRANK = { urgent: 0, high: 1, med: 2, low: 3 };
+const LABELS = { email: '#c98a1b', research: '#7a5a1f', fe: '#5157b0', be: '#3d8a6a', infra: '#c04a7a', zalo: '#0068ff', docs: '#8a8a85', data: '#1f6f7a' };
+
+function statusIco(s, z = 14) {
+  const c = { backlog: '#a3a29c', todo: '#8a8a85', doing: '#d97757', review: '#c98a1b', done: '#6a7f2a' }[s];
+  const inner = {
+    backlog: `<circle cx="8" cy="8" r="6" fill="none" stroke="${c}" stroke-width="1.6" stroke-dasharray="2.3 2.1"/>`,
+    todo: `<circle cx="8" cy="8" r="6" fill="none" stroke="${c}" stroke-width="1.6"/>`,
+    doing: `<circle cx="8" cy="8" r="6" fill="none" stroke="${c}" stroke-width="1.6"/><path d="M8 4.2a3.8 3.8 0 0 1 0 7.6z" fill="${c}"/>`,
+    review: `<circle cx="8" cy="8" r="6" fill="none" stroke="${c}" stroke-width="1.6"/><path d="M8 4.2a3.8 3.8 0 1 1-3.8 3.8H8z" fill="${c}"/>`,
+    done: `<circle cx="8" cy="8" r="7" fill="${c}"/><path d="m5 8.2 2 2 4-4.2" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>`,
+  }[s];
+  return `<svg width="${z}" height="${z}" viewBox="0 0 16 16" style="flex:none" aria-label="${colName(s)}">${inner}</svg>`;
+}
+function prioIco(p) {
+  if (p === 'urgent') return `<svg width="14" height="14" viewBox="0 0 16 16" style="flex:none" aria-label="Khẩn"><rect x="1" y="1" width="14" height="14" rx="3.5" fill="#c2453b"/><path d="M8 4.3v4.4M8 11.2v.3" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></svg>`;
+  const n = { high: 3, med: 2, low: 1 }[p];
+  return `<svg width="14" height="14" viewBox="0 0 16 16" style="flex:none" aria-label="${PRIO[p]}">${[0, 1, 2].map(i => `<rect x="${1.5 + i * 4.8}" y="${11 - i * 3.6}" width="3.2" height="${3.5 + i * 3.6}" rx="1" fill="${i < n ? '#5c5c58' : '#d9d8d3'}"/>`).join('')}</svg>`;
+}
+const lbl = l => `<span class="lbl"><i style="background:${LABELS[l]}"></i>${l}</span>`;
+function whoAv(id, z = 20) {
+  if (!id) return `<span class="av-none" style="width:${z}px;height:${z}px" title="Chưa giao"></span>`;
+  const a = findAgent(id); if (a) return `<span class="av" style="width:${z}px;height:${z}px" title="${a.name}">${agentAv(a.hue)}</span>`;
+  const h = findHuman(id); return `<span class="av human" style="width:${z}px;height:${z}px;font-size:${Math.round(z * .5)}px;${h.color ? 'background:' + h.color : ''}" title="${h.name}">${h.initial}</span>`;
+}
+const whoName = id => !id ? 'Chưa giao' : (findAgent(id) || findHuman(id)).name;
+const hhmm = ms => new Date(ms).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+function rel(ms) { const s = Math.round((Date.now() - ms) / 1000); return s < 45 ? 'vừa xong' : s < 3600 ? `${Math.max(1, Math.round(s / 60))} phút trước` : s < 86400 ? `${Math.round(s / 3600)} giờ trước` : `${Math.round(s / 86400)} ngày trước`; }
+const dur = s => s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s` : `${Math.floor(s / 3600)}h ${Math.floor(s % 3600 / 60)}m`;
+const pcOf = a => db.computers.find(c => c.id === a.computer);
+
+const STEPS = {
+  email: [['Bash', 'gws gmail list --unread --since 18:00'], ['Read', '42 email · phân loại theo người gửi'], ['Bash', 'gws gmail label --add "Cần xử lý" ×3'], ['Write', 'summary/email-sang-nay.md'], ['Bash', 'agent send --room dm-a1 summary.md']],
+  research: [['WebSearch', '"phần mềm bán hàng" bảng giá 2026'], ['WebFetch', 'doithu-a.vn/bang-gia'], ['WebFetch', 'doithu-b.vn/pricing'], ['Bash', 'python compare.py --out pricing.csv'], ['Write', 'reports/doi-thu.md']],
+  fe: [['Read', 'apps/fe/src/App.tsx'], ['Grep', '"apiRequest" apps/fe/src'], ['Edit', 'apps/fe/src/features/…'], ['Bash', 'pnpm --filter fe typecheck'], ['Bash', 'pnpm --filter fe test']],
+  be: [['Bash', 'git fetch origin mr/42'], ['Read', 'apps/be/src/computers/computers.service.ts'], ['Read', 'apps/be/src/computers/computers.controller.ts'], ['Bash', 'pnpm --filter be test'], ['Write', 'review-mr-42.md']],
+  infra: [['Bash', 'docker compose build be'], ['Bash', 'pnpm --filter be migration:run'], ['Bash', 'docker compose up -d'], ['Bash', 'curl -sf :3000/api/v1/health']],
+  zalo: [['Read', 'Zalo OA · tin nhắn của khách'], ['Read', 'bang-gia-combo.xlsx'], ['Write', 'bản nháp trả lời']],
+  data: [['Read', 'Khách hàng 2026.xlsx · 1.240 dòng'], ['Bash', 'python normalize.py --phone --email'], ['Bash', 'python dedupe.py → 37 trùng'], ['Write', 'Khách hàng 2026 (chuẩn hoá).xlsx']],
+  docs: [['Read', 'apps/be/src/computers/*.ts'], ['Write', 'docs/api/computers.md'], ['Bash', 'pnpm lint:md']],
+};
+const stepsFor = t => STEPS[t.labels[0]] || STEPS.fe;
+
+const ev = (by, text, at) => ({ by, text, at });
+const cm = (by, md, at) => ({ by, md, at });
+const tasks = [
+  { id: 'AG-31', title: 'Tóm tắt email sáng nay và gắn nhãn', status: 'doing', who: 'a1', prio: 'high', labels: ['email'], room: 'dm-a1', review: false, created: T0 - 40 * MIN, start: T0 - 74000, step: 2,
+    desc: 'Lọc email chưa đọc từ 18h hôm qua, gắn nhãn **Cần xử lý** cho thư khẩn, gửi bản tóm tắt vào DM.', subs: [['Lọc thư chưa đọc', 1], ['Gắn nhãn thư khẩn', 0], ['Gửi tóm tắt vào DM', 0]], runs: [],
+    log: [ev('u1', 'tạo task', T0 - 40 * MIN), ev('a1', 'nhận task', T0 - 74000)] },
+  { id: 'AG-30', title: 'Tìm 5 đối thủ cùng ngành, so sánh bảng giá', status: 'doing', who: 'a2', prio: 'med', labels: ['research'], room: 't-hello', review: true, created: T0 - 25 * MIN, start: T0 - 9000, step: 0,
+    desc: 'Lấy bảng giá công khai của 5 đối thủ, so theo gói và tính năng. Xuất `pricing.csv` + 1 trang nhận xét.', subs: [['Danh sách 5 đối thủ', 0], ['Bảng so sánh', 0], ['Nhận xét ngắn', 0]], runs: [],
+    log: [ev('u3', 'tạo task', T0 - 25 * MIN), ev('a2', 'nhận task', T0 - 9000)] },
+  { id: 'AG-23', title: 'Phác thảo màn Tasks cho desktop app', status: 'doing', who: 'u1', prio: 'med', labels: ['fe'], room: null, review: false, created: T0 - 26 * HOUR,
+    desc: 'Board + view theo agent để admin biết agent nào đang làm gì.', subs: [['Board', 1], ['Danh sách', 1], ['Theo Agent', 0]], runs: [], log: [ev('u1', 'tạo task', T0 - 26 * HOUR)] },
+  { id: 'AG-29', title: 'Trả lời khách hỏi giá combo 3 tháng (Zalo)', status: 'review', who: 'a1', prio: 'high', labels: ['zalo'], room: 'dm-a1', review: true, created: T0 - 14 * MIN,
+    desc: 'Chị Lan (Zalo OA) hỏi giá combo 3 tháng và phí ship.', subs: [['Đọc tin khách', 1], ['Tra bảng giá', 1], ['Soạn nháp', 1]],
+    output: 'Dạ chào chị Lan, combo 3 tháng hiện giá **1.290.000đ**, đã gồm phí ship nội thành ạ. Chị muốn em giữ suất cho mình không ạ?',
+    runs: [{ n: 1, status: 'completed', dur: 48, tools: 3, at: T0 - 12 * MIN }], log: [ev('a1', 'tạo task từ tin Zalo', T0 - 14 * MIN), ev('a1', 'xong, chuyển sang <b>Chờ duyệt</b>', T0 - 12 * MIN)] },
+  { id: 'AG-28', title: 'Viết hàm sortBy nhiều khoá + test', status: 'review', who: 'a1', prio: 'med', labels: ['fe'], room: 'dm-a1', review: true, created: T0 - 50 * MIN,
+    desc: 'Hàm sort ổn định theo nhiều khoá cho bảng Computers.', subs: [['Viết hàm', 1], ['Viết test', 1]],
+    output: 'Đã thêm `src/utils/sortBy.ts` và 4 test, `pnpm test` **4/4 pass**. Nhánh `feat/sort-by` sẵn sàng mở MR.',
+    runs: [{ n: 1, status: 'completed', dur: 96, tools: 5, at: T0 - 35 * MIN }], log: [ev('u1', 'tạo task', T0 - 50 * MIN), ev('a1', 'xong, chuyển sang <b>Chờ duyệt</b>', T0 - 35 * MIN)] },
+  { id: 'AG-27', title: 'Deploy staging sau khi nâng cấp NestJS 12', status: 'todo', who: 'a3', prio: 'urgent', labels: ['infra'], room: 'all', review: false, created: T0 - 50 * HOUR, blocked: 'build-box offline',
+    desc: 'Build image `be` mới, chạy migration rồi `up -d` trên staging.', subs: [['Build image', 0], ['Migration', 0], ['Health check', 0]],
+    runs: [{ n: 1, status: 'failed', dur: 212, tools: 6, at: T0 - 48 * HOUR, err: 'migration:run exit 1' }],
+    log: [ev('u3', 'tạo task', T0 - 50 * HOUR), ev('a3', 'run #1 <span style="color:var(--err)">thất bại</span> ở <code>migration:run</code>', T0 - 48 * HOUR), cm('u3', 'Lần trước fail ở bước migration, nhớ chạy `migration:run` trước khi `up`.', T0 - 47 * HOUR)] },
+  { id: 'AG-26', title: 'Review MR !42: thêm module computers', status: 'todo', who: 'a1', prio: 'high', labels: ['be'], room: 'dm-a1', review: true, created: T0 - 76 * HOUR,
+    desc: 'Đọc diff, chạy test, ghi nhận xét vào MR.', subs: [['Đọc diff', 0], ['Chạy test', 0], ['Viết nhận xét', 0]],
+    runs: [{ n: 1, status: 'expired', dur: 0, tools: 0, at: T0 - 72 * HOUR }], log: [ev('u1', 'tạo task', T0 - 76 * HOUR), ev('a1', 'hết hạn lease, trả lại hàng đợi', T0 - 72 * HOUR)] },
+  { id: 'AG-25', title: 'Viết docs API cho /computers', status: 'todo', who: 'a1', prio: 'low', labels: ['docs'], room: 'dm-a1', review: true, created: T0 - 5 * HOUR,
+    desc: 'Mô tả các endpoint, ví dụ request/response.', subs: [], runs: [], log: [ev('u3', 'tạo task', T0 - 5 * HOUR)] },
+  { id: 'AG-24', title: 'Chuẩn hoá data khách hàng trong Sheet', status: 'todo', who: 'a2', prio: 'med', labels: ['data'], room: 't-hello', review: true, created: T0 - 3 * HOUR,
+    desc: 'Chuẩn hoá số điện thoại, email; gộp dòng trùng.', subs: [['Chuẩn hoá', 0], ['Gộp trùng', 0]], runs: [], log: [ev('u2', 'tạo task', T0 - 3 * HOUR)] },
+  { id: 'AG-22', title: 'Chuyển migrations sang TypeORM 1', status: 'backlog', who: null, prio: 'med', labels: ['be'], room: null, review: true, created: T0 - 30 * HOUR, desc: '', subs: [], runs: [], log: [ev('u3', 'tạo task', T0 - 30 * HOUR)] },
+  { id: 'AG-21', title: 'Kết nối Telegram cho kênh CSKH', status: 'backlog', who: null, prio: 'low', labels: ['zalo'], room: null, review: false, created: T0 - 28 * HOUR, desc: '', subs: [], runs: [], log: [ev('u1', 'tạo task', T0 - 28 * HOUR)] },
+  { id: 'AG-20', title: 'Báo cáo tuần gửi ban giám đốc', status: 'backlog', who: 'u3', prio: 'med', labels: ['docs'], room: null, review: false, created: T0 - 20 * HOUR, desc: '', subs: [], runs: [], log: [ev('u3', 'tạo task', T0 - 20 * HOUR)] },
+  { id: 'AG-19', title: 'Nâng cấp NestJS 12 + TypeORM 1', status: 'done', who: 'a1', prio: 'high', labels: ['be'], room: 'dm-a1', review: true, created: T0 - 30 * HOUR, desc: '', subs: [], output: 'Đã nâng cấp, 9/9 test BE pass.',
+    runs: [{ n: 1, status: 'completed', dur: 1260, tools: 38, at: T0 - 25 * HOUR }], log: [ev('u1', 'duyệt', T0 - 24 * HOUR)] },
+  { id: 'AG-18', title: 'Cài Rust toolchain cho Tauri', status: 'done', who: 'a1', prio: 'med', labels: ['infra'], room: 'dm-a1', review: false, created: T0 - 26 * HOUR, desc: '', subs: [], runs: [{ n: 1, status: 'completed', dur: 140, tools: 4, at: T0 - 25 * HOUR }], log: [] },
+  { id: 'AG-17', title: 'Dịch landing page sang tiếng Anh', status: 'done', who: 'a2', prio: 'low', labels: ['docs'], room: 't-hello', review: true, created: T0 - 7 * HOUR, desc: '', subs: [], runs: [{ n: 1, status: 'completed', dur: 310, tools: 7, at: T0 - 6 * HOUR }], log: [] },
+  { id: 'AG-16', title: 'Crawl giá đối thủ (lần 1)', status: 'done', who: 'a2', prio: 'med', labels: ['research'], room: 't-hello', review: false, created: T0 - 7 * HOUR, desc: '', subs: [],
+    runs: [{ n: 2, status: 'completed', dur: 1200, tools: 6, at: T0 - 5 * HOUR }, { n: 1, status: 'failed', dur: 360, tools: 2, at: T0 - 5.5 * HOUR, err: 'WebFetch 403' }], log: [] },
+  { id: 'AG-15', title: 'Dọn nhãn Gmail cũ', status: 'done', who: 'a1', prio: 'low', labels: ['email'], room: 'dm-a1', review: false, created: T0 - 3 * HOUR, desc: '', subs: [], runs: [{ n: 1, status: 'completed', dur: 720, tools: 3, at: T0 - 150 * MIN }], log: [] },
+];
+let taskSeq = 31;
+const roomLabel = id => { const r = db.rooms.find(x => x.id === id); if (r) return r.kind === 'dm' ? 'DM' : '#' + r.name; const ch = db.rooms.find(x => x.threads?.some(t => t.id === id)); return ch ? `#${ch.name} › ${ch.threads.find(t => t.id === id).name}` : id; };
+const isChannel = id => db.rooms.some(r => r.id === id && r.kind === 'channel');
+const findTask = id => tasks.find(t => t.id === id);
+
+/* lịch sử run hôm nay cho timeline (start/end tuyệt đối) */
+const H = (agoMin, lenMin, st, title) => ({ s: T0 - agoMin * MIN, e: T0 - (agoMin - lenMin) * MIN, st, title });
+const HIST = {
+  a1: [H(462, 22, 'done', 'Đồng bộ lịch họp tuần'), H(428, 9, 'done', 'Tóm tắt Slack #dev'), H(392, 34, 'done', 'Viết test cho api-client'), H(318, 14, 'fail', 'Deploy preview'), H(300, 18, 'done', 'Deploy preview (lần 2)'), H(238, 41, 'done', 'Refactor TodoPage'), H(162, 12, 'done', 'Dọn nhãn Gmail cũ'), H(37, 2, 'done', 'Viết hàm sortBy nhiều khoá + test'), H(13, 1, 'done', 'Trả lời khách hỏi giá combo (Zalo)')],
+  a2: [H(448, 30, 'done', 'Tóm tắt 3 bài báo thị trường'), H(366, 6, 'fail', 'Crawl giá đối thủ (lần 1)'), H(354, 20, 'done', 'Crawl giá đối thủ (lần 2)'), H(330, 24, 'done', 'Dịch landing page sang tiếng Anh'), H(206, 45, 'done', 'Nghiên cứu Zalo OA API'), H(96, 15, 'done', 'Tóm tắt PDF hợp đồng')],
+  a3: [H(470, 12, 'done', 'Build image be'), H(452, 9, 'fail', 'Deploy staging')],
+};
+
+/* ----- live engine: agent tự nhận việc, chạy từng bước, xong thì chuyển cột ----- */
+const tk = { view: 'board', q: '', who: null, prio: '', open: null, dragging: null, live: true };
+const runningOf = a => tasks.find(t => t.who === a.id && t.status === 'doing' && t.start);
+const queueOf = id => tasks.filter(t => t.who === id && t.status === 'todo').sort((x, y) => PRANK[x.prio] - PRANK[y.prio]);
+function syncAgents() {
+  db.agents.forEach(a => { a.status = pcOf(a).status !== 'online' ? 'offline' : runningOf(a) ? 'working' : 'idle'; });
+}
+function startRun(t) {
+  t.status = 'doing'; t.start = Date.now(); t.step = 0; t.err = null; t.blocked = null;
+  t.log.push(ev(t.who, 'nhận task, bắt đầu run #' + (t.runs.length + 1), Date.now()));
+}
+function endRun(t, status, extra = {}) {
+  const a = findAgent(t.who), now = Date.now();
+  const r = { n: t.runs.length + 1, status, dur: Math.round((now - t.start) / 1000), tools: t.step, at: now, ...extra };
+  t.runs.unshift(r);
+  (HIST[a.id] ||= []).push({ s: t.start, e: now, st: status === 'completed' ? 'done' : status === 'failed' ? 'fail' : 'cancel', title: t.title });
+  t.start = null; t.step = 0;
+  return r;
+}
+function finishRun(t) {
+  const a = findAgent(t.who);
+  const failed = Math.random() < 0.12;
+  if (failed) {
+    const at = stepsFor(t)[Math.min(t.step, stepsFor(t).length - 1)];
+    const r = endRun(t, 'failed', { err: `${at[0]} exit 1` });
+    t.status = 'todo'; t.err = `Run #${r.n} lỗi ở ${at[0]}`;
+    t.log.push(ev(a.id, `run #${r.n} <span style="color:var(--err)">thất bại</span> ở <code>${esc(at[0])}</code>`, Date.now()));
+    toast(a.id, `<b>${a.name}</b> lỗi ở <b>${t.id}</b>, đã trả về Cần làm`, t.id);
+  } else {
+    const r = endRun(t, 'completed');
+    t.subs.forEach(s => s[1] = 1);
+    t.output ||= `Đã xong **${t.title.toLowerCase()}** trong ${dur(r.dur)}, ${r.tools} tool call. Chi tiết trong log run #${r.n}.`;
+    t.status = t.review ? 'review' : 'done';
+    t.log.push(ev(a.id, `xong run #${r.n}, chuyển sang <b>${colName(t.status)}</b>`, Date.now()));
+    toast(a.id, `<b>${a.name}</b> xong <b>${t.id}</b> → ${colName(t.status)}`, t.id);
+  }
+  setTimeout(() => pickNext(a), 1800);
+}
+function pickNext(a) {
+  if (!tk.live || pcOf(a).status !== 'online' || runningOf(a)) return;
+  const next = queueOf(a.id).find(t => !t.blocked && !t.err);
+  if (!next) return refreshTasks();
+  startRun(next);
+  toast(a.id, `<b>${a.name}</b> tự nhận <b>${next.id}</b> từ hàng đợi`, next.id);
+  refreshTasks();
+}
+function cancelRun(t, by = 'u1') {
+  const r = endRun(t, 'cancelled');
+  t.log.push(ev(by, `dừng run #${r.n}`, Date.now()));
+}
+function moveTask(t, to, by = 'u1') {
+  if (t.status === to && !(to === 'doing' && !t.start)) return;
+  const a = findAgent(t.who);
+  const wasRunning = t.status === 'doing' && t.start;
+  if (wasRunning && to !== 'doing') cancelRun(t, by);
+  if (to === 'doing' && a) {
+    const pc = pcOf(a);
+    if (pc.status !== 'online') { t.status = 'todo'; t.blocked = `${pc.name} offline`; toast(a.id, `<b>${a.name}</b> đang offline (${pc.name}). <b>${t.id}</b> được giữ ở Cần làm.`, t.id); return; }
+    const busy = runningOf(a);
+    if (busy && busy !== t) { t.status = 'todo'; t.log.push(ev(by, `xếp vào hàng đợi của ${a.name}`, Date.now())); toast(a.id, `<b>${a.name}</b> đang làm <b>${busy.id}</b>. Đã xếp <b>${t.id}</b> vào hàng đợi.`, t.id); return; }
+    if (!t.start) startRun(t);
+    toast(a.id, `Đã giao <b>${t.id}</b> cho <b>${a.name}</b>, đang chạy`, t.id);
+  } else {
+    t.status = to;
+    if (to === 'done') t.subs.forEach(s => s[1] = 1);
+    t.log.push(ev(by, `chuyển sang <b>${colName(to)}</b>`, Date.now()));
+  }
+  if (wasRunning && a) setTimeout(() => pickNext(a), 1500);
+}
+function tickTasks() {
+  if (!tk.live) return;
+  const running = tasks.filter(t => t.status === 'doing' && t.start && findAgent(t.who));
+  if (!running.length) return;
+  const t = running[Math.floor(Math.random() * running.length)];
+  t.step++;
+  const n = stepsFor(t).length;
+  t.subs.forEach((s, i) => { if (!s[1] && i < Math.floor(t.step / n * t.subs.length)) s[1] = 1; });
+  if (t.step >= n) finishRun(t);
+  refreshTasks();
+}
+setInterval(tickTasks, 2600);
+
+/* ----- toast ----- */
+function toast(agentId, html, taskId) {
+  const el = document.getElementById('toast'); if (!el || state.screen !== 'app') return;
+  const a = findAgent(agentId);
+  el.innerHTML = `${a ? `<span class="av">${agentAv(a.hue)}</span>` : ''}<span>${html}</span>${taskId ? `<span class="lnk" data-toast-task="${taskId}">Xem</span>` : ''}`;
+  el.classList.add('on'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 4200);
+}
+document.addEventListener('click', e => {
+  const x = e.target.closest('[data-toast-task]'); if (!x) return;
+  document.getElementById('toast').classList.remove('on');
+  if (state.nav !== 'tasks') navTo('tasks');
+  openTask(x.dataset.toastTask);
+});
+
+/* ----- render ----- */
+function filteredTasks() {
+  const q = tk.q.trim().toLowerCase();
+  return tasks.filter(t => (!tk.who || t.who === tk.who) && (!tk.prio || t.prio === tk.prio) && (!q || (t.id + ' ' + t.title).toLowerCase().includes(q)));
+}
+function renderTasks() {
+  main.innerHTML = `<div class="tk">
+    <div class="tk-head">
+      <div><div class="crumb">khanhpv workspace</div><h1>Tasks</h1></div>
+      <div class="tk-actions">
+        <button class="live-tg ${tk.live ? '' : 'off'}" id="liveTg" title="Bật/tắt mô phỏng agent chạy"><span class="pulse"></span>${tk.live ? 'Live' : 'Tạm dừng'}</button>
+        <div class="seg">${[['board', 'kanban', 'Board'], ['list', 'list', 'Danh sách'], ['agents', 'gantt', 'Theo Agent']].map(([v, i, n]) => `<button data-view="${v}" class="${tk.view === v ? 'on' : ''}">${ic(i, 15)}${n}</button>`).join('')}</div>
+        <button class="btn primary" data-add="todo">${ic('plus', 16)} Task mới</button>
+      </div>
+    </div>
+    <div class="ag-strip" id="tkStrip"></div>
+    <div class="tk-tools">
+      <div class="srch">${ic('search', 15)}<input id="tkq" placeholder="Tìm theo tên hoặc mã task" value="${esc(tk.q)}" autocomplete="off"/><kbd>/</kbd></div>
+      <select class="sel" id="tkPrio"><option value="">Mọi mức ưu tiên</option>${Object.entries(PRIO).map(([k, v]) => `<option value="${k}" ${tk.prio === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+      <span id="tkChips"></span>
+      <span class="tk-count" id="tkCount"></span>
+    </div>
+    <div class="tk-body" id="tkBody"></div>
+    <div class="tip" id="tktip" style="position:fixed"></div>
+  </div>
+  <div class="drawer-bg" id="drawer"></div>`;
+  const root = main.querySelector('.tk'), body = document.getElementById('tkBody');
+  document.getElementById('liveTg').onclick = () => { tk.live = !tk.live; renderTasks(); if (tk.live) db.agents.forEach(a => pickNext(a)); };
+  root.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { tk.view = b.dataset.view; renderTasks(); });
+  document.getElementById('tkq').oninput = e => { tk.q = e.target.value; renderTkBody(); };
+  document.getElementById('tkPrio').onchange = e => { tk.prio = e.target.value; renderTkBody(); };
+  root.addEventListener('click', e => {
+    const ap = e.target.closest('[data-approve]'); if (ap) { e.stopPropagation(); return approveTask(findTask(ap.dataset.approve)); }
+    const ad = e.target.closest('[data-add]'); if (ad) return openNewTask(ad.dataset.add);
+    const ot = e.target.closest('[data-open-task]'); if (ot) { e.stopPropagation(); return openTask(ot.dataset.openTask); }
+    const af = e.target.closest('[data-af]'); if (af) { tk.who = tk.who === af.dataset.af ? null : af.dataset.af; renderStrip(); return renderTkBody(); }
+    const cl = e.target.closest('[data-clear]'); if (cl) { tk[cl.dataset.clear] = cl.dataset.clear === 'q' ? '' : cl.dataset.clear === 'who' ? null : ''; if (cl.dataset.clear === 'q') document.getElementById('tkq').value = ''; if (cl.dataset.clear === 'prio') document.getElementById('tkPrio').value = ''; renderStrip(); return renderTkBody(); }
+    const tc = e.target.closest('[data-task]'); if (tc) return openTask(tc.dataset.task);
+  });
+  /* drag & drop */
+  body.addEventListener('dragstart', e => { const c = e.target.closest('.tcard'); if (!c) return; tk.dragging = c.dataset.task; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c.dataset.task); requestAnimationFrame(() => c.classList.add('drag')); });
+  body.addEventListener('dragend', () => { tk.dragging = null; renderTkBody(); });
+  body.addEventListener('dragover', e => { const col = e.target.closest('.col'); if (!col || !tk.dragging) return; e.preventDefault(); body.querySelectorAll('.col.over').forEach(x => x !== col && x.classList.remove('over')); col.classList.add('over'); });
+  body.addEventListener('dragleave', e => { const col = e.target.closest('.col'); if (col && !col.contains(e.relatedTarget)) col.classList.remove('over'); });
+  body.addEventListener('drop', e => {
+    const col = e.target.closest('.col'); if (!col || !tk.dragging) return; e.preventDefault();
+    const t = findTask(tk.dragging), before = e.target.closest('.tcard');
+    tasks.splice(tasks.indexOf(t), 1);
+    const bi = before && before.dataset.task !== t.id ? tasks.indexOf(findTask(before.dataset.task)) : -1;
+    bi >= 0 ? tasks.splice(bi, 0, t) : tasks.push(t);
+    moveTask(t, col.dataset.col);
+    tk.dragging = null; refreshTasks();
+  });
+  body.addEventListener('mousemove', e => {
+    const b = e.target.closest('[data-tip]'), tip = document.getElementById('tktip');
+    if (!b) return tip.style.display = 'none';
+    tip.innerHTML = b.dataset.tip; tip.style.display = 'block';
+    const r = tip.getBoundingClientRect();
+    tip.style.left = Math.min(e.clientX + 14, innerWidth - r.width - 12) + 'px'; tip.style.top = (e.clientY - r.height - 12) + 'px';
+  });
+  body.addEventListener('mouseleave', () => document.getElementById('tktip').style.display = 'none');
+  renderStrip(); renderTkBody();
+  if (tk.open) renderDrawer();
+}
+
+function renderStrip() {
+  const el = document.getElementById('tkStrip'); if (!el) return;
+  const agents = db.agents.map(a => {
+    const cur = runningOf(a), q = queueOf(a.id), pc = pcOf(a), off = pc.status !== 'online';
+    const blocked = q.filter(t => t.blocked).length;
+    const line = cur ? `<span data-open-task="${cur.id}"><b>${cur.id}</b> · ${cur.title}</span>`
+      : off ? `Offline · ${pc.name}${blocked ? ` · ${blocked} việc bị chặn` : ''}`
+      : q.length ? 'Rảnh · sắp nhận việc tiếp' : 'Rảnh · hàng đợi trống';
+    return `<button class="ag ${cur ? 'working' : ''} ${tk.who === a.id ? 'on' : tk.who ? 'dim' : ''}" data-af="${a.id}" title="Lọc theo ${a.name}">
+      <span class="avw"><span class="av">${agentAv(a.hue)}</span><span class="dot ${off ? 'off' : cur ? 'busy' : 'on'}"></span></span>
+      <span class="ag-tx"><div class="ag-n">${a.name}</div><div class="ag-s">${line}</div></span>
+      <span class="ag-r">${cur ? `<span class="elapsed" data-since="${cur.start}">${mmss(Date.now() - cur.start)}</span>` : ''}${q.length} chờ</span></button>`;
+  }).join('');
+  const humans = db.humans.filter(h => tasks.some(t => t.who === h.id && t.status !== 'done'));
+  el.innerHTML = agents + `<div class="ag-humans"><span class="stack">${humans.map(h => `<button data-af="${h.id}" class="${tk.who === h.id ? 'on' : ''}">${whoAv(h.id, 26)}</button>`).join('')}</span><span>Thành viên<br/>${tasks.filter(t => findHuman(t.who) && t.status === 'doing').length} đang làm</span></div>`;
+}
+
+function keepScroll(fn) {
+  const body = document.getElementById('tkBody'); if (!body) return;
+  const saved = { top: body.scrollTop, left: body.scrollLeft, cols: [...body.querySelectorAll('[data-scroll]')].map(c => [c.dataset.scroll, c.scrollTop]) };
+  fn(body);
+  body.scrollTop = saved.top; body.scrollLeft = saved.left;
+  saved.cols.forEach(([k, v]) => { const c = body.querySelector(`[data-scroll="${k}"]`); if (c) c.scrollTop = v; });
+}
+function renderTkBody() {
+  const list = filteredTasks();
+  document.getElementById('tkCount').textContent = `${list.length} task${tk.who || tk.q || tk.prio ? ' khớp bộ lọc' : ''}`;
+  const chips = [];
+  if (tk.who) chips.push(`<span class="fchip">${whoAv(tk.who, 16)} ${whoName(tk.who)}<button data-clear="who" title="Bỏ lọc">${ic('x', 12)}</button></span>`);
+  document.getElementById('tkChips').innerHTML = chips.join('');
+  keepScroll(body => { body.innerHTML = tk.view === 'board' ? boardHtml(list) : tk.view === 'list' ? listHtml(list) : workloadHtml(); });
+}
+
+function cardHtml(t) {
+  const a = findAgent(t.who), run = t.status === 'doing' && t.start;
+  const steps = stepsFor(t), cur = steps[Math.min(t.step, steps.length - 1)];
+  const subsDone = t.subs.filter(s => s[1]).length;
+  let note = '';
+  if (run) note = `<div class="tc-live"><span class="mini-spin"></span><span class="stp">${cur[0]} · ${esc(cur[1])}</span><span class="elapsed" data-since="${t.start}">${mmss(Date.now() - t.start)}</span></div>
+    <div class="tc-prog" title="Bước ${t.step + 1}/${steps.length}">${steps.map((_, i) => `<i class="${i < t.step ? 'd' : i === t.step ? 'c' : ''}"></i>`).join('')}</div>`;
+  else if (t.status === 'doing' && !a && t.who) note = `<div class="tc-note hum">${ic('user', 13)} ${whoName(t.who)} đang làm</div>`;
+  else if (t.blocked) note = `<div class="tc-note blk">${ic('lock', 13)} Bị chặn: ${t.blocked}</div>`;
+  else if (t.err) note = `<div class="tc-note err">${ic('alert', 13)} ${t.err}</div>`;
+  else if (t.status === 'review') note = `<div class="tc-note rev"><span>Chờ bạn duyệt</span><button class="btn sm" data-approve="${t.id}">${ic('check', 12)} Duyệt</button></div>`;
+  else if (t.status === 'todo' && a) { const pos = queueOf(a.id).indexOf(t); if (pos >= 0 && !t.blocked) note = ''; }
+  const lastRun = t.runs[0];
+  return `<div class="tcard ${run ? 'run' : ''} ${t.status === 'done' ? 'done' : ''} ${tk.open === t.id ? 'sel' : ''}" draggable="true" data-task="${t.id}">
+    <div class="tc-top">${statusIco(t.status, 13)}<span class="tid">${t.id}</span><span class="sp"></span>${prioIco(t.prio)}${whoAv(t.who)}</div>
+    <div class="tc-title">${esc(t.title)}</div>${note}
+    <div class="tc-foot">${t.labels.map(lbl).join('')}${t.subs.length ? `<span class="m">${ic('check', 12)}${subsDone}/${t.subs.length}</span>` : ''}${t.runs.length ? `<span class="m" title="Số run">${ic('zap', 12)}${t.runs.length}</span>` : ''}${t.log.some(l => l.md) ? `<span class="m">${ic('chat', 12)}${t.log.filter(l => l.md).length}</span>` : ''}${t.status === 'done' && lastRun ? `<span class="m" style="margin-left:auto">${rel(lastRun.at)}</span>` : ''}</div>
+  </div>`;
+}
+function boardHtml(list) {
+  return `<div class="board">${COLS.map(c => {
+    const items = list.filter(t => t.status === c.id);
+    const over = c.wip && items.length > c.wip;
+    return `<section class="col" data-col="${c.id}">
+      <div class="col-h">${statusIco(c.id)}<span>${c.name}</span><span class="n ${over ? 'over' : ''}" title="${c.wip ? 'Giới hạn WIP ' + c.wip : ''}">${items.length}${c.wip ? '/' + c.wip : ''}</span>
+        <button class="icon-btn" data-add="${c.id}" title="Thêm task vào ${c.name}">${ic('plus', 15)}</button></div>
+      <div class="col-b" data-scroll="${c.id}">${items.map(cardHtml).join('') || `<div class="col-empty">${c.hint || 'Trống'}<br/>Kéo task vào đây</div>`}</div>
+    </section>`;
+  }).join('')}</div>`;
+}
+function listHtml(list) {
+  return `<div class="tlist">${COLS.map(c => {
+    const items = list.filter(t => t.status === c.id); if (!items.length) return '';
+    return `<div class="tl-grp">${statusIco(c.id)} ${c.name} <span class="n">${items.length}</span></div>` + items.map(t => {
+      const run = t.status === 'doing' && t.start, s = stepsFor(t)[Math.min(t.step || 0, stepsFor(t).length - 1)];
+      const st = run ? `<span class="st run"><span data-since="${t.start}">${mmss(Date.now() - t.start)}</span> · ${s[0]} ${esc(s[1])}</span>`
+        : t.blocked ? `<span class="st">${ic('lock', 12)} ${t.blocked}</span>` : t.err ? `<span class="st" style="color:var(--err)">${t.err}</span>`
+        : `<span class="st">${t.runs[0] ? 'Run gần nhất ' + rel(t.runs[0].at) : 'Tạo ' + rel(t.created)}</span>`;
+      return `<div class="tl-row" data-task="${t.id}">${statusIco(t.status)}<span class="id">${t.id}</span><span class="ttl"><span>${esc(t.title)}</span>${t.labels.map(lbl).join('')}</span><span class="who">${whoAv(t.who)} ${whoName(t.who)}</span>${st}<span class="pr">${prioIco(t.prio)}${PRIO[t.prio]}</span></div>`;
+    }).join('');
+  }).join('') || '<div class="col-empty" style="margin-top:24px">Không có task nào khớp bộ lọc</div>'}</div>`;
+}
+function workloadHtml() {
+  const now = Date.now(), W = 8 * HOUR, W0 = now - W;
+  const pos = ms => Math.max(0, (ms - W0) / W * 100);
+  const ticks = []; for (let h = Math.ceil(W0 / HOUR) * HOUR; h < now - 20 * MIN; h += HOUR) ticks.push(h);
+  const colorOf = st => ({ done: C_DONE, fail: C_FAIL, cancel: '#b5b3ac' })[st];
+  const stName = { done: 'Hoàn thành', fail: 'Lỗi', cancel: 'Đã dừng' };
+  const rows = db.agents.filter(a => !tk.who || tk.who === a.id).map(a => {
+    const cur = runningOf(a), q = queueOf(a.id), pc = pcOf(a), off = pc.status !== 'online';
+    const hist = (HIST[a.id] || []).filter(h => h.e > W0);
+    const runMs = hist.reduce((s, h) => s + h.e - Math.max(h.s, W0), 0) + (cur ? now - cur.start : 0);
+    const done = hist.filter(h => h.st === 'done').length, fail = hist.filter(h => h.st === 'fail').length;
+    const offFrom = off ? now - pc.hb * 1000 : null;
+    const steps = cur && stepsFor(cur), s = cur && steps[Math.min(cur.step, steps.length - 1)];
+    return `<div class="wl-row">
+      <div><div class="wl-who"><span class="avw"><span class="av">${agentAv(a.hue)}</span><span class="dot ${off ? 'off' : cur ? 'busy' : 'on'}"></span></span>
+        <div><h4>${a.name}</h4><div class="sub">${off ? 'Offline' : cur ? 'Đang làm' : 'Rảnh'} · ${pc.name}</div></div></div>
+        <div class="wl-stats"><span><b>${done}</b>xong</span><span><b>${fail}</b>lỗi</span><span><b>${dur(Math.round(runMs / 1000)).replace(/ \d+s$/, '')}</b>đã chạy</span><span><b>${Math.round(runMs / W * 100)}%</b>bận</span></div></div>
+      <div>
+        ${cur ? `<div class="wl-cur" data-task="${cur.id}"><span class="mini-spin"></span><div class="t"><b>${cur.id}</b> · ${esc(cur.title)}<div>Bước ${cur.step + 1}/${steps.length} · ${s[0]} ${esc(s[1])}</div></div><span class="elapsed" data-since="${cur.start}" style="color:var(--claude);font-weight:600">${mmss(now - cur.start)}</span></div>`
+          : `<div class="wl-idle ${off ? 'off' : ''}">${off ? `${ic('monitor', 15)} Máy <b>${pc.name}</b> offline ${ago(pc.hb)}. Việc trong hàng đợi đang bị chặn.` : `${ic('clock', 15)} Đang rảnh${q.length ? `, sẽ nhận <b>${q[0].id}</b> tiếp theo` : '. Hàng đợi trống, hãy giao thêm việc.'}`}</div>`}
+        <div class="lane">
+          ${hist.map(h => `<div class="blk" style="left:${pos(h.s)}%;width:${(Math.min(h.e, now) - Math.max(h.s, W0)) / W * 100}%;background-color:${colorOf(h.st)}" data-tip="<b style='float:none;margin:0'>${esc(h.title)}</b><br/>${hhmm(h.s)}–${hhmm(h.e)} · ${stName[h.st]}"></div>`).join('')}
+          ${cur ? `<div class="blk run" style="left:${pos(cur.start)}%;width:${(now - cur.start) / W * 100}%;background-color:${C_RUN}" data-tip="<b style='float:none;margin:0'>${esc(cur.title)}</b><br/>Từ ${hhmm(cur.start)} · đang chạy"></div>` : ''}
+          ${off ? `<div class="offz" style="left:${pos(offFrom)}%">offline</div>` : ''}
+          <span class="now"></span>
+        </div>
+        <div class="axis">${ticks.map(h => `<span style="left:${pos(h)}%">${hhmm(h)}</span>`).join('')}</div>
+        <div class="wl-q"><span class="h">Hàng đợi (${q.length})</span>${q.map(t => `<span class="qchip" data-task="${t.id}">${prioIco(t.prio)}<span class="k">${t.id}</span><span>${esc(t.title)}</span>${t.blocked ? ic('lock', 12) : ''}</span>`).join('') || '<span class="h">trống</span>'}</div>
+      </div></div>`;
+  }).join('');
+  const humans = db.humans.filter(h => (!tk.who || tk.who === h.id) && tasks.some(t => t.who === h.id && t.status !== 'done'));
+  const hrows = humans.map(h => { const mine = tasks.filter(t => t.who === h.id && t.status !== 'done'); return `<div class="wl-row" style="grid-template-columns:320px 1fr;align-items:center"><div class="wl-who"><span class="avw">${whoAv(h.id, 40)}</span><div><h4>${h.name}</h4><div class="sub">${h.role}</div></div></div><div class="wl-q" style="margin:0">${mine.map(t => `<span class="qchip" data-task="${t.id}">${statusIco(t.status, 13)}<span class="k">${t.id}</span><span>${esc(t.title)}</span></span>`).join('')}</div></div>`; }).join('');
+  return `<div class="wl"><div class="wl-top"><div class="sub">8 giờ gần nhất · mỗi thanh là một run. Rê chuột để xem chi tiết.</div>
+    <div class="legend"><span><i style="background:${C_DONE}"></i>Hoàn thành</span><span><i style="background:${C_FAIL}"></i>Lỗi</span><span><i style="background:${C_RUN}"></i>Đang chạy</span><span><i style="background:#b5b3ac"></i>Đã dừng</span><span><i style="background:repeating-linear-gradient(135deg,#fff 0 2px,#ccc 2px 3px);border:1px solid #ddd"></i>Offline</span></div></div>
+    ${rows}${hrows ? `<div class="dsec" style="margin-top:26px">Thành viên</div>${hrows}` : ''}</div>`;
+}
+
+/* ----- drawer chi tiết task ----- */
+function openTask(id) { tk.open = id; renderDrawer(); if (tk.view === 'board') renderTkBody(); }
+function closeTask() { tk.open = null; const d = document.getElementById('drawer'); if (d) { d.classList.remove('on'); d.innerHTML = ''; } if (state.nav === 'tasks') renderTkBody(); }
+function approveTask(t) {
+  t.status = 'done'; t.log.push(ev('u1', 'duyệt kết quả, chuyển sang <b>Xong</b>', Date.now()));
+  toast(t.who, `Đã duyệt <b>${t.id}</b>`, null); refreshTasks();
+}
+function renderDrawer(soft) {
+  const d = document.getElementById('drawer'); const t = findTask(tk.open); if (!d || !t) return;
+  const old = d.querySelector('#cmt'), draft = old ? old.value : '', focused = old && document.activeElement === old;
+  const scroll = d.querySelector('.dr-body')?.scrollTop || 0;
+  const a = findAgent(t.who), run = t.status === 'doing' && t.start, steps = stepsFor(t);
+  const people = [...db.agents.map(x => [x.id, `${x.name}${x.status === 'offline' ? ' (offline)' : x.status === 'working' ? ' (đang bận)' : ''}`]), ...db.humans.map(h => [h.id, h.name])];
+  let top = '';
+  if (run) top = `<div class="runbox"><div class="runbox-h"><span class="mini-spin"></span><b>Run #${t.runs.length + 1} đang chạy</b><span style="color:var(--muted)">trên ${pcOf(a).name} · bước ${t.step + 1}/${steps.length}</span><span class="sp"></span><span class="elapsed" data-since="${t.start}">${mmss(Date.now() - t.start)}</span>
+      <button class="btn sm" id="drStop">${ic('stop', 12)} Dừng</button>${t.room && !isChannel(t.room) ? `<button class="btn sm" id="drRoom">${ic('chat', 12)} Mở room</button>` : ''}</div>
+      <div class="runlog" id="runlog">${steps.slice(0, t.step + 1).map((s, i) => `<div class="${i < t.step ? 'ok' : 'cur'}"><span class="tm">${hhmm(t.start + i * 5200)}</span>${i < t.step ? '✓' : '›'} <span class="tn">${s[0]}</span>${esc(s[1])}</div>`).join('')}</div></div>`;
+  else if (t.status === 'doing' && !a && t.who) top = `<div class="banner hum">${ic('user', 16)} ${whoName(t.who)} tự làm task này, không có run tự động.</div>`;
+  else if (t.blocked) top = `<div class="banner blk">${ic('lock', 16)}<span>Bị chặn: <b>${t.blocked}</b>. Agent sẽ tự chạy khi máy online lại.</span><span class="sp"></span><button class="btn sm" onclick="modal.classList.add('on')">Hướng dẫn</button></div>`;
+  else if (t.err) top = `<div class="banner err">${ic('alert', 16)}<span>${t.err}</span><span class="sp"></span><button class="btn sm" id="drRetry">${ic('refresh', 12)} Chạy lại</button></div>`;
+  else if (t.status === 'review') top = `<div class="revbox"><div class="h">${ic('shield', 15)} ${a ? a.name : whoName(t.who)} đã xong, chờ bạn duyệt</div><div class="out">${md(t.output || 'Không có kết quả.')}</div>
+      <div style="display:flex;gap:8px"><button class="btn primary sm" data-approve="${t.id}">${ic('check', 12)} Duyệt</button><button class="btn sm" id="drRevise">Yêu cầu sửa</button></div></div>`;
+  else if (t.status === 'todo' && a) { const q = queueOf(a.id), i = q.indexOf(t), busy = runningOf(a); top = `<div class="banner blk">${ic('clock', 16)}<span>Vị trí <b>${i + 1}/${q.length}</b> trong hàng đợi của ${a.name}${busy ? `, agent đang làm <b>${busy.id}</b>` : ''}.</span><span class="sp"></span><button class="btn sm" id="drRun">${ic('play', 12)} Chạy ngay</button></div>`; }
+  else if (!t.who) top = `<div class="banner blk">${ic('user', 16)}<span>Chưa giao cho ai. Chọn agent ở mục <b>Người làm</b> để đưa vào hàng đợi.</span></div>`;
+
+  const runRows = (run ? [`<tr><td>#${t.runs.length + 1}</td><td><span style="color:var(--claude);font-weight:600">running</span></td><td data-since="${t.start}">${mmss(Date.now() - t.start)}</td><td>${t.step}</td><td style="color:var(--muted)">${hhmm(t.start)}</td></tr>`] : [])
+    .concat(t.runs.map(r => `<tr><td>#${r.n}</td><td><span style="color:${r.status === 'completed' ? 'var(--ok)' : r.status === 'failed' ? 'var(--err)' : 'var(--muted)'};font-weight:600">${r.status}</span>${r.err ? `<div style="color:var(--muted);font-size:11.5px">${esc(r.err)}</div>` : ''}</td><td>${r.dur ? dur(r.dur) : '–'}</td><td>${r.tools}</td><td style="color:var(--muted)">${rel(r.at)}</td></tr>`)).join('');
+
+  const acts = [...t.log].sort((x, y) => x.at - y.at).map(l => l.md
+    ? `<li>${whoAv(l.by, 22)}<div class="bd"><b>${whoName(l.by)}</b><div class="cm">${md(l.md)}</div></div><span class="t">${rel(l.at)}</span></li>`
+    : `<li>${whoAv(l.by, 22)}<div class="bd"><b>${whoName(l.by)}</b> ${l.text}</div><span class="t">${rel(l.at)}</span></li>`).join('');
+
+  d.innerHTML = `<aside class="drawer" ${soft ? 'style="animation:none"' : ''}>
+    <div class="dr-top">${statusIco(t.status)}<span>${t.id}</span>${t.room ? `<span>· ${roomLabel(t.room)}</span>` : ''}<span class="sp"></span>
+      <button class="icon-btn" title="Sao chép link">${ic('copy', 15)}</button><button class="icon-btn" title="Đóng (Esc)" id="drClose">${ic('x', 16)}</button></div>
+    <div class="dr-body">
+      <h2>${esc(t.title)}</h2>
+      <dl class="props">
+        <dt>Trạng thái</dt><dd>${statusIco(t.status)}<select id="pStatus">${COLS.map(c => `<option value="${c.id}" ${c.id === t.status ? 'selected' : ''}>${c.name}</option>`).join('')}</select></dd>
+        <dt>Người làm</dt><dd>${whoAv(t.who)}<select id="pWho"><option value="">Chưa giao</option>${people.map(([id, n]) => `<option value="${id}" ${id === t.who ? 'selected' : ''}>${n}</option>`).join('')}</select></dd>
+        <dt>Ưu tiên</dt><dd>${prioIco(t.prio)}<select id="pPrio">${Object.entries(PRIO).map(([k, v]) => `<option value="${k}" ${k === t.prio ? 'selected' : ''}>${v}</option>`).join('')}</select></dd>
+        <dt>Nhãn</dt><dd>${t.labels.map(lbl).join('')}</dd>
+        <dt>Duyệt</dt><dd><label class="nt-chk" style="margin:0"><input type="checkbox" id="pReview" ${t.review ? 'checked' : ''}/> Cần người duyệt trước khi Xong</label></dd>
+        <dt>Tạo</dt><dd style="color:var(--soft)">${rel(t.created)}</dd>
+      </dl>
+      ${top}
+      ${t.desc ? `<div class="dsec">Mô tả</div><div class="desc">${md(t.desc)}</div>` : ''}
+      ${t.subs.length ? `<div class="dsec">Việc con <span class="r">${t.subs.filter(s => s[1]).length}/${t.subs.length}</span></div><div class="subs">${t.subs.map((s, i) => `<label class="${s[1] ? 'dn' : ''}"><input type="checkbox" data-sub="${i}" ${s[1] ? 'checked' : ''}/><span>${s[0]}</span></label>`).join('')}</div>` : ''}
+      ${runRows ? `<div class="dsec">Runs <span class="r">${t.runs.length + (run ? 1 : 0)}</span></div><table class="runs"><thead><tr><th>Run</th><th>Trạng thái</th><th>Thời lượng</th><th>Tools</th><th>Lúc</th></tr></thead><tbody>${runRows}</tbody></table>` : ''}
+      <div class="dsec">Hoạt động</div><ul class="act">${acts || '<li style="color:var(--muted)">Chưa có hoạt động</li>'}</ul>
+      <form class="cmt" id="cmtForm"><input id="cmt" placeholder="Bình luận… gõ @ để nhắc agent" autocomplete="off"/><button class="btn primary">${ic('send', 14)}</button></form>
+    </div></aside>`;
+  d.classList.add('on');
+  const body = d.querySelector('.dr-body'); body.scrollTop = scroll;
+  const log = d.querySelector('#runlog'); if (log) log.scrollTop = log.scrollHeight;
+  const ci = d.querySelector('#cmt'); ci.value = draft; if (focused) ci.focus();
+  d.onclick = e => { if (e.target === d) closeTask(); };
+  d.querySelector('#drClose').onclick = closeTask;
+  d.querySelector('#pStatus').onchange = e => { moveTask(t, e.target.value); refreshTasks(); };
+  d.querySelector('#pPrio').onchange = e => { t.prio = e.target.value; t.log.push(ev('u1', `đổi ưu tiên thành <b>${PRIO[t.prio]}</b>`, Date.now())); refreshTasks(); };
+  d.querySelector('#pReview').onchange = e => { t.review = e.target.checked; };
+  d.querySelector('#pWho').onchange = e => {
+    const to = e.target.value || null; if (t.status === 'doing' && t.start) cancelRun(t);
+    const prev = t.who; t.who = to; t.blocked = null; t.err = null;
+    t.log.push(ev('u1', to ? `giao cho <b>${whoName(to)}</b>` : 'bỏ giao', Date.now()));
+    if (to && findAgent(to) && (t.status === 'doing' || t.status === 'todo')) { t.status = 'todo'; moveTask(t, 'doing'); }
+    if (prev && findAgent(prev)) setTimeout(() => pickNext(findAgent(prev)), 1500);
+    refreshTasks();
+  };
+  d.querySelectorAll('[data-sub]').forEach(c => c.onchange = () => { t.subs[+c.dataset.sub][1] = c.checked ? 1 : 0; refreshTasks(); });
+  d.querySelector('#drStop')?.addEventListener('click', () => { cancelRun(t); t.status = 'todo'; t.blocked = null; t.err = 'Đã dừng thủ công'; refreshTasks(); setTimeout(() => pickNext(a), 1500); });
+  d.querySelector('#drRoom')?.addEventListener('click', () => { closeTask(); state.nav = 'chat'; state.open = t.room; render(); });
+  d.querySelector('#drRetry')?.addEventListener('click', () => { t.err = null; moveTask(t, 'doing'); refreshTasks(); });
+  d.querySelector('#drRun')?.addEventListener('click', () => {
+    const busy = runningOf(a);
+    if (busy) { tasks.splice(tasks.indexOf(t), 1); tasks.unshift(t); t.prio = 'urgent'; t.log.push(ev('u1', `đưa lên đầu hàng đợi (ưu tiên <b>Khẩn</b>)`, Date.now())); toast(a.id, `<b>${t.id}</b> lên đầu hàng đợi, ${a.name} sẽ làm ngay sau <b>${busy.id}</b>`, t.id); }
+    else moveTask(t, 'doing');
+    refreshTasks();
+  });
+  d.querySelector('#drRevise')?.addEventListener('click', () => {
+    const note = ci.value.trim(); if (note) { t.log.push(cm('u1', note, Date.now())); ci.value = ''; }
+    t.log.push(ev('u1', 'yêu cầu sửa', Date.now())); t.status = 'todo'; t.output = null;
+    if (a) moveTask(t, 'doing'); refreshTasks();
+  });
+  d.querySelector('#cmtForm').onsubmit = e => {
+    e.preventDefault(); const v = ci.value.trim(); if (!v) return;
+    t.log.push(cm('u1', v, Date.now())); ci.value = '';
+    const mention = db.agents.find(x => v.includes('@' + x.name) || (x.id === t.who && /@agent|@claude/i.test(v)));
+    renderDrawer(true);
+    if (mention) setTimeout(() => { t.log.push(cm(mention.id, 'Đã nhận, em sẽ cập nhật trong run tiếp theo.', Date.now())); refreshTasks(); }, 1400);
+  };
+}
+
+/* ----- tạo task ----- */
+const tkm = () => document.getElementById('tkm');
+function openNewTask(status = 'todo') {
+  const m = tkm(); const agents = db.agents.map(a => `<option value="${a.id}">${a.name}${a.status === 'offline' ? ' (offline)' : a.status === 'working' ? ' (đang bận)' : ' (rảnh)'}</option>`).join('');
+  m.firstElementChild.innerHTML = `<h3>Task mới</h3><p>Giao cho agent thì task vào hàng đợi; agent rảnh sẽ tự nhận.</p>
+    <input class="field" id="ntTitle" placeholder="Ví dụ: Tóm tắt báo cáo doanh thu tuần này" autocomplete="off"/>
+    <textarea class="field" id="ntDesc" style="height:84px;padding:10px 14px;margin-top:8px;resize:none" placeholder="Mô tả, đầu ra mong muốn (không bắt buộc)"></textarea>
+    <div class="nt-grid">
+      <label>Người làm<select id="ntWho"><option value="">Chưa giao</option><optgroup label="Agents">${agents}</optgroup><optgroup label="Thành viên">${db.humans.map(h => `<option value="${h.id}">${h.name}</option>`).join('')}</optgroup></select></label>
+      <label>Ưu tiên<select id="ntPrio">${Object.entries(PRIO).map(([k, v]) => `<option value="${k}" ${k === 'med' ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+      <label>Cột<select id="ntStatus">${COLS.map(c => `<option value="${c.id}" ${c.id === status ? 'selected' : ''}>${c.name}</option>`).join('')}</select></label>
+    </div>
+    <label class="nt-chk"><input type="checkbox" id="ntReview" checked/> Cần người duyệt kết quả trước khi chuyển sang Xong</label>
+    <div class="wz-foot"><button class="btn" id="ntCancel">Huỷ</button><button class="btn primary" id="ntOk">Tạo task</button></div>`;
+  m.classList.add('on');
+  const title = m.querySelector('#ntTitle'); title.focus();
+  m.querySelector('#ntWho').value = tk.who || (status === 'doing' ? 'a1' : '');
+  m.querySelector('#ntCancel').onclick = () => m.classList.remove('on');
+  const ok = () => {
+    const v = title.value.trim(); if (!v) { title.focus(); title.style.borderColor = 'var(--err)'; return; }
+    const who = m.querySelector('#ntWho').value || null, st = m.querySelector('#ntStatus').value;
+    const lab = /email|mail/i.test(v) ? 'email' : /đối thủ|nghiên cứu|research|tìm/i.test(v) ? 'research' : /deploy|docker|server/i.test(v) ? 'infra' : /zalo|khách/i.test(v) ? 'zalo' : /sheet|data|excel/i.test(v) ? 'data' : /docs|tài liệu|báo cáo/i.test(v) ? 'docs' : 'fe';
+    const t = { id: 'AG-' + (++taskSeq), title: v, desc: m.querySelector('#ntDesc').value.trim(), status: st === 'doing' ? 'todo' : st, who, prio: m.querySelector('#ntPrio').value, labels: [lab], room: who === 'a2' ? 't-hello' : who ? 'dm-a1' : null,
+      review: m.querySelector('#ntReview').checked, created: Date.now(), subs: [], runs: [], log: [ev('u1', 'tạo task', Date.now())] };
+    tasks.unshift(t); m.classList.remove('on');
+    if (st === 'doing') moveTask(t, 'doing');
+    else if (st === 'todo' && findAgent(who)) { const a = findAgent(who); if (!runningOf(a) && a.status !== 'offline') setTimeout(() => pickNext(a), 900); else toast(a.id, `Đã thêm <b>${t.id}</b> vào hàng đợi của <b>${a.name}</b>`, t.id); }
+    if (state.nav !== 'tasks') navTo('tasks'); else refreshTasks();
+  };
+  m.querySelector('#ntOk').onclick = ok;
+  title.onkeydown = e => { if (e.key === 'Enter') ok(); };
+}
+
+function refreshTasks() {
+  syncAgents();
+  if (state.screen !== 'app' || state.nav !== 'tasks') return;
+  if (tk.dragging) return;
+  renderStrip(); renderTkBody();
+  if (tk.open) renderDrawer(true);
+}
+document.addEventListener('keydown', e => {
+  if (state.nav !== 'tasks' || state.screen !== 'app') return;
+  if (e.key === 'Escape') { if (tkm().classList.contains('on')) tkm().classList.remove('on'); else if (tk.open) closeTask(); }
+  if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); document.getElementById('tkq')?.focus(); }
+  if (e.key === 'c' && !e.metaKey && !e.ctrlKey && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) && !tkm().classList.contains('on')) { e.preventDefault(); openNewTask('todo'); }
+});
+syncAgents();
+
+
+panel.addEventListener('click', e => {
+  const t = e.target.closest('[data-tab]'); if (t) { state.tab = t.dataset.tab; return renderPanel(); }
+  const s = e.target.closest('[data-sec]'); if (s) { const id = s.dataset.sec; state.closed.has(id) ? state.closed.delete(id) : state.closed.add(id); return renderPanel(); }
+  const o = e.target.closest('[data-open]'); if (o) { state.open = o.dataset.open; state.agentTab = 'Overview'; render(); }
+});
+document.querySelectorAll('.rail [data-nav]').forEach(b => b.onclick = () => navTo(b.dataset.nav));
+setInterval(() => document.querySelectorAll('[data-since]').forEach(el => el.textContent = mmss(Date.now() - +el.dataset.since)), 1000);
+window.addEventListener('resize', () => { if (state.screen === 'app' && state.nav === 'dashboard') drawChart(); });
+document.querySelectorAll('.switcher button').forEach(b => b.onclick = () => go(b.dataset.go));
+setInterval(() => { db.computers[0].hb = 1 + Math.floor(Math.random() * 4); document.querySelectorAll('[data-hb="c1"]').forEach(el => el.textContent = ago(db.computers[0].hb)); }, 3000);
+
+hydrateIcons();
+go('login');
+</script>
+</body>
+</html>

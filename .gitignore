@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+coverage/
+.turbo/
+*.tsbuildinfo
+
+# env
+.env
+.env.*
+!.env.example
+
+# backend runtime data
+apps/be/storage/**
+!apps/be/storage/
+!apps/be/storage/**/
+!apps/be/storage/**/.gitkeep
+
+# tauri / rust
+apps/fe/src-tauri/target/
+apps/fe/src-tauri/gen/schemas/
+
+# logs & os
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+
+# editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!apps/be/.vscode/
+
+# Playwright MCP screenshots/snapshots
+.playwright-mcp/

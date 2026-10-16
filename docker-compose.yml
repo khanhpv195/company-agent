@@ -1,0 +1,58 @@
+# Development stack: PostgreSQL + NestJS API with hot reload.
+#   pnpm docker:up    (docker compose up -d --build)
+#   pnpm docker:down
+name: monorepo
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-app}
+    ports:
+      - '${DB_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  be:
+    build:
+      context: .
+      dockerfile: apps/be/Dockerfile
+      target: dev
+    restart: unless-stopped
+    env_file:
+      - path: apps/be/.env
+        required: false
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-app}
+    ports:
+      - '${BE_PORT:-3000}:3000'
+      - '9229:9229'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./apps/be:/app/apps/be
+      - ./packages/shared/src:/app/packages/shared/src:ro
+      # Keep Linux node_modules from the image; dist is JS so it can live on the bind mount
+      # (an anonymous volume on dist/ makes Nest's deleteOutDir fail with EBUSY).
+      - /app/apps/be/node_modules
+      - be_storage:/app/apps/be/storage
+
+volumes:
+  postgres_data:
+  be_storage:

@@ -1,0 +1,10 @@
+node_modules
+dist
+coverage
+.turbo
+pnpm-lock.yaml
+apps/be/storage
+apps/fe/src-tauri/target
+apps/fe/src-tauri/gen
+apps/fe/src-tauri/icons
+.playwright-mcp

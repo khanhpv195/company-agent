@@ -1,0 +1,12 @@
+# The Docker build context is the monorepo root (turbo prune needs the whole workspace),
+# so Docker reads /.dockerignore, not this file. Keep both in sync.
+node_modules
+dist
+coverage
+storage
+test
+.env
+.env.*
+!.env.example
+*.log
+.vscode

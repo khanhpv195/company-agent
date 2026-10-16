@@ -1,0 +1,53 @@
+# Production-like stack: runs the prebuilt `runtime` image, no source mounts.
+#   docker compose -f docker-compose.prod.yml build      # or pull BE_IMAGE from a registry
+#   DB_PASSWORD=... docker compose -f docker-compose.prod.yml up -d
+name: monorepo-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: ${DB_NAME:-app}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  be:
+    image: ${BE_IMAGE:-monorepo/be:latest}
+    build:
+      context: .
+      dockerfile: apps/be/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      CORS_ORIGINS: ${CORS_ORIGINS:-tauri://localhost,http://tauri.localhost}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      FALLBACK_LANGUAGE: ${FALLBACK_LANGUAGE:-en}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_NAME: ${DB_NAME:-app}
+      DB_SYNCHRONIZE: 'false'
+      RUN_MIGRATIONS: 'true'
+    ports:
+      - '${BE_PORT:-3000}:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - be_storage:/app/storage
+
+volumes:
+  postgres_data:
+  be_storage:
