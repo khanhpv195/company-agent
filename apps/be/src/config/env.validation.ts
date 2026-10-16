@@ -11,6 +11,11 @@ export const envValidationSchema = Joi.object({
     .valid(...Object.values(SupportedLanguage))
     .default(SupportedLanguage.EN),
 
+  JWT_ACCESS_SECRET: Joi.string().min(32).required(),
+  JWT_ACCESS_TTL: Joi.string().default('15m'),
+  JWT_REFRESH_TTL: Joi.string().default('30d'),
+  AGENT_SIMULATOR: Joi.boolean().default(true),
+
   DB_HOST: Joi.string().default('localhost'),
   DB_PORT: Joi.number().port().default(5432),
   DB_USERNAME: Joi.string().required(),

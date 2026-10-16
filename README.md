@@ -46,7 +46,7 @@ cp apps/fe/.env.example apps/fe/.env
 
 ```bash
 pnpm docker:up          # postgres + be (hot reload, chạy migration lúc start)
-pnpm db:seed            # tùy chọn: todo mẫu
+pnpm db:seed            # tùy chọn: dữ liệu mẫu (chưa có seeder)
 pnpm dev:fe             # mở cửa sổ Tauri, gọi API tại VITE_API_URL
 ```
 
@@ -129,7 +129,7 @@ pnpm docker:down
 | `pnpm format`                         | Prettier                                  |
 | `pnpm docker:up` / `pnpm docker:down` | Compose dev                               |
 | `pnpm db:migrate`                     | `typeorm migration:run`                   |
-| `pnpm db:seed`                        | Seed todo mẫu                             |
+| `pnpm db:seed`                        | Chạy các seeder (hiện chưa có)            |
 
 Trong `apps/be`: `pnpm migration:generate InitX`, `pnpm migration:run`, `pnpm migration:revert`, `pnpm seed`.
 
@@ -189,7 +189,6 @@ Image multi-stage (`apps/be/Dockerfile`): `turbo prune be --docker` → install 
 | -------- | ------------------------------------------------- |
 | Prefix   | `/api` + URI version `/v1`                        |
 | Health   | `GET /api/v1/health` → `{ status: "ok", uptime }` |
-| Todos    | CRUD + phân trang `/api/v1/todos`                 |
 | Envelope | `{ success, data, message, meta? }`               |
 | i18n     | Header `Accept-Language: en` hoặc `vi`            |
 | Swagger  | http://localhost:3000/docs                        |

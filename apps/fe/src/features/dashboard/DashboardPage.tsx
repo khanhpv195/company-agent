@@ -1,3 +1,4 @@
+import { currentStep } from '@repo/shared';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { AgentAvatar, Dot } from '../../components/Avatar';
@@ -13,7 +14,7 @@ import { chatLabel } from '../chat/chat.logic';
 import { useRooms } from '../chat/chat.api';
 import { useConnections } from '../connections/connections.api';
 import { useTasks } from '../tasks/tasks.api';
-import { C_DONE, C_FAIL, currentStep } from '../tasks/tasks.logic';
+import { C_DONE, C_FAIL } from '../tasks/tasks.logic';
 import { usePeople, useSession } from '../workspace/workspace.api';
 import { api } from '../../lib/api-client';
 import { AssignmentsChart, AssignmentsTable } from './AssignmentsChart';

@@ -1,8 +1,0 @@
-{
-  "CREATED": "Tạo công việc thành công",
-  "LIST": "Lấy danh sách công việc thành công",
-  "DETAIL": "Lấy công việc thành công",
-  "UPDATED": "Cập nhật công việc thành công",
-  "DELETED": "Xóa công việc thành công",
-  "NOT_FOUND": "Không tìm thấy công việc có id {id}"
-}

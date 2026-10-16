@@ -1,4 +1,4 @@
-import type { Task, TaskPriority, TaskStatus } from '@repo/shared';
+import { queueOf, runningOf, type Task, type TaskPriority, type TaskStatus } from '@repo/shared';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../../components/Icon';
@@ -12,7 +12,7 @@ import { chatLabel } from '../chat/chat.logic';
 import { usePeople } from '../workspace/workspace.api';
 import { useTaskActions } from './tasks.api';
 import { Elapsed, Label, PriorityIcon, StatusIcon } from './task-ui';
-import { COLUMNS, PRIORITIES, queueOf, runningOf } from './tasks.logic';
+import { COLUMNS, PRIORITIES } from './tasks.logic';
 
 const RUN_COLOR = {
   completed: 'var(--ok)',

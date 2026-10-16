@@ -8,7 +8,7 @@ pnpm + Turborepo monorepo: a NestJS REST API (`apps/be`) and a Tauri v2 + React 
 
 Current stack (README.md still lists older versions; trust `package.json`): Node 24 (`.nvmrc`), pnpm 11, NestJS 12 (ESM-only packages), TypeORM 1, TypeScript 6, React 19, Vite 8, ESLint 10 (flat config at root `eslint.config.mjs`), Jest 30 for the backend. Rust (rustup stable) is required to run/build the Tauri app.
 
-The product is a Kylon-like "AI-native workspace" (humans and Claude Code agents chatting in rooms, plus a task board where admins see which agent runs what). See `docs/kylon-reference.md` and `docs/ui-plan-kylon.md`. `docs/mockups/ui-preview.html` is the approved static prototype; `apps/fe` implements it for real and currently runs entirely on an in-app mock backend (`VITE_MOCK=1`). The backend still only has the scaffold `todos` module.
+The product is a Kylon-like "AI-native workspace" (humans and Claude Code agents chatting in rooms, plus a task board where admins see which agent runs what). See `docs/kylon-reference.md` and `docs/ui-plan-kylon.md`. `docs/mockups/ui-preview.html` is the approved static prototype; `apps/fe` implements it for real and currently runs entirely on an in-app mock backend (`VITE_MOCK=1`). The backend has no feature modules yet; it is being built in phases (auth, computers/agents, SSE, tasks engine, chat, dashboard, connections). Pure task rules live in `packages/shared/src/rules/` (used by the FE mock and, later, the backend); the stateful mock engine is `apps/fe/src/mocks/backend.ts`.
 
 ## Commands
 
@@ -31,10 +31,12 @@ Backend tests (Jest needs `NODE_OPTIONS=--experimental-vm-modules` because Nest 
 
 ```bash
 pnpm --filter be test                                  # unit (*.spec.ts under src/)
-pnpm --filter be test todos.service                    # single file by pattern
-pnpm --filter be test todos.service -t "create"        # single test by name
+pnpm --filter be test <file-pattern>                   # single file by pattern
+pnpm --filter be test <file-pattern> -t "<test name>"  # single test by name
 pnpm --filter be test:e2e                              # test/*.e2e-spec.ts
 ```
+
+E2E runs serially against a real Postgres DB `agent_test` (needs `docker compose up -d postgres`). `test/global-setup.ts` creates it if missing and runs all migrations; `test/setup-env.ts` forces test env (`DB_NAME=agent_test`, fixed `JWT_ACCESS_SECRET`, `AGENT_SIMULATOR=false`) over `.env`. Specs use `createTestApp()` (full `AppModule` + `configureApp`) and `truncateAll(dataSource)` in `beforeEach` from `test/utils`.
 
 Migrations (run from `apps/be`, wrapped by `scripts/migrate.sh`, which uses ts-node in dev and compiled `dist/` when `NODE_ENV=production`):
 
@@ -45,12 +47,12 @@ pnpm migration:create Name | migration:run | migration:revert | migration:show
 
 New Nest resource: `cd apps/be && pnpm exec nest g resource modules/<name>`.
 
-Env setup: `cp apps/be/.env.example apps/be/.env` and `cp apps/fe/.env.example apps/fe/.env`. Postgres alone: `docker compose up -d postgres`.
+Env setup: `cp apps/be/.env.example apps/be/.env` and `cp apps/fe/.env.example apps/fe/.env`. `JWT_ACCESS_SECRET` must be set (>= 32 chars, generate with `openssl rand -base64 48`); the example value is a dev placeholder only. Postgres alone: `docker compose up -d postgres`.
 
 ## Architecture
 
 ### Shared contract (`packages/shared`)
-Types, interfaces and enums used by both apps, built with tsup to CJS + ESM in `dist/`. Consumers import from `dist`, so **after changing shared types run `pnpm --filter @repo/shared build`** (or use `pnpm --filter @repo/shared dev` for watch) before typechecking/running be or fe. `ApiResponse` / `ApiErrorResponse` defined here are the wire format for every endpoint.
+Types, interfaces and enums used by both apps, built with tsup to CJS + ESM in `dist/`. Consumers import from `dist`, so **after changing shared types run `pnpm --filter @repo/shared build`** (or use `pnpm --filter @repo/shared dev` for watch) before typechecking/running be or fe. `ApiResponse` / `ApiErrorResponse` defined here are the wire format for every endpoint. `src/rules/` holds the pure, framework-free task rules (shared by the FE mock and, later, the backend task engine).
 
 ### Backend (`apps/be`)
 - `main.ts` adds helmet + CORS; `app.setup.ts#configureApp` holds the global HTTP pipeline and is reused by e2e tests, so global pipes/filters/interceptors go there, not in `main.ts`.
@@ -68,9 +70,24 @@ Types, interfaces and enums used by both apps, built with tsup to CJS + ESM in `
 - Features in `src/features/<name>/`: `*.api.ts` (query/mutation hooks), pure `*.logic.ts`, page components. Screens: dashboard, tasks (board / list / per-agent timeline + drawer), chat, people, computers, connections, settings, auth (login + onboarding). Shell in `src/layout/` (rail, ⌘K palette).
 - Styling is plain CSS ported from the mockup: `src/styles/app.css` (CSS variables on `:root`). No Tailwind.
 - `src/lib/api-client.ts#apiRequest` is the single fetch wrapper: prefixes `VITE_API_URL`, sends `Accept-Language`, unwraps/validates the `ApiResponse` envelope and throws `ApiError` (status `0` = API unreachable). `api.get/post/patch/put/delete` return only `data`.
-- Mock mode (`VITE_MOCK=1`, on in `.env.example`): `apiRequest` routes to `src/mocks/server.ts` in-process (no service worker, so it works in Tauri). `src/mocks/backend.ts` holds the task rules the real backend must keep (one run per agent, priority queue, auto pick-up, offline computer blocks, review before done); `src/mocks/chat.ts` streams agent replies. Push events go through `src/lib/realtime.ts` (`RealtimeClient`) and `useRealtimeSync` applies them to the query cache; a real SSE client replaces the mock there.
+- Mock mode (`VITE_MOCK=1`, on in `.env.example`): `apiRequest` routes to `src/mocks/server.ts` in-process (no service worker, so it works in Tauri). The pure task rules (one run per agent, priority queue, auto pick-up, offline computer blocks, review before done) live in `packages/shared/src/rules/`, and `src/mocks/backend.ts` is the stateful mock engine built on them; `src/mocks/chat.ts` streams agent replies. Push events go through `src/lib/realtime.ts` (`RealtimeClient`) and `useRealtimeSync` applies them to the query cache; a real SSE client replaces the mock there.
 - Tests: `pnpm --filter fe test` (Vitest) covers the mock task engine and pure logic.
 - Tauri shell (`src-tauri/`) is currently a bare builder with no custom commands. Any API origin must be allowed in the CSP `connect-src` in `src-tauri/tauri.conf.json`, and the backend `CORS_ORIGINS` must include `tauri://localhost`, `http://tauri.localhost` (Windows) and `http://localhost:1420`.
 
 ### Docker
-`docker-compose.yml` = dev (source mounted, `nest start --watch`, debugger on 9229, migrations on start). `docker-compose.prod.yml` = runtime image, requires `DB_PASSWORD`. `apps/be/Dockerfile` is multi-stage via `turbo prune be --docker` → `pnpm deploy` → non-root runtime.
+`docker-compose.yml` = dev (source mounted, `nest start --watch`, debugger on 9229, migrations on start). `docker-compose.prod.yml` = runtime image, requires `DB_PASSWORD` and `JWT_ACCESS_SECRET`. `apps/be/Dockerfile` is multi-stage via `turbo prune be --docker` → `pnpm deploy` → non-root runtime.
+
+## Model roles and review gate (mandatory)
+
+| Role | Model |
+|------|-------|
+| Specs, implementation plans, plan review | Opus 5.5 (`model: "opus"`), never Sonnet or Haiku |
+| Codebase scanning and indexing: Explore/research subagents, grep/CodeGraph sweeps, codegraph sync/index refresh, file and caller lookups, log/test-output summaries | Haiku 5.5 (`model: "haiku"`) |
+| Implementer subagents for routine tasks (per plan task, mechanical edits, renames, copy/i18n, UI wiring, tests for existing behaviour) | Haiku 5.5 (`model: "haiku"`) |
+| Implementer subagents for hard tasks (see below) and fix rounds after the gate | Sonnet 5.5 (`model: "sonnet"`), never Opus |
+| Per-task reviewers and scoped re-reviews | Sonnet 5.5 |
+| Final whole-branch review (the gate) | Opus 5.5 (`model: "opus"`) |
+
+A task is **hard** (Sonnet 5.5, not Haiku) when it touches the task engine rules (one run per agent, priority queue, auto pick-up, offline-computer blocking, review before done), locking/concurrency, migrations, auth/session guards, SSE/realtime delivery, idempotency, external integrations (Claude Code agents on computers, Zalo/Facebook/Gmail connections, OAuth), Tauri/Rust or CSP/CORS config, a cross-module refactor (including `@repo/shared` contract changes), or root-cause debugging; or when a Haiku implementer fails or stalls on it once. When in doubt, use Sonnet.
+
+Always pass `model` explicitly when dispatching a subagent. The split is fixed: Opus 5.5 plans, Haiku 5.5 scans and executes routine tasks, Sonnet 5.5 executes hard tasks and reviews per task. Opus never implements.

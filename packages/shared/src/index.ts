@@ -9,5 +9,5 @@ export * from './interfaces/pagination.interface';
 export * from './interfaces/realtime-event.interface';
 export * from './interfaces/room.interface';
 export * from './interfaces/task.interface';
-export * from './interfaces/todo.interface';
 export * from './interfaces/workspace.interface';
+export * from './rules';

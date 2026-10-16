@@ -1,4 +1,4 @@
-import type { RunSpan, Task } from '@repo/shared';
+import { currentStep, pickableOf, queueOf, runningOf, type RunSpan, type Task } from '@repo/shared';
 import { useState, type MouseEvent, type ReactNode } from 'react';
 import { AgentAvatar, Dot } from '../../components/Avatar';
 import { Icon } from '../../components/Icon';
@@ -8,16 +8,7 @@ import { useNow } from '../../lib/use-now';
 import { ROLE_NAME, usePeople } from '../workspace/workspace.api';
 import { useRunSpans } from './tasks.api';
 import { PriorityIcon, StatusIcon } from './task-ui';
-import {
-  C_CANCEL,
-  C_DONE,
-  C_FAIL,
-  C_RUN,
-  currentStep,
-  pickableOf,
-  queueOf,
-  runningOf,
-} from './tasks.logic';
+import { C_CANCEL, C_DONE, C_FAIL, C_RUN } from './tasks.logic';
 
 const WINDOW = 8 * HOUR;
 const COLOR: Record<RunSpan['result'], string> = { done: C_DONE, fail: C_FAIL, cancel: C_CANCEL };

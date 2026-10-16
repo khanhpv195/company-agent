@@ -4,10 +4,17 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { AcceptLanguageResolver, HeaderResolver, I18nModule, QueryResolver } from 'nestjs-i18n';
 import { join } from 'node:path';
 import { AppController } from './app.controller';
-import { appConfig, databaseConfig, envValidationSchema, i18nConfig, I18nConfig } from './config';
+import {
+  agentConfig,
+  appConfig,
+  authConfig,
+  databaseConfig,
+  envValidationSchema,
+  i18nConfig,
+  I18nConfig,
+} from './config';
 import { STATIC_SERVE_ROOT } from './contacts';
 import { DatabaseModule } from './database/database.module';
-import { TodosModule } from './modules/todos/todos.module';
 
 @Module({
   imports: [
@@ -15,7 +22,7 @@ import { TodosModule } from './modules/todos/todos.module';
       isGlobal: true,
       cache: true,
       envFilePath: ['.env.local', '.env'],
-      load: [appConfig, databaseConfig, i18nConfig],
+      load: [appConfig, databaseConfig, i18nConfig, authConfig, agentConfig],
       validationSchema: envValidationSchema,
     }),
     I18nModule.forRootAsync({
@@ -38,7 +45,6 @@ import { TodosModule } from './modules/todos/todos.module';
       serveRoot: STATIC_SERVE_ROOT,
     }),
     DatabaseModule,
-    TodosModule,
   ],
   controllers: [AppController],
 })

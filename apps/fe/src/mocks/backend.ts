@@ -1,15 +1,25 @@
-import type {
-  Agent,
-  CreateTaskInput,
-  RealtimeEvent,
-  RunSpan,
-  Task,
-  TaskActivity,
-  TaskPriority,
-  TaskRun,
-  TaskStatus,
-  TaskStep,
-  UpdateTaskInput,
+import {
+  currentStep,
+  firstRank,
+  inferLabel,
+  pickableOf,
+  placeBefore,
+  PRIORITY_NAME,
+  queueOf,
+  runningOf,
+  spanResult,
+  STATUS_NAME,
+  statusAfterRun,
+  stepsFor,
+  subtasksDue,
+  type Agent,
+  type CreateTaskInput,
+  type RealtimeEvent,
+  type Task,
+  type TaskActivity,
+  type TaskRun,
+  type TaskStatus,
+  type UpdateTaskInput,
 } from '@repo/shared';
 import { iso, seed, type MockDb } from './fixtures';
 
@@ -28,87 +38,6 @@ export interface BackendOptions {
   now?: () => number;
   /** Deferred work (agent pick-up, replies). Tests pass a manual scheduler. */
   later?: (fn: () => void, ms: number) => void;
-}
-
-export const PRIORITY_RANK: Record<TaskPriority, number> = { urgent: 0, high: 1, med: 2, low: 3 };
-export const STATUS_NAME: Record<TaskStatus, string> = {
-  backlog: 'Backlog',
-  todo: 'Cần làm',
-  doing: 'Đang làm',
-  review: 'Chờ duyệt',
-  done: 'Xong',
-};
-const PRIORITY_NAME: Record<TaskPriority, string> = {
-  urgent: 'Khẩn',
-  high: 'Cao',
-  med: 'Trung bình',
-  low: 'Thấp',
-};
-
-const step = (tool: string, input: string): TaskStep => ({ tool, input });
-/** Tool scripts an agent "runs" for a task, picked by its first label. */
-export const STEPS: Record<string, TaskStep[]> = {
-  email: [
-    step('Bash', 'gws gmail list --unread --since 18:00'),
-    step('Read', '42 email · phân loại theo người gửi'),
-    step('Bash', 'gws gmail label --add "Cần xử lý" ×3'),
-    step('Write', 'summary/email-sang-nay.md'),
-    step('Bash', 'agent send --room dm-a1 summary.md'),
-  ],
-  research: [
-    step('WebSearch', '"phần mềm bán hàng" bảng giá 2026'),
-    step('WebFetch', 'doithu-a.vn/bang-gia'),
-    step('WebFetch', 'doithu-b.vn/pricing'),
-    step('Bash', 'python compare.py --out pricing.csv'),
-    step('Write', 'reports/doi-thu.md'),
-  ],
-  fe: [
-    step('Read', 'apps/fe/src/App.tsx'),
-    step('Grep', '"apiRequest" apps/fe/src'),
-    step('Edit', 'apps/fe/src/features/…'),
-    step('Bash', 'pnpm --filter fe typecheck'),
-    step('Bash', 'pnpm --filter fe test'),
-  ],
-  be: [
-    step('Bash', 'git fetch origin mr/42'),
-    step('Read', 'apps/be/src/computers/computers.service.ts'),
-    step('Read', 'apps/be/src/computers/computers.controller.ts'),
-    step('Bash', 'pnpm --filter be test'),
-    step('Write', 'review-mr-42.md'),
-  ],
-  infra: [
-    step('Bash', 'docker compose build be'),
-    step('Bash', 'pnpm --filter be migration:run'),
-    step('Bash', 'docker compose up -d'),
-    step('Bash', 'curl -sf :3000/api/v1/health'),
-  ],
-  zalo: [
-    step('Read', 'Zalo OA · tin nhắn của khách'),
-    step('Read', 'bang-gia-combo.xlsx'),
-    step('Write', 'bản nháp trả lời'),
-  ],
-  data: [
-    step('Read', 'Khách hàng 2026.xlsx · 1.240 dòng'),
-    step('Bash', 'python normalize.py --phone --email'),
-    step('Bash', 'python dedupe.py → 37 trùng'),
-    step('Write', 'Khách hàng 2026 (chuẩn hoá).xlsx'),
-  ],
-  docs: [
-    step('Read', 'apps/be/src/computers/*.ts'),
-    step('Write', 'docs/api/computers.md'),
-    step('Bash', 'pnpm lint:md'),
-  ],
-};
-export const stepsFor = (labels: string[]) => STEPS[labels[0]] ?? STEPS.fe;
-
-export function inferLabel(title: string): string {
-  if (/email|mail/i.test(title)) return 'email';
-  if (/đối thủ|nghiên cứu|research|tìm/i.test(title)) return 'research';
-  if (/deploy|docker|server/i.test(title)) return 'infra';
-  if (/zalo|khách/i.test(title)) return 'zalo';
-  if (/sheet|data|excel/i.test(title)) return 'data';
-  if (/docs|tài liệu|báo cáo/i.test(title)) return 'docs';
-  return 'fe';
 }
 
 /** Chance that a finished run fails, so the error path shows up while testing the UI. */
@@ -181,12 +110,10 @@ export class MockBackend {
     return this.agent(id)?.name ?? this.db.members.find((m) => m.id === id)?.name ?? id;
   }
   runningOf(agentId: string) {
-    return this.db.tasks.find((t) => t.assigneeId === agentId && t.activeRun);
+    return runningOf(this.db.tasks, agentId);
   }
   queueOf(agentId: string) {
-    return this.db.tasks
-      .filter((t) => t.assigneeId === agentId && t.status === 'todo')
-      .sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || a.rank - b.rank);
+    return queueOf(this.db.tasks, agentId);
   }
   syncAgents() {
     for (const a of this.db.agents) {
@@ -239,14 +166,12 @@ export class MockBackend {
       error,
     };
     t.runs.unshift(record);
-    const result: RunSpan['result'] =
-      status === 'completed' ? 'done' : status === 'failed' ? 'fail' : 'cancel';
     this.db.spans.push({
       agentId: t.assigneeId,
       title: t.title,
       startedAt: run.startedAt,
       endedAt: iso(end),
-      result,
+      result: spanResult(status),
     });
     t.activeRun = null;
     if (status === 'completed' || status === 'failed')
@@ -275,9 +200,8 @@ export class MockBackend {
 
   private finishRun(t: Task) {
     const agent = this.agent(t.assigneeId)!;
-    const run = t.activeRun!;
     if (this.random() < FAIL_RATE) {
-      const at = run.steps[Math.min(run.step, run.steps.length - 1)];
+      const at = currentStep(t)!;
       const r = this.endRun(t, 'failed', `${at.tool} exit 1`);
       t.status = 'todo';
       t.error = `Run #${r.n} lỗi ở ${at.tool}`;
@@ -288,7 +212,7 @@ export class MockBackend {
       const r = this.endRun(t, 'completed');
       t.subtasks.forEach((s) => (s.done = true));
       t.output ??= `Đã xong **${t.title.toLowerCase()}** trong ${r.durationSec}s, ${r.toolCalls} tool call. Chi tiết trong log run #${r.n}.`;
-      t.status = t.requiresReview ? 'review' : 'done';
+      t.status = statusAfterRun(t);
       this.log(t, agent.id, `xong run #${r.n}, chuyển sang **${STATUS_NAME[t.status]}**`);
       this.notice(`**${agent.name}** xong **${t.id}** → ${STATUS_NAME[t.status]}`, agent.id, t.id);
       this.feed(agent.id, `xong **${t.title}**`);
@@ -301,7 +225,7 @@ export class MockBackend {
     const agent = this.agent(agentId);
     if (!agent || this.db.scheduler.paused || !this.isOnline(agent) || this.runningOf(agentId))
       return;
-    const next = this.queueOf(agentId).find((t) => !t.blockedReason && !t.error);
+    const [next] = pickableOf(this.db.tasks, agentId);
     if (next) {
       this.startRun(next);
       this.notice(`**${agent.name}** tự nhận **${next.id}** từ hàng đợi`, agent.id, next.id);
@@ -328,7 +252,7 @@ export class MockBackend {
     if (!run) return;
     run.step++;
     const n = run.steps.length;
-    const due = Math.floor((run.step / n) * t.subtasks.length);
+    const due = subtasksDue(run.step, n, t.subtasks.length);
     t.subtasks.forEach((s, i) => {
       if (i < due) s.done = true;
     });
@@ -379,10 +303,7 @@ export class MockBackend {
 
   /** Reorder: place `t` before `beforeId` (or at the end). */
   rerank(t: Task, beforeId: string | null | undefined) {
-    const list = [...this.db.tasks].sort((a, b) => a.rank - b.rank).filter((x) => x !== t);
-    const i = beforeId ? list.findIndex((x) => x.id === beforeId) : -1;
-    list.splice(i >= 0 ? i : list.length, 0, t);
-    list.forEach((x, k) => (x.rank = k));
+    placeBefore(this.db.tasks, t, beforeId).forEach((x, k) => (x.rank = k));
   }
 
   createTask(input: CreateTaskInput): Task {
@@ -411,7 +332,7 @@ export class MockBackend {
       output: null,
       blockedReason: null,
       error: null,
-      rank: Math.min(0, ...this.db.tasks.map((x) => x.rank)) - 1,
+      rank: firstRank(this.db.tasks),
     };
     this.log(t, this.db.meId, 'tạo task');
     this.db.tasks.push(t);
@@ -476,7 +397,7 @@ export class MockBackend {
     if (!agent) throw new HttpError(409, 'Task has no agent');
     const busy = this.runningOf(agent.id);
     if (busy && busy !== t) {
-      t.rank = Math.min(...this.db.tasks.map((x) => x.rank)) - 1;
+      t.rank = firstRank(this.db.tasks);
       t.priority = 'urgent';
       t.error = null;
       this.log(t, this.db.meId, 'đưa lên đầu hàng đợi (ưu tiên **Khẩn**)');

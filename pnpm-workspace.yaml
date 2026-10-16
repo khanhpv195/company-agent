@@ -3,6 +3,7 @@ packages:
   - packages/*
 
 allowBuilds:
+  argon2: true
   esbuild: true
   '@parcel/watcher': false
   '@scarf/scarf': false

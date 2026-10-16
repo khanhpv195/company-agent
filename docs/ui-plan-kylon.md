@@ -35,7 +35,7 @@ Hiện có: Tauri 2, React 19.3, Vite 8, TanStack Query, `lib/api-client.ts` (b�
 Không thêm thư viện nào khác. Thứ chưa cần thì để sau (dnd-kit, recharts…).
 
 ## 2. Hợp đồng type ở `packages/shared/src/interfaces`
-Theo pattern của `todo.interface.ts`, enum đặt trong `enums.ts`, export qua `index.ts`.
+Theo pattern của các file trong `interfaces/`, enum đặt trong `enums.ts`, export qua `index.ts`.
 
 - `workspace.interface.ts`: `Workspace {id, name, slug, iconUrl?, plan}` và `Member {id, userId, name, avatarUrl, role: owner|admin|member, presence}`
 - `computer.interface.ts`: `Computer {id, name, os, hostname, status: online|offline|sleeping, lastHeartbeatAt, keepAwake, cliVersion, agentIds[]}`
@@ -117,7 +117,7 @@ apps/fe/src/
   stores/ui.ts            zustand
   mocks/                  browser.ts, db.ts, fixtures/, handlers/, realtime/
 ```
-Feature `todos` được giữ lại cho tới khi shell chạy được, xoá ở bước 3.
+Feature `todos` đã được xoá (sau khi shell chạy được).
 
 ## 6. Thứ tự làm (mỗi bước đều chạy được)
 1. **Shared types + fixtures + MSW**: chạy `pnpm --filter fe dev:web`, thấy request mock trả về đúng trong devtools.

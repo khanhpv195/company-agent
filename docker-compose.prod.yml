@@ -1,6 +1,8 @@
 # Production-like stack: runs the prebuilt `runtime` image, no source mounts.
 #   docker compose -f docker-compose.prod.yml build      # or pull BE_IMAGE from a registry
-#   DB_PASSWORD=... docker compose -f docker-compose.prod.yml up -d
+#   DB_PASSWORD=... JWT_ACCESS_SECRET=... docker compose -f docker-compose.prod.yml up -d
+# Required: DB_PASSWORD and JWT_ACCESS_SECRET (>= 32 chars, e.g. `openssl rand -base64 48`).
+# Optional: JWT_ACCESS_TTL, JWT_REFRESH_TTL, AGENT_SIMULATOR (defaults below).
 name: monorepo-prod
 
 services:
@@ -38,6 +40,10 @@ services:
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       DB_NAME: ${DB_NAME:-app}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-30d}
+      AGENT_SIMULATOR: ${AGENT_SIMULATOR:-true}
       DB_SYNCHRONIZE: 'false'
       RUN_MIGRATIONS: 'true'
     ports:

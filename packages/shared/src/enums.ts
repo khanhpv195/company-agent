@@ -1,9 +1,3 @@
-export enum TodoPriority {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-}
-
 export enum SortOrder {
   ASC = 'ASC',
   DESC = 'DESC',

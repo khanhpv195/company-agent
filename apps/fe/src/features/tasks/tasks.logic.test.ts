@@ -1,8 +1,8 @@
-import type { Task } from '@repo/shared';
+import { queueOf, runningOf, type Task } from '@repo/shared';
 import { describe, expect, it } from 'vitest';
 import { seed } from '../../mocks/fixtures';
 import { applyMention, mentionQuery } from '../chat/chat.logic';
-import { filterTasks, moveLocally, queueOf, runningOf } from './tasks.logic';
+import { filterTasks, moveLocally } from './tasks.logic';
 
 const tasks = (): Task[] => seed(Date.parse('2026-10-16T09:00:00Z')).tasks;
 

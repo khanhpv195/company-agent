@@ -1,9 +1,8 @@
-import type { Task } from '@repo/shared';
+import { pickableOf, queueOf, runningOf, type Task } from '@repo/shared';
 import { AgentAvatar, Dot } from '../../components/Avatar';
 import { Who } from '../../components/Who';
 import { usePeople } from '../workspace/workspace.api';
 import { Elapsed } from './task-ui';
-import { pickableOf, queueOf, runningOf } from './tasks.logic';
 
 interface Props {
   tasks: Task[];

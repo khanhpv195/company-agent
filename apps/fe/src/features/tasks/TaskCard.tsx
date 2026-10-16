@@ -1,11 +1,10 @@
-import type { Task } from '@repo/shared';
+import { currentStep, type Task } from '@repo/shared';
 import { Icon } from '../../components/Icon';
 import { Who } from '../../components/Who';
 import { rel } from '../../lib/format';
 import { useNow } from '../../lib/use-now';
 import { usePeople } from '../workspace/workspace.api';
 import { Elapsed, Label, PriorityIcon, StatusIcon } from './task-ui';
-import { currentStep } from './tasks.logic';
 
 interface Props {
   task: Task;

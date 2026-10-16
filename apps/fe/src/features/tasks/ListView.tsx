@@ -1,11 +1,11 @@
-import type { Task } from '@repo/shared';
+import { currentStep, type Task } from '@repo/shared';
 import { Icon } from '../../components/Icon';
 import { Who } from '../../components/Who';
 import { rel } from '../../lib/format';
 import { useNow } from '../../lib/use-now';
 import { usePeople } from '../workspace/workspace.api';
 import { Elapsed, Label, PriorityIcon, StatusIcon } from './task-ui';
-import { COLUMNS, currentStep, PRIORITIES } from './tasks.logic';
+import { COLUMNS, PRIORITIES } from './tasks.logic';
 
 export function ListView({ tasks, onOpen }: { tasks: Task[]; onOpen: (id: string) => void }) {
   const people = usePeople();
