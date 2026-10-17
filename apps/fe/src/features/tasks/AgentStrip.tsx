@@ -1,6 +1,8 @@
+import { DemoBadge } from '../../components/DemoBadge';
 import { pickableOf, queueOf, runningOf, type Task } from '@repo/shared';
 import { AgentAvatar, Dot } from '../../components/Avatar';
 import { Who } from '../../components/Who';
+import { useT } from '../../i18n';
 import { usePeople } from '../workspace/workspace.api';
 import { Elapsed } from './task-ui';
 
@@ -13,6 +15,7 @@ interface Props {
 
 /** "Agents lúc này": what every agent is running right now. */
 export function AgentStrip({ tasks, who, onFilter, onOpen }: Props) {
+  const t = useT();
   const people = usePeople();
   const humans = people.members.filter((m) =>
     tasks.some((t) => t.assigneeId === m.id && t.status !== 'done'),
@@ -22,7 +25,7 @@ export function AgentStrip({ tasks, who, onFilter, onOpen }: Props) {
   ).length;
 
   return (
-    <div className="ag-strip" aria-label="Agents lúc này">
+    <div className="ag-strip" aria-label={t('tasks.strip.aria')}>
       {people.agents.map((a) => {
         const cur = runningOf(tasks, a.id);
         const queue = queueOf(tasks, a.id);
@@ -33,7 +36,7 @@ export function AgentStrip({ tasks, who, onFilter, onOpen }: Props) {
           <button
             key={a.id}
             className={`ag ${cur ? 'working' : ''} ${who === a.id ? 'on' : who ? 'dim' : ''}`}
-            title={`Lọc theo ${a.name}`}
+            title={t('tasks.filterBy', { name: a.name })}
             aria-pressed={who === a.id}
             onClick={() => onFilter(a.id)}
           >
@@ -42,7 +45,10 @@ export function AgentStrip({ tasks, who, onFilter, onOpen }: Props) {
               <Dot state={off ? 'off' : cur ? 'busy' : 'on'} />
             </span>
             <span className="ag-tx">
-              <div className="ag-n">{a.name}</div>
+              <div className="ag-n">
+                {a.name}
+                {a.simulated && <DemoBadge />}
+              </div>
               <div className="ag-s">
                 {cur ? (
                   <span
@@ -55,19 +61,19 @@ export function AgentStrip({ tasks, who, onFilter, onOpen }: Props) {
                     <b>{cur.id}</b> · {cur.title}
                   </span>
                 ) : off ? (
-                  `Offline · ${pc?.name ?? ''}${blocked ? ` · ${blocked} việc bị chặn` : ''}`
+                  `${t('tasks.strip.offline', { name: pc?.name ?? '' })}${blocked ? t('tasks.strip.blocked', { n: blocked }) : ''}`
                 ) : pickableOf(tasks, a.id).length ? (
-                  'Rảnh · sắp nhận việc tiếp'
+                  t('tasks.strip.idleNext')
                 ) : queue.length ? (
-                  `Rảnh · ${queue.length} việc cần xem lại`
+                  t('tasks.strip.idleReview', { n: queue.length })
                 ) : (
-                  'Rảnh · hàng đợi trống'
+                  t('tasks.strip.idleEmpty')
                 )}
               </div>
             </span>
             <span className="ag-r">
               {cur?.activeRun && <Elapsed since={cur.activeRun.startedAt} />}
-              {queue.length} chờ
+              {queue.length} {t('tasks.strip.waiting')}
             </span>
           </button>
         );
@@ -78,7 +84,7 @@ export function AgentStrip({ tasks, who, onFilter, onOpen }: Props) {
             <button
               key={m.id}
               className={who === m.id ? 'on' : ''}
-              title={`Lọc theo ${m.name}`}
+              title={t('tasks.filterBy', { name: m.name })}
               onClick={() => onFilter(m.id)}
             >
               <Who id={m.id} size={26} />
@@ -86,9 +92,9 @@ export function AgentStrip({ tasks, who, onFilter, onOpen }: Props) {
           ))}
         </span>
         <span>
-          Thành viên
+          {t('tasks.members')}
           <br />
-          {humansDoing} đang làm
+          {t('tasks.strip.doingCount', { n: humansDoing })}
         </span>
       </div>
     </div>

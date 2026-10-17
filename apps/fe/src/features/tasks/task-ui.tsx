@@ -2,7 +2,8 @@ import type { CSSProperties } from 'react';
 import type { TaskPriority, TaskStatus } from '@repo/shared';
 import { useNow } from '../../lib/use-now';
 import { mmss, ms } from '../../lib/format';
-import { LABEL_COLORS, PRIORITIES, statusName } from './tasks.logic';
+import { useT } from '../../i18n';
+import { LABEL_COLORS, PRIORITY_KEYS, statusName } from './tasks.logic';
 
 const STATUS_COLOR: Record<TaskStatus, string> = {
   backlog: '#a3a29c',
@@ -13,6 +14,7 @@ const STATUS_COLOR: Record<TaskStatus, string> = {
 };
 
 export function StatusIcon({ status, size = 14 }: { status: TaskStatus; size?: number }) {
+  const t = useT();
   const c = STATUS_COLOR[status];
   return (
     <svg
@@ -21,7 +23,7 @@ export function StatusIcon({ status, size = 14 }: { status: TaskStatus; size?: n
       viewBox="0 0 16 16"
       style={{ flex: 'none' }}
       role="img"
-      aria-label={statusName(status)}
+      aria-label={statusName(status, t)}
     >
       {status === 'backlog' && (
         <circle
@@ -65,6 +67,7 @@ export function StatusIcon({ status, size = 14 }: { status: TaskStatus; size?: n
 }
 
 export function PriorityIcon({ priority }: { priority: TaskPriority }) {
+  const t = useT();
   if (priority === 'urgent')
     return (
       <svg
@@ -73,7 +76,7 @@ export function PriorityIcon({ priority }: { priority: TaskPriority }) {
         viewBox="0 0 16 16"
         style={{ flex: 'none' }}
         role="img"
-        aria-label="Khẩn"
+        aria-label={t('tasks.priority.urgent')}
       >
         <rect x="1" y="1" width="14" height="14" rx="3.5" fill="#c2453b" />
         <path d="M8 4.3v4.4M8 11.2v.3" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" />
@@ -87,7 +90,7 @@ export function PriorityIcon({ priority }: { priority: TaskPriority }) {
       viewBox="0 0 16 16"
       style={{ flex: 'none' }}
       role="img"
-      aria-label={PRIORITIES[priority]}
+      aria-label={t(PRIORITY_KEYS[priority])}
     >
       {[0, 1, 2].map((i) => (
         <rect
@@ -97,7 +100,7 @@ export function PriorityIcon({ priority }: { priority: TaskPriority }) {
           width="3.2"
           height={3.5 + i * 3.6}
           rx="1"
-          fill={i < n ? '#5c5c58' : '#d9d8d3'}
+          fill={i < n ? 'var(--soft)' : 'var(--prio-off)'}
         />
       ))}
     </svg>

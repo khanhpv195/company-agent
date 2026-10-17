@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AgentsModule } from '../agents/agents.module';
+import { BillingModule } from '../billing/billing.module';
 import { ChatModule } from '../chat/chat.module';
 import { ComputersModule } from '../computers/computers.module';
 import { GatewayModule } from '../gateway/gateway.module';
@@ -21,7 +22,15 @@ import { PairingService } from './pairing.service';
  * the in-process `AgentGatewayService`, the task engine, chat and agents services.
  */
 @Module({
-  imports: [AgentsModule, ChatModule, ComputersModule, GatewayModule, TasksModule, WorkspaceModule],
+  imports: [
+    AgentsModule,
+    BillingModule,
+    ChatModule,
+    ComputersModule,
+    GatewayModule,
+    TasksModule,
+    WorkspaceModule,
+  ],
   controllers: [GatewayPairController, GatewayController, ComputersAdminController],
   providers: [
     ComputerAuthGuard,

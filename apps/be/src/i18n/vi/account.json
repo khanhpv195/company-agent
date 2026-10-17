@@ -1,0 +1,13 @@
+{
+  "PROFILE_UPDATED": "Đã cập nhật hồ sơ",
+  "PASSWORD_CHANGED": "Đã đổi mật khẩu",
+  "SESSIONS_LISTED": "Đã tải danh sách phiên",
+  "SESSIONS_REVOKED": "Đã đăng xuất các phiên khác",
+  "SESSION_REVOKED": "Đã đăng xuất phiên",
+  "SESSION_NOT_FOUND": "Không tìm thấy phiên",
+  "VERIFY_EMAIL_SENT": "Đã gửi email xác minh",
+  "VERIFY_RESEND_TOO_SOON": "Email xác minh vừa được gửi, vui lòng chờ một phút",
+  "DELETED": "Đã xóa tài khoản",
+  "OWNER_MUST_TRANSFER": "Hãy chuyển quyền chủ sở hữu không gian làm việc trước khi xóa tài khoản",
+  "NOT_FOUND": "Không tìm thấy tài khoản"
+}

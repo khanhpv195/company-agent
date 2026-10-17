@@ -1,4 +1,5 @@
 import { Modal } from '../../components/Modal';
+import { useT } from '../../i18n';
 import { useUi } from '../../stores/ui';
 import { useComputerArrivals } from './computers.api';
 import { PairingPanel } from './PairingPanel';
@@ -11,19 +12,17 @@ export function ConnectComputerModal() {
 
 /** Mounted only while open, so the computer list is polled only then. */
 function ConnectComputerDialog() {
+  const t = useT();
   const setOpen = useUi((s) => s.setConnectComputerOpen);
   const { arrived, rebase } = useComputerArrivals();
   return (
-    <Modal onClose={() => setOpen(false)} label="Kết nối máy">
-      <h3>Kết nối máy</h3>
-      <p>
-        Tạo mã kết nối rồi chạy lệnh trên máy muốn kết nối. Máy sẽ xuất hiện trong danh sách sau vài
-        giây.
-      </p>
+    <Modal onClose={() => setOpen(false)} label={t('computers.connect')}>
+      <h3>{t('computers.connect')}</h3>
+      <p>{t('computers.connectLead')}</p>
       <PairingPanel arrived={arrived} onAgain={rebase} />
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
         <button className="btn" onClick={() => setOpen(false)}>
-          Đóng
+          {t('computers.close')}
         </button>
       </div>
     </Modal>

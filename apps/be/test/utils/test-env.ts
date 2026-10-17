@@ -21,6 +21,12 @@ const FORCED: Record<string, string> = {
   ARGON2_TIME_COST: '2',
   ARGON2_PARALLELISM: '1',
   RECONCILE_ENABLED: 'false',
+  RETENTION_ENABLED: 'false',
+  // Specs hammer endpoints: the global limits stay out of the way unless a spec lowers them.
+  API_THROTTLE_LIMIT: '100000',
+  GATEWAY_THROTTLE_LIMIT: '100000',
+  LOG_LEVEL: 'silent',
+  CONNECTIONS_MODE: 'simulated',
   SWAGGER_ENABLED: 'false',
 };
 

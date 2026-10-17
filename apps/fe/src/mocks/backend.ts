@@ -522,6 +522,7 @@ export class MockBackend {
       workdir: input.workdir?.trim() || `~/.agent/agents/${slug}`,
       maxTurns: input.maxTurns ?? 40,
       status: 'idle',
+      simulated: pc.simulated,
     };
     this.db.agents.push(agent);
     this.syncAgents();

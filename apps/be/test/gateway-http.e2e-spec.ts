@@ -23,6 +23,7 @@ import {
   createTestApp,
   LoggedInClient,
   registerAndLogin,
+  setPlan,
   TestClock,
   truncateAll,
 } from './utils';
@@ -78,6 +79,7 @@ describe('Gateway over HTTP (e2e)', () => {
   beforeEach(async () => {
     await truncateAll(dataSource);
     me = await registerAndLogin(app);
+    await setPlan(dataSource, me.workspaceId, 'pro');
     member = await addMemberWithRole(dataSource, me, 'member');
     realtime = [];
     emitter.removeAllListeners(REALTIME_EVENT);
@@ -923,6 +925,20 @@ describe('Gateway over HTTP (e2e)', () => {
       // a demoted requester loses the admin tools at once
       await dataSource.query(`UPDATE members SET role = 'member' WHERE id = $1`, [me.memberId]);
       await toolError('create_agent', second.id, { name: 'Another' }, 403);
+    });
+
+    it('stops create_agent at the plan limit (403 billing.LIMIT_REACHED)', async () => {
+      await setPlan(dataSource, me.workspaceId, 'free'); // 2 agents, one exists
+      const ownerChat = await dmOf(agent, me);
+      await sendChat(ownerChat, 'tạo agent', me);
+      const run = (await gw<Claimed | null>('/claim', { maxChats: 3 }))!;
+      await gw(`/assignments/${run.id}/accept`, { attempt: 1 });
+      await tool('create_agent', run.id, { name: 'Second' });
+      const message = await toolError('create_agent', run.id, { name: 'Third' }, 403);
+      expect(message).toBe('The free plan allows up to 2 agents. Upgrade your plan to add more.');
+      expect(
+        await dataSource.getRepository(Agent).count({ where: { workspaceId: me.workspaceId } }),
+      ).toBe(2);
     });
 
     it('lets a run without a requester only read', async () => {

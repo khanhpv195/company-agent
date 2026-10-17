@@ -23,6 +23,7 @@ export function useUpdateAgent(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (patch: UpdateAgentInput) => api.patch<Agent>(`/agents/${id}`, patch),
+    meta: { silentError: true },
     onSuccess: (agent) =>
       qc.setQueryData<Agent[]>(qk.agents, (old) =>
         old?.map((a) => (a.id === agent.id ? agent : a)),
@@ -45,9 +46,11 @@ export function useCreateAgent() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateAgentInput) => api.post<Agent>('/agents', input),
+    meta: { silentError: true },
     onSuccess: (agent) => {
       qc.setQueryData<Agent[]>(qk.agents, (old) => (old ? [...old, agent] : old));
       void qc.invalidateQueries({ queryKey: qk.agents });
+      void qc.invalidateQueries({ queryKey: qk.billing });
     },
   });
 }
@@ -57,9 +60,10 @@ export function useDeleteAgent() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete<null>(`/agents/${id}`),
+    meta: { silentError: true },
     onSuccess: (_data, id) => {
       qc.setQueryData<Agent[]>(qk.agents, (old) => old?.filter((a) => a.id !== id));
-      for (const key of [qk.agents, qk.tasks, qk.rooms, qk.connections, qk.dashboard])
+      for (const key of [qk.agents, qk.tasks, qk.rooms, qk.connections, qk.dashboard, qk.billing])
         void qc.invalidateQueries({ queryKey: key });
     },
   });

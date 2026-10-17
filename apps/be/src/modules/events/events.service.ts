@@ -40,18 +40,59 @@ export interface AssignmentProgressPayload {
   events: { kind: 'tool' | 'text' | 'step'; payload?: unknown }[];
 }
 
+export interface StreamOwner {
+  memberId?: string;
+  workspaceId?: string;
+  sessionId?: string;
+}
+
 @Injectable()
 export class EventsService implements BeforeApplicationShutdown {
   private readonly logger = new Logger(EventsService.name);
   /** Open SSE streams; each entry ends its stream and clears its heartbeat timer. */
-  private readonly streams = new Set<() => void>();
+  private readonly streams = new Map<() => void, StreamOwner>();
 
   constructor(private readonly emitter: EventEmitter2) {}
 
   /** Registers an open SSE stream so shutdown can end it; returns the unregister function. */
-  registerStream(end: () => void): () => void {
-    this.streams.add(end);
+  registerStream(end: () => void, owner: StreamOwner = {}): () => void {
+    this.streams.set(end, owner);
     return () => void this.streams.delete(end);
+  }
+
+  /**
+   * Ends the open streams of a member (removal, password reset, revoked sessions). With
+   * `exceptSessionId` the streams of that login stay open; with `onlySessionId` only that
+   * login's streams end. Streams opened by tokens without a session id count as "other".
+   */
+  closeMemberStreams(
+    memberId: string,
+    filter: { exceptSessionId?: string; onlySessionId?: string } = {},
+  ): void {
+    for (const [end, owner] of [...this.streams]) {
+      if (owner.memberId !== memberId) continue;
+      if (filter.exceptSessionId && owner.sessionId === filter.exceptSessionId) continue;
+      if (filter.onlySessionId && owner.sessionId !== filter.onlySessionId) continue;
+      try {
+        end();
+      } catch (error) {
+        this.logger.warn(`Failed to end SSE stream: ${String(error)}`);
+      }
+      this.streams.delete(end);
+    }
+  }
+
+  /** Ends every open stream of a workspace (the workspace was deleted). */
+  closeWorkspaceStreams(workspaceId: string): void {
+    for (const [end, owner] of [...this.streams]) {
+      if (owner.workspaceId !== workspaceId) continue;
+      try {
+        end();
+      } catch (error) {
+        this.logger.warn(`Failed to end SSE stream: ${String(error)}`);
+      }
+      this.streams.delete(end);
+    }
   }
 
   get openStreamCount(): number {
@@ -60,7 +101,7 @@ export class EventsService implements BeforeApplicationShutdown {
 
   /** `app.close()` waits for open connections, so end every SSE stream first. */
   beforeApplicationShutdown(): void {
-    for (const end of [...this.streams]) {
+    for (const end of [...this.streams.keys()]) {
       try {
         end();
       } catch (error) {

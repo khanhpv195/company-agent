@@ -1,9 +1,10 @@
 import type { Room } from '@repo/shared';
+import type { TFunction } from '../../i18n';
 
 /** "DM", "#all-members" or "#test › Hello" for a chat id. */
-export function chatLabel(rooms: Room[], chatId: string): string {
+export function chatLabel(rooms: Room[], chatId: string, t: TFunction): string {
   const room = rooms.find((r) => r.id === chatId);
-  if (room) return room.kind === 'dm' ? 'DM' : `#${room.name}`;
+  if (room) return room.kind === 'dm' ? t('chat.dm') : `#${room.name}`;
   for (const r of rooms) {
     const t = r.threads.find((x) => x.id === chatId);
     if (t) return `#${r.name} › ${t.name}`;

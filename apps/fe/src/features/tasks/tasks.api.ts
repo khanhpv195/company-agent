@@ -7,10 +7,9 @@ import type {
   UpdateTaskInput,
 } from '@repo/shared';
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, ApiError } from '../../lib/api-client';
+import { api } from '../../lib/api-client';
 import { HOUR } from '../../lib/format';
 import { qk } from '../../lib/query-keys';
-import { useUi } from '../../stores/ui';
 import { moveLocally } from './tasks.logic';
 
 export const tasksQuery = queryOptions({
@@ -32,15 +31,8 @@ export const useScheduler = () =>
 
 function useTaskMutation<TVars>(fn: (vars: TVars) => Promise<unknown>) {
   const qc = useQueryClient();
-  const showToast = useUi((s) => s.showToast);
   return useMutation({
     mutationFn: fn,
-    onError: (e) =>
-      showToast({
-        text: e instanceof ApiError ? e.message : 'Không thực hiện được',
-        agentId: null,
-        taskId: null,
-      }),
     onSettled: () => qc.invalidateQueries({ queryKey: qk.tasks }),
   });
 }

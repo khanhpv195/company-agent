@@ -4,6 +4,7 @@ import { API_URL } from '../../lib/api-client';
 import { useNow } from '../../lib/use-now';
 import { MANAGER_ONLY_HINT } from '../people/agent-form.logic';
 import { useCanManage } from '../people/people.api';
+import { useT } from '../../i18n';
 import { CopyCommand } from './CopyCommand';
 import { useCreatePairingCode } from './computers.api';
 import {
@@ -25,6 +26,7 @@ interface PairingPanelProps {
 
 /** Owner/admin creates a pairing code and copies the `agent connect` command. */
 export function PairingPanel({ arrived, onAgain }: PairingPanelProps) {
+  const t = useT();
   const canManage = useCanManage();
   const now = useNow();
   const create = useCreatePairingCode();
@@ -49,7 +51,7 @@ export function PairingPanel({ arrived, onAgain }: PairingPanelProps) {
         <div className="status" aria-live="polite">
           <span className="dot on" />
           <div>
-            <b>Đã kết nối {arrived.name}</b>
+            <b>{t('computers.paired', { name: arrived.name })}</b>
             <div style={{ color: 'var(--muted)', fontSize: 12 }}>
               {arrived.os} · CLI {arrived.cliVersion}
             </div>
@@ -59,15 +61,15 @@ export function PairingPanel({ arrived, onAgain }: PairingPanelProps) {
 
       {!arrived && !pairing && (
         <div>
-          {requestButton('Tạo mã kết nối')}
-          {!canManage && <p style={hint}>{MANAGER_ONLY_HINT}</p>}
+          {requestButton(t('computers.pair.create'))}
+          {!canManage && <p style={hint}>{t(MANAGER_ONLY_HINT)}</p>}
         </div>
       )}
 
       {!arrived && pairing && expired && (
         <div>
-          <p>Mã đã hết hạn. Tạo mã mới để kết nối.</p>
-          {requestButton('Tạo mã mới')}
+          <p>{t('computers.pair.expired')}</p>
+          {requestButton(t('computers.pair.createNew'))}
         </div>
       )}
 
@@ -76,23 +78,26 @@ export function PairingPanel({ arrived, onAgain }: PairingPanelProps) {
           <div className="pair-code" aria-live="polite">
             <code style={{ fontSize: 22, letterSpacing: 2 }}>{pairing.code}</code>
             <span style={{ color: 'var(--muted)', fontSize: 12 }}>
-              Hết hạn sau {formatCountdown(left)}
+              {t('computers.pair.expiresIn', { time: formatCountdown(left) })}
             </span>
           </div>
           <CopyCommand command={pairingCommand(serverOrigin(API_URL), pairing.code)} />
           <p style={hint}>
-            Cần cài và đăng nhập Claude Code trên máy đó (<code>claude login</code>) hoặc đặt{' '}
-            <code>ANTHROPIC_API_KEY</code>.
+            {t('computers.pair.needsClaudePrefix')}
+            <code>claude login</code>
+            {t('computers.pair.needsClaudeMiddle')}
+            <code>ANTHROPIC_API_KEY</code>
+            {t('computers.pair.needsClaudeSuffix')}
           </p>
           <div className="status">
             <div className="spinner" />
-            <span>Đang chờ máy kết nối…</span>
+            <span>{t('computers.pair.waiting')}</span>
           </div>
         </>
       )}
 
       {arrived && canManage && (
-        <div style={{ marginTop: 12 }}>{requestButton('Kết nối máy khác')}</div>
+        <div style={{ marginTop: 12 }}>{requestButton(t('computers.pair.connectAnother'))}</div>
       )}
 
       {create.error && <div className="err-line">{create.error.message}</div>}

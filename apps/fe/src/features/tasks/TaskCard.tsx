@@ -2,6 +2,7 @@ import { currentStep, type Task } from '@repo/shared';
 import { Icon } from '../../components/Icon';
 import { Who } from '../../components/Who';
 import { rel } from '../../lib/format';
+import { useT } from '../../i18n';
 import { useNow } from '../../lib/use-now';
 import { usePeople } from '../workspace/workspace.api';
 import { Elapsed, Label, PriorityIcon, StatusIcon } from './task-ui';
@@ -17,7 +18,7 @@ interface Props {
 }
 
 export function TaskCard({
-  task: t,
+  task,
   selected,
   dragging,
   onOpen,
@@ -25,14 +26,15 @@ export function TaskCard({
   onDragStart,
   onDragEnd,
 }: Props) {
+  const t = useT();
   const people = usePeople();
   const now = useNow();
-  const agent = people.agent(t.assigneeId);
-  const run = t.activeRun;
-  const step = currentStep(t);
-  const subsDone = t.subtasks.filter((s) => s.done).length;
-  const comments = t.activity.filter((a) => a.kind === 'comment').length;
-  const lastRun = t.runs[0];
+  const agent = people.agent(task.assigneeId);
+  const run = task.activeRun;
+  const step = currentStep(task);
+  const subsDone = task.subtasks.filter((s) => s.done).length;
+  const comments = task.activity.filter((a) => a.kind === 'comment').length;
+  const lastRun = task.runs[0];
 
   let note = null;
   if (run && step)
@@ -45,35 +47,39 @@ export function TaskCard({
           </span>
           <Elapsed since={run.startedAt} />
         </div>
-        <div className="tc-prog" title={`Bước ${run.step + 1}/${run.steps.length}`}>
+        <div
+          className="tc-prog"
+          title={t('tasks.step', { n: run.step + 1, total: run.steps.length })}
+        >
           {run.steps.map((_, i) => (
             <i key={i} className={i < run.step ? 'd' : i === run.step ? 'c' : ''} />
           ))}
         </div>
       </>
     );
-  else if (t.status === 'doing' && !agent && t.assigneeId)
+  else if (task.status === 'doing' && !agent && task.assigneeId)
     note = (
       <div className="tc-note hum">
-        <Icon name="user" size={13} /> {people.name(t.assigneeId)} đang làm
+        <Icon name="user" size={13} />{' '}
+        {t('tasks.card.working', { name: people.name(task.assigneeId) })}
       </div>
     );
-  else if (t.blockedReason)
+  else if (task.blockedReason)
     note = (
       <div className="tc-note blk">
-        <Icon name="lock" size={13} /> Bị chặn: {t.blockedReason}
+        <Icon name="lock" size={13} /> {t('tasks.card.blocked', { reason: task.blockedReason })}
       </div>
     );
-  else if (t.error)
+  else if (task.error)
     note = (
       <div className="tc-note err">
-        <Icon name="alert" size={13} /> {t.error}
+        <Icon name="alert" size={13} /> {task.error}
       </div>
     );
-  else if (t.status === 'review')
+  else if (task.status === 'review')
     note = (
       <div className="tc-note rev">
-        <span>Chờ bạn duyệt</span>
+        <span>{t('tasks.card.waitingApproval')}</span>
         <button
           className="btn sm"
           onClick={(e) => {
@@ -81,51 +87,51 @@ export function TaskCard({
             onApprove();
           }}
         >
-          <Icon name="check" size={12} /> Duyệt
+          <Icon name="check" size={12} /> {t('tasks.approve')}
         </button>
       </div>
     );
 
   return (
     <div
-      className={`tcard ${run ? 'run' : ''} ${t.status === 'done' ? 'done' : ''} ${selected ? 'sel' : ''} ${dragging ? 'drag' : ''}`}
+      className={`tcard ${run ? 'run' : ''} ${task.status === 'done' ? 'done' : ''} ${selected ? 'sel' : ''} ${dragging ? 'drag' : ''}`}
       draggable
-      data-task={t.id}
+      data-task={task.id}
       role="button"
       tabIndex={0}
-      aria-label={`${t.id} ${t.title}`}
+      aria-label={`${task.id} ${task.title}`}
       onClick={onOpen}
       onKeyDown={(e) => e.key === 'Enter' && onOpen()}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', t.id);
+        e.dataTransfer.setData('text/plain', task.id);
         onDragStart();
       }}
       onDragEnd={onDragEnd}
     >
       <div className="tc-top">
-        <StatusIcon status={t.status} size={13} />
-        <span className="tid">{t.id}</span>
+        <StatusIcon status={task.status} size={13} />
+        <span className="tid">{task.id}</span>
         <span className="sp" />
-        <PriorityIcon priority={t.priority} />
-        <Who id={t.assigneeId} />
+        <PriorityIcon priority={task.priority} />
+        <Who id={task.assigneeId} />
       </div>
-      <div className="tc-title">{t.title}</div>
+      <div className="tc-title">{task.title}</div>
       {note}
       <div className="tc-foot">
-        {t.labels.map((l) => (
+        {task.labels.map((l) => (
           <Label key={l} name={l} />
         ))}
-        {t.subtasks.length > 0 && (
+        {task.subtasks.length > 0 && (
           <span className="m">
             <Icon name="check" size={12} />
-            {subsDone}/{t.subtasks.length}
+            {subsDone}/{task.subtasks.length}
           </span>
         )}
-        {t.runs.length > 0 && (
-          <span className="m" title="Số run">
+        {task.runs.length > 0 && (
+          <span className="m" title={t('tasks.card.runsTip')}>
             <Icon name="zap" size={12} />
-            {t.runs.length}
+            {task.runs.length}
           </span>
         )}
         {comments > 0 && (
@@ -134,7 +140,7 @@ export function TaskCard({
             {comments}
           </span>
         )}
-        {t.status === 'done' && lastRun && (
+        {task.status === 'done' && lastRun && (
           <span className="m" style={{ marginLeft: 'auto' }}>
             {rel(lastRun.at, now)}
           </span>

@@ -2,7 +2,6 @@
 import './utils/simulator-env';
 import { INestApplication } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { JwtService } from '@nestjs/jwt';
 import type { ApiResponse, Chat, Message, Room, Task } from '@repo/shared';
 import http from 'node:http';
 import { AddressInfo } from 'node:net';
@@ -21,7 +20,7 @@ import { Agent } from '../src/modules/agents/entities/agent.entity';
 import { AgentActivity } from '../src/modules/agents/entities/agent-activity.entity';
 import { AgentGatewayService } from '../src/modules/gateway/agent-gateway.service';
 import { Assignment } from '../src/modules/gateway/entities/assignment.entity';
-import { replyFor } from '../src/modules/simulator/chat-script';
+import { DEMO_REPLIES } from '../src/modules/simulator/chat-script';
 import { Random, TaskTimers } from '../src/modules/tasks/task-timers';
 import { Member } from '../src/modules/workspace/entities/member.entity';
 import {
@@ -29,6 +28,7 @@ import {
   createComputer,
   createTestApp,
   LoggedInClient,
+  mintAccessToken,
   registerAndLogin,
   TestClock,
   truncateAll,
@@ -101,10 +101,11 @@ describe('Chat (e2e)', () => {
   });
 
   const tokenFor = async (memberId: string, workspaceId: string): Promise<LoggedInClient> => {
-    const accessToken = await new JwtService().signAsync(
-      { sub: memberId, wid: workspaceId, role: 'member' },
-      { secret: process.env.JWT_ACCESS_SECRET, expiresIn: '15m' },
-    );
+    const accessToken = await mintAccessToken(dataSource, {
+      memberId,
+      workspaceId,
+      role: 'member',
+    });
     return {
       accessToken,
       workspaceId,
@@ -403,7 +404,7 @@ describe('Chat (e2e)', () => {
     expect(await agentOfLastReply(mine)).toEqual({ kind: 'agent', id: a1.id });
   });
 
-  it('answers through a full simulated run: states, tool calls, a streamed reply', async () => {
+  it('answers through a full simulated run: states, an honest demo reply streamed', async () => {
     const mine = await dmOf(a1);
     realtime = [];
     const human = await send(mine, 'viết hàm sortBy giúp em');
@@ -438,40 +439,26 @@ describe('Chat (e2e)', () => {
     });
     expect(seen.at(-1)).toMatchObject({
       status: 'complete',
-      markdown: replyFor('viết hàm sortBy'),
+      markdown: DEMO_REPLIES.vi,
     });
 
     const [final] = await replies(mine);
     expect(final).toMatchObject({
       id: placeholder.id,
       status: 'complete',
-      markdown: replyFor('sort'),
+      markdown: DEMO_REPLIES.vi,
     });
-    expect(final.assignment).toMatchObject({ status: 'completed', turns: 2, error: null });
-    expect(final.assignment!.toolCalls).toEqual([
-      {
-        id: expect.any(String),
-        name: 'Write',
-        input: 'src/utils/sortBy.ts',
-        output: 'Wrote 11 lines',
-        status: 'ok',
-      },
-      {
-        id: expect.any(String),
-        name: 'Bash',
-        input: 'pnpm test -- sortBy',
-        output: expect.stringContaining('Tests: 4 passed'),
-        status: 'ok',
-      },
-    ]);
+    expect(final.assignment).toMatchObject({ status: 'completed', turns: 1, error: null });
+    // a demo agent shows no scripted tool calls
+    expect(final.assignment!.toolCalls).toEqual([]);
     const row = await dataSource
       .getRepository(Assignment)
       .findOneByOrFail({ id: final.assignment!.id });
     expect(row).toMatchObject({
       sourceKind: 'chat',
       sourceId: placeholder.id,
-      toolCalls: 2,
-      turns: 2,
+      toolCalls: 0,
+      turns: 1,
     });
     expect(await dataSource.getRepository(ChatMessage).count({ where: { chatId: mine } })).toBe(2);
 
@@ -511,29 +498,25 @@ describe('Chat (e2e)', () => {
     expect(agents.find((a) => a.id === a2.id)!.status).toBe('working');
     await drainUntil(() => ended.length > 0);
     const [done] = await replies(threadId);
-    expect(done.markdown).toBe(replyFor('tóm tắt'));
-    expect(done.assignment!.toolCalls.map((t) => t.name)).toEqual(['Bash', 'Read']);
+    expect(done.markdown).toBe(DEMO_REPLIES.vi);
+    expect(done.assignment!.toolCalls).toEqual([]);
     expect(
       await dataSource.getRepository(AgentActivity).findOneByOrFail({ agentId: a2.id }),
     ).toMatchObject({ location: '# test › Hello', status: 'completed' });
   });
 
-  it('fails a reply when the failure roll hits', async () => {
-    random.value = 0.05;
+  it('answers in the fallback language (en) for text without Vietnamese letters, and never fails by chance', async () => {
+    random.value = 0.05; // would have been the old 8 % failure roll
     const mine = await dmOf(a1);
     await send(mine, 'hello');
     await drainUntil(() => ended.length > 0);
     const [reply] = await replies(mine);
-    expect(reply).toMatchObject({ status: 'failed', markdown: '' });
-    expect(reply.assignment).toMatchObject({
-      status: 'failed',
-      error: 'Claude Code thoát với mã 1 (context quá dài)',
-      turns: 0,
-    });
-    expect(ended[0]).toMatchObject({ ok: false, durationSec: 4 });
+    expect(reply).toMatchObject({ status: 'complete', markdown: DEMO_REPLIES.en });
+    expect(reply.assignment).toMatchObject({ status: 'completed', error: null });
+    expect(ended[0]).toMatchObject({ ok: true, durationSec: 4 });
     expect(
       await dataSource.getRepository(AgentActivity).findOneByOrFail({ agentId: a1.id }),
-    ).toMatchObject({ status: 'failed' });
+    ).toMatchObject({ status: 'completed' });
   });
 
   it('expires the reply of an agent whose computer is offline', async () => {

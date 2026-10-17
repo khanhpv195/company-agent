@@ -7,7 +7,13 @@ import { App } from 'supertest/types';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { EventsService, REALTIME_EVENT } from '../src/modules/events';
-import { createTestApp, LoggedInClient, registerAndLogin, truncateAll } from './utils';
+import {
+  createTestApp,
+  LoggedInClient,
+  mintAccessToken,
+  registerAndLogin,
+  truncateAll,
+} from './utils';
 
 interface Stream {
   res: http.IncomingMessage;
@@ -139,9 +145,10 @@ describe('Events SSE (e2e)', () => {
 
   it('ends the stream when its access token expires and frees its registry entry', async () => {
     const baseline = events.openStreamCount;
-    const token = await new JwtService().signAsync(
-      { sub: me.memberId, wid: me.workspaceId, role: 'owner' },
-      { secret: process.env.JWT_ACCESS_SECRET, expiresIn: 2 },
+    const token = await mintAccessToken(
+      dataSource,
+      { memberId: me.memberId, workspaceId: me.workspaceId, role: 'owner' },
+      2,
     );
     const stream = await open(token);
     expect(events.openStreamCount).toBe(baseline + 1);

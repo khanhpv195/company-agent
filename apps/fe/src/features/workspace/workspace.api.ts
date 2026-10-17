@@ -3,6 +3,7 @@ import { queryOptions, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { api } from '../../lib/api-client';
 import { qk } from '../../lib/query-keys';
+import { translate } from '../../i18n';
 
 export const sessionQuery = queryOptions({
   queryKey: qk.session,
@@ -63,11 +64,11 @@ export function usePeople(): People {
       computerOf: (a: Agent) => computer(a.computerId),
       name: (id: string | null | undefined) =>
         !id
-          ? 'Chưa giao'
+          ? translate('workspace.unassigned')
           : (agent(id)?.name ??
             member(id)?.name ??
             // Once the lists are in, an unknown id is an agent that was deleted.
-            (agents.length || members.length ? 'Agent đã xoá' : id)),
+            (agents.length || members.length ? translate('workspace.deletedAgent') : id)),
       mentionNames: [...agents.map((a) => a.name), ...members.map((m) => m.name)].sort(
         (a, b) => b.length - a.length,
       ),
@@ -75,8 +76,18 @@ export function usePeople(): People {
   }, [agents, members, computers]);
 }
 
+/**
+ * Localized role labels. Getters read the current language on every access, so
+ * `ROLE_NAME[role]` stays correct after a language switch without a memoized copy.
+ */
 export const ROLE_NAME: Record<Member['role'], string> = {
-  owner: 'Owner',
-  admin: 'Admin',
-  member: 'Member',
+  get owner() {
+    return translate('workspace.role.owner');
+  },
+  get admin() {
+    return translate('workspace.role.admin');
+  },
+  get member() {
+    return translate('workspace.role.member');
+  },
 };

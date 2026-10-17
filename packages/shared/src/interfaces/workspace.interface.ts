@@ -18,8 +18,13 @@ export interface Workspace {
   plan: WorkspacePlan;
 }
 
+/** The signed-in member as the session sees them (the people lists do not carry this flag). */
+export interface SessionUser extends Member {
+  emailVerified: boolean;
+}
+
 export interface Session {
-  user: Member;
+  user: SessionUser;
   workspace: Workspace;
   onboarded: boolean;
 }
@@ -34,6 +39,49 @@ export interface RegisterInput {
   email: string;
   password: string;
   workspaceName?: string;
+  /** Must be `true`; stored as `terms_accepted_at`. */
+  acceptTerms: boolean;
+}
+
+export interface ForgotPasswordInput {
+  email: string;
+}
+
+export interface ResetPasswordInput {
+  token: string;
+  newPassword: string;
+}
+
+export interface VerifyEmailInput {
+  token: string;
+}
+
+export interface UpdateProfileInput {
+  /** 1..60 characters after trimming. */
+  name?: string;
+  /** `#rrggbb`, or `null` to go back to the default avatar color. */
+  color?: string | null;
+}
+
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface DeleteAccountInput {
+  password: string;
+}
+
+/** One live login (refresh-token family) of the caller. */
+export interface AuthSessionInfo {
+  /** The refresh family id; also the `sid` claim of the access tokens issued for it. */
+  id: string;
+  createdAt: string;
+  lastUsedAt: string;
+  userAgent: string | null;
+  ip: string | null;
+  /** True for the session the request was made with. */
+  current: boolean;
 }
 
 export interface RefreshInput {
@@ -53,4 +101,70 @@ export interface AuthResult {
 export interface CliStatus {
   connected: boolean;
   computerId: string | null;
+}
+
+/** Roles an invite or a role change can grant (`owner` only moves through a transfer). */
+export type AssignableRole = Exclude<MemberRole, 'owner'>;
+
+/** A pending (unaccepted, unrevoked, unexpired) invite, as owners and admins see it. */
+export interface Invite {
+  id: string;
+  email: string;
+  role: AssignableRole;
+  /** `null` when the inviter was removed since. */
+  invitedByName: string | null;
+  /** ISO timestamps. */
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface CreateInviteInput {
+  email: string;
+  role: AssignableRole;
+}
+
+/** `token` and `url` are returned once, so the admin can copy the link when mail is not set up. */
+export interface CreateInviteResult {
+  invite: Invite;
+  token: string;
+  url: string;
+}
+
+/** Public: what the accept screen shows before the invitee signs up. */
+export interface InvitePreview {
+  workspaceName: string;
+  email: string;
+  role: AssignableRole;
+  invitedByName: string | null;
+  expiresAt: string;
+}
+
+export interface AcceptInviteInput {
+  token: string;
+  name: string;
+  password: string;
+  /** Must be `true`. */
+  acceptTerms: boolean;
+}
+
+export interface UpdateMemberRoleInput {
+  role: AssignableRole;
+}
+
+export interface TransferOwnershipInput {
+  memberId: string;
+  /** The owner's current password. */
+  password: string;
+}
+
+export interface UpdateWorkspaceInput {
+  /** 1..80 characters after cleaning. */
+  name: string;
+}
+
+export interface DeleteWorkspaceInput {
+  /** The owner's current password. */
+  password: string;
+  /** Must equal the workspace name. */
+  confirmName: string;
 }

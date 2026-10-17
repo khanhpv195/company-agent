@@ -4,5 +4,6 @@
   "CONNECTED": "Đã bật kết nối",
   "DISCONNECTED": "Đã tắt kết nối",
   "NOT_FOUND": "Không tìm thấy kết nối {id}",
-  "UNKNOWN_AGENT": "Agent không tồn tại"
+  "UNKNOWN_AGENT": "Agent không tồn tại",
+  "UNAVAILABLE": "Máy chủ này chưa hỗ trợ kết nối"
 }

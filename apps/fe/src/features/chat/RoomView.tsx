@@ -1,7 +1,9 @@
+import { DemoBadge } from '../../components/DemoBadge';
 import { getRouteApi } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { AgentAvatar } from '../../components/Avatar';
 import { Icon } from '../../components/Icon';
+import { useT } from '../../i18n';
 import { usePeople, useSession } from '../workspace/workspace.api';
 import { useChat, useMarkRead, useMessages, useSendMessage } from './chat.api';
 import { Composer } from './Composer';
@@ -13,6 +15,7 @@ const READ_DEBOUNCE_MS = 500;
 const route = getRouteApi('/_app/chat/$chatId');
 
 export function RoomView() {
+  const t = useT();
   const { chatId } = route.useParams();
   const chat = useChat(chatId);
   const messages = useMessages(chatId);
@@ -50,7 +53,7 @@ export function RoomView() {
   if (chat.isError)
     return (
       <main className="main">
-        <div className="loading">Không tìm thấy cuộc trò chuyện.</div>
+        <div className="loading">{t('chat.notFound')}</div>
       </main>
     );
 
@@ -58,9 +61,7 @@ export function RoomView() {
   const agents = (info?.agentIds ?? []).map((id) => people.agent(id)).filter((a) => !!a);
   const dmAgent = info?.kind === 'dm' ? agents[0] : undefined;
   const offline =
-    dmAgent && dmAgent.status === 'offline'
-      ? `${dmAgent.name} đang offline, tin nhắn sẽ chờ tới khi máy online.`
-      : null;
+    dmAgent && dmAgent.status === 'offline' ? t('chat.agentOffline', { name: dmAgent.name }) : null;
 
   return (
     <main className="main">
@@ -69,14 +70,15 @@ export function RoomView() {
         <div>
           <div className="title">
             {info?.title ?? '…'} {dmAgent && <span className="spark">✳</span>}
+            {dmAgent?.simulated && <DemoBadge />}
           </div>
           {info?.subtitle && <div className="sub">{info.subtitle}</div>}
         </div>
         <div className="right">
-          <button className="icon-btn" title="Gọi (sắp có)" disabled>
+          <button className="icon-btn" title={t('chat.callSoon')} disabled>
             <Icon name="phone" size={17} />
           </button>
-          <button className="icon-btn" title="Thêm">
+          <button className="icon-btn" title={t('chat.more')}>
             <Icon name="more" />
           </button>
         </div>
@@ -95,7 +97,9 @@ export function RoomView() {
         ))}
         {list && !list.length && (
           <div className="empty-line" style={{ padding: '40px 70px' }}>
-            Chưa có tin nhắn. Gõ <code>@</code> để gọi agent.
+            {t('chat.emptyPrefix')}
+            <code>@</code>
+            {t('chat.emptySuffix')}
           </div>
         )}
       </div>

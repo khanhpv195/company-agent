@@ -88,20 +88,20 @@ export function LetterLogo({
 
 export const BrandMark = ({
   size = 22,
-  color = '#5f6a3a',
-  hole = '#fafafa',
+  color = 'var(--brand)',
+  hole = 'var(--rail)',
 }: {
   size?: number;
   color?: string;
   hole?: string | null;
 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-    <g fill={color}>
+    <g style={{ fill: color }}>
       <ellipse cx="12" cy="6" rx="3.2" ry="5" />
       <ellipse cx="12" cy="18" rx="3.2" ry="5" />
       <ellipse cx="6" cy="12" rx="5" ry="3.2" />
       <ellipse cx="18" cy="12" rx="5" ry="3.2" />
     </g>
-    {hole && <circle cx="12" cy="12" r="2.2" fill={hole} />}
+    {hole && <circle cx="12" cy="12" r="2.2" style={{ fill: hole }} />}
   </svg>
 );

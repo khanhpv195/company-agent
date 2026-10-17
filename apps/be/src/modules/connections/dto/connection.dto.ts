@@ -69,6 +69,9 @@ export class ConnectionDto implements Connection {
 
   @ApiProperty({ enum: REPLY_MODES })
   mode: ReplyMode;
+
+  @ApiProperty({ enum: ['simulated', 'unavailable'], required: false })
+  availability?: 'simulated' | 'unavailable';
 }
 
 export class AuthorizeResultDto {

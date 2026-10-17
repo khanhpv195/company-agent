@@ -1,0 +1,12 @@
+{
+  "CREATED": "Đã gửi lời mời",
+  "LISTED": "Đã tải danh sách lời mời",
+  "REVOKED": "Đã thu hồi lời mời",
+  "PREVIEWED": "Đã tải lời mời",
+  "ACCEPTED": "Chào mừng bạn",
+  "INVALID": "Lời mời không hợp lệ hoặc đã hết hạn",
+  "NOT_FOUND": "Không tìm thấy lời mời",
+  "EMAIL_TAKEN": "Email này đã có tài khoản",
+  "ADMIN_REQUIRES_OWNER": "Chỉ chủ sở hữu mới mời được quản trị viên",
+  "ALREADY_MEMBER": "Người này đã là thành viên của không gian làm việc"
+}

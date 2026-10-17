@@ -9,5 +9,11 @@
   "MAX_LENGTH": "{property} tối đa {constraints.0} ký tự",
   "IS_EMAIL": "{property} phải là địa chỉ email hợp lệ",
   "MIN_LENGTH": "{property} phải có ít nhất {constraints.0} ký tự",
-  "IS_ARRAY": "{property} phải là một mảng"
+  "IS_ARRAY": "{property} phải là một mảng",
+  "WEAK_PASSWORD": "{property} phải dài 8-128 ký tự, có chữ cái và chữ số, và không trùng với email",
+  "MUST_ACCEPT_TERMS": "Bạn cần đồng ý với điều khoản để tiếp tục",
+  "IS_CURSOR": "{property} không phải là con trỏ hợp lệ",
+  "IS_ISO_DATE": "{property} phải là ngày theo chuẩn ISO 8601",
+  "IS_HEX_COLOR": "{property} phải là màu dạng #b0516f",
+  "IS_UUID": "{property} phải là một mã hợp lệ"
 }

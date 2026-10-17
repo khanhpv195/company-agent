@@ -2,6 +2,7 @@ import type {
   Member as MemberContract,
   MemberRole,
   Session,
+  SessionUser,
   Workspace as WorkspaceContract,
   WorkspacePlan,
 } from '@repo/shared';
@@ -17,6 +18,11 @@ export const toMember = (member: Member): MemberContract => ({
   color: member.color,
 });
 
+export const toSessionUser = (member: Member): SessionUser => ({
+  ...toMember(member),
+  emailVerified: member.emailVerifiedAt !== null,
+});
+
 export const toWorkspace = (workspace: Workspace): WorkspaceContract => ({
   id: workspace.id,
   name: workspace.name,
@@ -25,7 +31,7 @@ export const toWorkspace = (workspace: Workspace): WorkspaceContract => ({
 });
 
 export const toSession = (member: Member, workspace: Workspace): Session => ({
-  user: toMember(member),
+  user: toSessionUser(member),
   workspace: toWorkspace(workspace),
   onboarded: workspace.onboardedAt !== null,
 });

@@ -29,7 +29,7 @@ import {
   type TaskRunEndedPayload,
 } from '../tasks/task-events';
 import { TaskEngineService } from '../tasks/task-engine.service';
-import { WorkspaceLockService } from '../tasks/workspace-lock.service';
+import { WorkspaceGoneException, WorkspaceLockService } from '../tasks/workspace-lock.service';
 import { FINISHED_SQL } from './dashboard.sql';
 import { lastDays, localDate } from './dashboard.util';
 import { AttentionItemRow, attentionKey } from './entities/attention-item.entity';
@@ -340,6 +340,7 @@ export class DashboardService {
     try {
       await fn();
     } catch (error) {
+      if (error instanceof WorkspaceGoneException) return;
       this.logger.error(
         `Recording the dashboard entry for a ${what} failed`,
         error instanceof Error ? error.stack : String(error),

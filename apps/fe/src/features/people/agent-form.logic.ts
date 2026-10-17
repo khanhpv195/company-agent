@@ -1,4 +1,5 @@
 import type { AgentSkill, CreateAgentInput, MemberRole } from '@repo/shared';
+import type { MessageKey, TFunction } from '../../i18n';
 
 export const MAX_NAME = 60;
 export const MAX_TURNS = 200;
@@ -8,7 +9,7 @@ export const DEFAULT_MAX_TURNS = 40;
 export const canManageAgents = (role: MemberRole | undefined): boolean =>
   role === 'owner' || role === 'admin';
 
-export const MANAGER_ONLY_HINT = 'Chỉ owner/admin';
+export const MANAGER_ONLY_HINT: MessageKey = 'people.managerOnly';
 
 export interface AgentFormValues {
   name: string;
@@ -35,9 +36,10 @@ export const parseMaxTurns = (raw: string): number | null => {
 
 /**
  * `taken` are the names of the other agents (compared case-insensitively, like the API).
- * `computerIds` are the workspace's computers.
+ * `computerIds` are the workspace's computers. `t` localizes the messages.
  */
 export function validateAgentForm(
+  t: TFunction,
   values: AgentFormValues,
   taken: readonly string[],
   computerIds: readonly string[],
@@ -45,14 +47,15 @@ export function validateAgentForm(
 ): AgentFormErrors {
   const errors: AgentFormErrors = {};
   const name = values.name.trim();
-  if (!name) errors.name = 'Nhập tên agent';
-  else if (name.length > MAX_NAME) errors.name = `Tên tối đa ${MAX_NAME} ký tự`;
-  else if (taken.some((t) => t.trim().toLowerCase() === name.toLowerCase()))
-    errors.name = 'Đã có agent trùng tên';
-  if (!computerIds.includes(values.computerId)) errors.computerId = 'Chọn computer';
-  if (options.requireWorkdir && !values.workdir.trim()) errors.workdir = 'Nhập workdir';
+  if (!name) errors.name = t('people.form.nameRequired');
+  else if (name.length > MAX_NAME) errors.name = t('people.form.nameTooLong', { max: MAX_NAME });
+  else if (taken.some((x) => x.trim().toLowerCase() === name.toLowerCase()))
+    errors.name = t('people.form.nameTaken');
+  if (!computerIds.includes(values.computerId)) errors.computerId = t('people.form.chooseComputer');
+  if (options.requireWorkdir && !values.workdir.trim())
+    errors.workdir = t('people.form.workdirRequired');
   if (values.maxTurns.trim() && parseMaxTurns(values.maxTurns) === null)
-    errors.maxTurns = `Số nguyên từ 1 đến ${MAX_TURNS}`;
+    errors.maxTurns = t('people.form.maxTurnsInvalid', { max: MAX_TURNS });
   return errors;
 }
 

@@ -1,0 +1,13 @@
+import { ConfigType, registerAs } from '@nestjs/config';
+
+export const billingConfig = registerAs('billing', () => ({
+  provider: (process.env.BILLING_PROVIDER ?? 'none') as 'none' | 'stripe',
+  stripe: {
+    secretKey: process.env.STRIPE_SECRET_KEY ?? '',
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
+    pricePro: process.env.STRIPE_PRICE_PRO ?? '',
+    priceTeam: process.env.STRIPE_PRICE_TEAM ?? '',
+  },
+}));
+
+export type BillingConfig = ConfigType<typeof billingConfig>;

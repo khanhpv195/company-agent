@@ -15,5 +15,16 @@ export const truncateAll = async (dataSource: DataSource): Promise<void> => {
     return;
   }
   const list = tables.map((name) => `"${name.replace(/"/g, '""')}"`).join(', ');
-  await dataSource.query(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+  // A background write left over from the previous test (an in-flight reply, a timer) can
+  // deadlock with TRUNCATE's table locks: Postgres aborts one side, so retry the truncate.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await dataSource.query(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+      return;
+    } catch (error) {
+      const code = (error as { driverError?: { code?: string } }).driverError?.code;
+      if (code !== '40P01' || attempt >= 5) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 50 * attempt));
+    }
+  }
 };

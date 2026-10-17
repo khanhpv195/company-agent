@@ -58,6 +58,10 @@ WORKDIR /app
 
 COPY --from=build --chown=node:node /prod/be/package.json ./package.json
 COPY --from=build --chown=node:node /prod/be/node_modules ./node_modules
+# `pnpm deploy --legacy` links the workspace package `@repo/shared` to /app/packages/shared:
+# ship its manifest and built output there so the link resolves at runtime.
+COPY --from=build --chown=node:node /app/packages/shared/package.json ./packages/shared/package.json
+COPY --from=build --chown=node:node /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build --chown=node:node /app/apps/be/dist ./dist
 COPY --from=build --chown=node:node /app/apps/be/public ./public
 COPY --from=build --chown=node:node /app/apps/be/scripts ./scripts

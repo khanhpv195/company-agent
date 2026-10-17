@@ -11,7 +11,7 @@ const DEV_PASSWORD = 'password123';
 const WORKSPACE: { name: string; slug: string; plan: WorkspacePlan } = {
   name: 'khanhpv workspace',
   slug: 'khanhpv',
-  plan: 'free',
+  plan: 'pro',
 };
 const MEMBERS: { name: string; email: string; role: MemberRole; color: string | null }[] = [
   { name: 'khanhpv', email: 'khanhpv@holatech.tech', role: 'owner', color: null },
@@ -34,6 +34,11 @@ export const seedAuth = async (ds: DataSource): Promise<void> => {
 
   await ds.transaction(async (manager) => {
     let workspace = await manager.findOne(Workspace, { where: { slug: WORKSPACE.slug } });
+    if (workspace && workspace.plan === 'free') {
+      // Older dev databases were seeded on the free plan, which is too small for the demo data.
+      workspace.plan = 'pro';
+      await manager.save(workspace);
+    }
     if (!workspace) {
       workspace = await manager.save(
         manager.create(Workspace, { ...WORKSPACE, onboardedAt: new Date() }),
@@ -48,6 +53,10 @@ export const seedAuth = async (ds: DataSource): Promise<void> => {
           ...data,
           workspaceId: workspace.id,
           passwordHash: await argon2.hash(password),
+          // Dev members need no email round trip: verified and past the terms.
+          emailVerifiedAt: new Date(),
+          termsAcceptedAt: new Date(),
+          passwordChangedAt: new Date(),
         }),
       );
       logger.log(`Created member ${data.email}`);

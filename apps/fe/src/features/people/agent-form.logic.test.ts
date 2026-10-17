@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { translate } from '../../i18n';
 import {
   canManageAgents,
   nextAgentAfterDelete,
@@ -19,38 +20,59 @@ const base: AgentFormValues = {
 
 describe('validateAgentForm', () => {
   it('accepts a minimal form', () => {
-    expect(validateAgentForm(base, ['Research Bot'], ['c1', 'c2'])).toEqual({});
+    expect(validateAgentForm(translate, base, ['Research Bot'], ['c1', 'c2'])).toEqual({});
   });
 
   it('requires a name within 60 characters', () => {
-    expect(validateAgentForm({ ...base, name: '   ' }, [], ['c1']).name).toBeTruthy();
-    expect(validateAgentForm({ ...base, name: 'x'.repeat(61) }, [], ['c1']).name).toBeTruthy();
-    expect(validateAgentForm({ ...base, name: 'x'.repeat(60) }, [], ['c1']).name).toBeUndefined();
+    expect(validateAgentForm(translate, { ...base, name: '   ' }, [], ['c1']).name).toBeTruthy();
+    expect(
+      validateAgentForm(translate, { ...base, name: 'x'.repeat(61) }, [], ['c1']).name,
+    ).toBeTruthy();
+    expect(
+      validateAgentForm(translate, { ...base, name: 'x'.repeat(60) }, [], ['c1']).name,
+    ).toBeUndefined();
   });
 
   it('rejects a taken name regardless of case and surrounding spaces', () => {
-    const errors = validateAgentForm({ ...base, name: ' research bot ' }, ['Research Bot'], ['c1']);
+    const errors = validateAgentForm(
+      translate,
+      { ...base, name: ' research bot ' },
+      ['Research Bot'],
+      ['c1'],
+    );
     expect(errors.name).toBe('Đã có agent trùng tên');
   });
 
   it('requires a known computer', () => {
-    expect(validateAgentForm({ ...base, computerId: '' }, [], ['c1']).computerId).toBeTruthy();
-    expect(validateAgentForm({ ...base, computerId: 'zz' }, [], ['c1']).computerId).toBeTruthy();
+    expect(
+      validateAgentForm(translate, { ...base, computerId: '' }, [], ['c1']).computerId,
+    ).toBeTruthy();
+    expect(
+      validateAgentForm(translate, { ...base, computerId: 'zz' }, [], ['c1']).computerId,
+    ).toBeTruthy();
   });
 
   it('requires a workdir only when asked to (editing)', () => {
-    expect(validateAgentForm(base, [], ['c1'], { requireWorkdir: true }).workdir).toBeTruthy();
     expect(
-      validateAgentForm({ ...base, workdir: '~/w' }, [], ['c1'], { requireWorkdir: true }).workdir,
+      validateAgentForm(translate, base, [], ['c1'], { requireWorkdir: true }).workdir,
+    ).toBeTruthy();
+    expect(
+      validateAgentForm(translate, { ...base, workdir: '~/w' }, [], ['c1'], {
+        requireWorkdir: true,
+      }).workdir,
     ).toBeUndefined();
-    expect(validateAgentForm(base, [], ['c1']).workdir).toBeUndefined();
+    expect(validateAgentForm(translate, base, [], ['c1']).workdir).toBeUndefined();
   });
 
   it('validates max turns only when given', () => {
     for (const bad of ['0', '201', '1.5', 'abc', '-3'])
-      expect(validateAgentForm({ ...base, maxTurns: bad }, [], ['c1']).maxTurns).toBeTruthy();
+      expect(
+        validateAgentForm(translate, { ...base, maxTurns: bad }, [], ['c1']).maxTurns,
+      ).toBeTruthy();
     for (const ok of ['', ' ', '1', '200', '40'])
-      expect(validateAgentForm({ ...base, maxTurns: ok }, [], ['c1']).maxTurns).toBeUndefined();
+      expect(
+        validateAgentForm(translate, { ...base, maxTurns: ok }, [], ['c1']).maxTurns,
+      ).toBeUndefined();
   });
 });
 

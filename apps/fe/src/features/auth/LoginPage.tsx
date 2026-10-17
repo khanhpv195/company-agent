@@ -2,6 +2,7 @@ import type { AuthResult, LoginInput } from '@repo/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
+import { useT } from '../../i18n';
 import { api, ApiError, MOCK } from '../../lib/api-client';
 import { setTokens } from '../../lib/auth-tokens';
 import { qk } from '../../lib/query-keys';
@@ -10,9 +11,12 @@ import { LoginHero } from './LoginHero';
 export function LoginPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('khanhpv@holatech.tech');
+  const t = useT();
+  // Dev convenience only: never ship a prefilled account in a production build.
+  const [email, setEmail] = useState(import.meta.env.DEV ? 'khanhpv@holatech.tech' : '');
   const [password, setPassword] = useState('');
   const login = useMutation({
+    meta: { silentError: true },
     mutationFn: (pw: string) =>
       api.post<AuthResult>('/auth/login', { email, password: pw } satisfies LoginInput),
     onSuccess: async (result) => {
@@ -25,7 +29,7 @@ export function LoginPage() {
   const sso = () => {
     if (MOCK) login.mutate('sso-mock');
   };
-  const name = email.split('@')[0] || 'bạn';
+  const name = email.split('@')[0] || t('auth.login.fallbackName');
 
   return (
     <div className="app">
@@ -34,7 +38,7 @@ export function LoginPage() {
         <div className="login-side drag" data-tauri-drag-region>
           <div className="login-box">
             <h1>
-              Welcome back,
+              {t('auth.login.welcome')}
               <br />
               {name}.
             </h1>
@@ -45,7 +49,7 @@ export function LoginPage() {
                 setPassword('');
               }}
             >
-              Not you?
+              {t('auth.login.notYou')}
             </button>
             <div className="card">
               <form
@@ -59,13 +63,13 @@ export function LoginPage() {
                   <button
                     type="button"
                     title="Apple"
-                    aria-label="Đăng nhập với Apple"
+                    aria-label={t('auth.sso.aria', { provider: 'Apple' })}
                     disabled={!MOCK || login.isPending}
                     onClick={sso}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
                       <path
-                        fill="#111"
+                        fill="currentColor"
                         d="M16.4 12.6c0-2.5 2-3.7 2.1-3.8-1.2-1.7-3-1.9-3.6-2-1.5-.2-3 .9-3.8.9-.8 0-2-.9-3.3-.9-1.7 0-3.3 1-4.1 2.5-1.8 3.1-.5 7.6 1.3 10.1.8 1.2 1.8 2.6 3.1 2.5 1.3-.1 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.4-1-2.4-4.1zM14 5.2c.7-.8 1.2-2 1-3.2-1 0-2.2.7-3 1.5-.6.7-1.2 1.9-1 3.1 1.1.1 2.3-.6 3-1.4z"
                       />
                     </svg>
@@ -73,7 +77,7 @@ export function LoginPage() {
                   <button
                     type="button"
                     title="Google"
-                    aria-label="Đăng nhập với Google"
+                    aria-label={t('auth.sso.aria', { provider: 'Google' })}
                     disabled={!MOCK || login.isPending}
                     onClick={sso}
                   >
@@ -99,7 +103,7 @@ export function LoginPage() {
                   <button
                     type="button"
                     title="Microsoft"
-                    aria-label="Đăng nhập với Microsoft"
+                    aria-label={t('auth.sso.aria', { provider: 'Microsoft' })}
                     disabled={!MOCK || login.isPending}
                     onClick={sso}
                   >
@@ -111,38 +115,46 @@ export function LoginPage() {
                     </svg>
                   </button>
                 </div>
-                <div className="or">or</div>
-                <label htmlFor="email">Email address</label>
+                <div className="or">{t('auth.login.or')}</div>
+                <label htmlFor="email">{t('auth.login.email')}</label>
                 <input
                   id="email"
                   className="field"
                   type="email"
-                  placeholder="Enter your email address"
+                  placeholder={t('auth.login.emailPlaceholder')}
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
-                <label htmlFor="password">Password</label>
+                <label htmlFor="password">{t('auth.login.password')}</label>
                 <input
                   id="password"
                   className="field"
                   type="password"
-                  placeholder="Enter your password"
+                  placeholder={t('auth.login.passwordPlaceholder')}
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
+                <div className="forgot-row">
+                  <Link to="/forgot-password">{t('auth.login.forgot')}</Link>
+                </div>
                 {login.error && (
                   <div className="err-line">
-                    {login.error instanceof ApiError ? login.error.message : 'Không đăng nhập được'}
+                    {login.error instanceof ApiError ? login.error.message : t('auth.login.failed')}
                   </div>
                 )}
                 <button className="btn-olive" disabled={login.isPending}>
-                  Continue&nbsp;&nbsp;›
+                  {t('auth.login.submit')}&nbsp;&nbsp;›
                 </button>
               </form>
               <div className="card-foot">
-                Don&apos;t have an account? <Link to="/register">Sign up</Link>
+                {t('auth.login.noAccount')} <Link to="/register">{t('auth.login.signUp')}</Link>
+                <br />
+                {t('auth.login.haveInvite')}{' '}
+                <Link to="/invite" search={{}}>
+                  {t('auth.login.enterInvite')}
+                </Link>
               </div>
             </div>
           </div>

@@ -1,6 +1,6 @@
 import type { Computer } from '@repo/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../../lib/api-client';
 import { qk } from '../../lib/query-keys';
 import { computersQuery } from '../workspace/workspace.api';
@@ -10,6 +10,7 @@ import { arrivals, type PairingCode } from './computers.logic';
 export const useCreatePairingCode = () =>
   useMutation({
     mutationFn: () => api.post<PairingCode>('/computers/pairing-codes'),
+    meta: { silentError: true },
   });
 
 /** Revokes a real computer (owner/admin). The API answers 409 for simulated ones. */
@@ -17,10 +18,12 @@ export const useRevokeComputer = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (computerId: string) => api.delete<null>(`/computers/${computerId}`),
+    meta: { silentError: true },
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: qk.computers }),
         qc.invalidateQueries({ queryKey: qk.agents }),
+        qc.invalidateQueries({ queryKey: qk.billing }),
       ]),
   });
 };
@@ -40,6 +43,11 @@ export function useComputerArrivals(): {
   if (!baseline && data) setBaseline(new Set(data.map((c) => c.id)));
   const computers = data ?? [];
   const arrived = baseline ? arrivals(baseline, computers)[0] : undefined;
+  const qc = useQueryClient();
+  // A newly paired computer changes the computer count, so the plan meters go stale.
+  useEffect(() => {
+    if (arrived) void qc.invalidateQueries({ queryKey: qk.billing });
+  }, [arrived, qc]);
   /** Forget the current list: the next computer to appear counts as new. */
   const rebase = () => setBaseline(new Set(computers.map((c) => c.id)));
   return { computers, arrived, rebase };

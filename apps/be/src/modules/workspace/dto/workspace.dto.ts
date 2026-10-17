@@ -3,6 +3,7 @@ import type {
   Member as MemberContract,
   MemberRole,
   Session,
+  SessionUser,
   Workspace as WorkspaceContract,
   WorkspacePlan,
 } from '@repo/shared';
@@ -24,6 +25,11 @@ export class MemberDto implements MemberContract {
   color: string | null;
 }
 
+export class SessionUserDto extends MemberDto implements SessionUser {
+  @ApiProperty()
+  emailVerified: boolean;
+}
+
 export class WorkspaceDto implements WorkspaceContract {
   @ApiProperty({ format: 'uuid' })
   id: string;
@@ -39,8 +45,8 @@ export class WorkspaceDto implements WorkspaceContract {
 }
 
 export class SessionDto implements Session {
-  @ApiProperty({ type: MemberDto })
-  user: MemberDto;
+  @ApiProperty({ type: SessionUserDto })
+  user: SessionUserDto;
 
   @ApiProperty({ type: WorkspaceDto })
   workspace: WorkspaceDto;

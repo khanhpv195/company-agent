@@ -1,0 +1,17 @@
+{
+  "LOADED": "Billing loaded",
+  "CHECKOUT_CREATED": "Checkout session created",
+  "PORTAL_CREATED": "Billing portal session created",
+  "WEBHOOK_RECEIVED": "Webhook received",
+  "LIMIT_REACHED": "The {plan} plan allows up to {limit} {resource}. Upgrade your plan to add more.",
+  "UNAVAILABLE": "Online billing is not available on this server",
+  "ALREADY_SUBSCRIBED": "This workspace already has a subscription. Use the billing portal to change it.",
+  "NO_CUSTOMER": "This workspace has no billing account yet",
+  "CANCEL_FAILED": "Could not cancel the subscription with the payment provider. Nothing was deleted; try again in a moment.",
+  "INVALID_SIGNATURE": "The webhook signature is invalid",
+  "resources": {
+    "seats": "members (seats)",
+    "agents": "agents",
+    "computers": "computers"
+  }
+}

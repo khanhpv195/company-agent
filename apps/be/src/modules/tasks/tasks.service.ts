@@ -8,6 +8,7 @@ import {
   ReviseTaskDto,
   UpdateTaskDto,
 } from './dto/task.dto';
+import { AuditService } from '../audit/audit.service';
 import { TaskEngineService } from './task-engine.service';
 import { TasksQueryService } from './tasks-query.service';
 
@@ -17,6 +18,7 @@ export class TasksService {
   constructor(
     private readonly engine: TaskEngineService,
     private readonly query: TasksQueryService,
+    private readonly audit: AuditService,
   ) {}
 
   list(auth: AuthContext): Promise<Task[]> {
@@ -82,6 +84,13 @@ export class TasksService {
 
   async setScheduler(auth: AuthContext, paused: boolean): Promise<SchedulerState> {
     await this.engine.setPaused(auth.workspaceId, auth.memberId, paused);
+    await this.audit.record({
+      workspaceId: auth.workspaceId,
+      actorMemberId: auth.memberId,
+      action: 'scheduler.updated',
+      meta: { paused },
+      ip: auth.ip,
+    });
     return this.query.scheduler(auth.workspaceId);
   }
 }

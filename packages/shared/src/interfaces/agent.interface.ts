@@ -18,6 +18,8 @@ export interface Agent {
   workdir: string;
   maxTurns: number;
   status: AgentStatus;
+  /** Demo agent on a simulated computer: it only plays scripted, honest demo replies. */
+  simulated: boolean;
 }
 
 export interface CreateAgentInput {

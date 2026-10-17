@@ -4,5 +4,6 @@
   "CONNECTED": "Connection enabled",
   "DISCONNECTED": "Connection disabled",
   "NOT_FOUND": "Connection {id} not found",
-  "UNKNOWN_AGENT": "Unknown agent"
+  "UNKNOWN_AGENT": "Unknown agent",
+  "UNAVAILABLE": "Connections are not available on this server yet"
 }

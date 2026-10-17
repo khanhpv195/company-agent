@@ -2,7 +2,13 @@ import type { Agent, Member } from '@repo/shared';
 import { useRef, useState } from 'react';
 import { AgentArt } from '../../components/Avatar';
 import { Icon } from '../../components/Icon';
+import { useT, type MessageKey } from '../../i18n';
 import { applyMention, mentionQuery } from './chat.logic';
+
+const KIND_KEY: Record<Option['kind'], MessageKey> = {
+  agent: 'chat.kind.agent',
+  member: 'chat.kind.member',
+};
 
 interface Option {
   name: string;
@@ -22,6 +28,7 @@ export function Composer({
   onSend: (text: string) => void;
   disabledReason?: string | null;
 }) {
+  const t = useT();
   const ref = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState('');
   const [query, setQuery] = useState<string | null>(null);
@@ -71,8 +78,8 @@ export function Composer({
   return (
     <div className="composer-wrap">
       {open && (
-        <div className="mention-pop" role="listbox" aria-label="Mention">
-          <div className="h">Mention</div>
+        <div className="mention-pop" role="listbox" aria-label={t('chat.mention')}>
+          <div className="h">{t('chat.mention')}</div>
           {options.map((o, i) => (
             <div
               key={o.kind + o.name}
@@ -97,7 +104,7 @@ export function Composer({
                 </div>
               )}
               {o.name}
-              <small>{o.kind}</small>
+              <small>{t(KIND_KEY[o.kind])}</small>
             </div>
           ))}
         </div>
@@ -111,8 +118,8 @@ export function Composer({
         <textarea
           ref={ref}
           rows={1}
-          placeholder="Message…"
-          aria-label="Tin nhắn"
+          placeholder={t('chat.composer.placeholder')}
+          aria-label={t('chat.composer.label')}
           value={text}
           onChange={(e) => update(e.currentTarget)}
           onClick={(e) =>
@@ -135,14 +142,21 @@ export function Composer({
           }}
         />
         <div className="bar">
-          <button className="icon-btn" title="Đính kèm (sắp có)" disabled>
+          <button className="icon-btn" title={t('chat.composer.attachSoon')} disabled>
             <Icon name="plus" />
           </button>
           <span className="hint">
-            Gõ <code>@</code> để gọi agent · Enter để gửi
+            {t('chat.composer.hintPrefix')}
+            <code>@</code>
+            {t('chat.composer.hintSuffix')}
           </span>
           <span className="sp" />
-          <button className="icon-btn" title="Gửi" aria-label="Gửi" onClick={send}>
+          <button
+            className="icon-btn"
+            title={t('chat.send')}
+            aria-label={t('chat.send')}
+            onClick={send}
+          >
             <Icon name="send" size={17} />
           </button>
         </div>

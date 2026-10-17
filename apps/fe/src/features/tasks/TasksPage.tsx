@@ -3,6 +3,7 @@ import { getRouteApi } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
 import { Icon, type IconName } from '../../components/Icon';
 import { Who } from '../../components/Who';
+import { useT, type MessageKey } from '../../i18n';
 import { useUi } from '../../stores/ui';
 import { MANAGER_ONLY_HINT } from '../people/agent-form.logic';
 import { useCanManage } from '../people/people.api';
@@ -12,20 +13,21 @@ import { BoardView } from './BoardView';
 import { ListView } from './ListView';
 import { TaskDrawer } from './TaskDrawer';
 import { useScheduler, useTaskActions, useTasks } from './tasks.api';
-import { filterTasks, PRIORITIES } from './tasks.logic';
+import { filterTasks, PRIORITY_KEYS } from './tasks.logic';
 import { WorkloadView } from './WorkloadView';
 
 const route = getRouteApi('/_app/tasks');
 export type TasksView = 'board' | 'list' | 'agents';
-const VIEWS: [TasksView, IconName, string][] = [
-  ['board', 'kanban', 'Board'],
-  ['list', 'list', 'Danh sách'],
-  ['agents', 'gantt', 'Theo Agent'],
+const VIEWS: [TasksView, IconName, MessageKey][] = [
+  ['board', 'kanban', 'tasks.views.board'],
+  ['list', 'list', 'tasks.views.list'],
+  ['agents', 'gantt', 'tasks.views.agents'],
 ];
 
 const typing = () => /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName ?? '');
 
 export function TasksPage() {
+  const t = useT();
   const { view = 'board', task: openId } = route.useSearch();
   const navigate = route.useNavigate();
   const session = useSession().data;
@@ -77,26 +79,26 @@ export function TasksPage() {
         <div className="tk-head drag" data-tauri-drag-region>
           <div>
             <div className="crumb">{session?.workspace.name}</div>
-            <h1>Tasks</h1>
+            <h1>{t('tasks.title')}</h1>
           </div>
           <div className="tk-actions">
             <button
               className={`live-tg ${live ? '' : 'off'}`}
               title={
                 !canManage
-                  ? MANAGER_ONLY_HINT
+                  ? t(MANAGER_ONLY_HINT)
                   : live
-                    ? 'Tạm dừng: agent ngừng chạy và không nhận việc mới'
-                    : 'Tiếp tục cho agent chạy'
+                    ? t('tasks.pauseTip')
+                    : t('tasks.resumeTip')
               }
               aria-pressed={live}
               disabled={!canManage}
               onClick={() => actions.setPaused.mutate(live)}
             >
               <span className="pulse" />
-              {live ? 'Live' : 'Tạm dừng'}
+              {live ? t('tasks.live') : t('tasks.paused')}
             </button>
-            <div className="seg" role="tablist" aria-label="Kiểu xem">
+            <div className="seg" role="tablist" aria-label={t('tasks.viewMode')}>
               {VIEWS.map(([v, icon, name]) => (
                 <button
                   key={v}
@@ -110,16 +112,16 @@ export function TasksPage() {
                   }
                 >
                   <Icon name={icon} size={15} />
-                  {name}
+                  {t(name)}
                 </button>
               ))}
             </div>
             <button
               className="btn primary"
               onClick={() => openNewTask('todo')}
-              title="Tạo task (c)"
+              title={t('tasks.newTaskTip')}
             >
-              <Icon name="plus" size={16} /> Task mới
+              <Icon name="plus" size={16} /> {t('tasks.newTask')}
             </button>
           </div>
         </div>
@@ -131,8 +133,8 @@ export function TasksPage() {
             <Icon name="search" size={15} />
             <input
               ref={searchRef}
-              placeholder="Tìm theo tên hoặc mã task"
-              aria-label="Tìm task"
+              placeholder={t('tasks.searchPlaceholder')}
+              aria-label={t('tasks.searchLabel')}
               autoComplete="off"
               value={filters.q}
               onChange={(e) => setFilters({ q: e.target.value })}
@@ -144,14 +146,14 @@ export function TasksPage() {
           </div>
           <select
             className="sel"
-            aria-label="Lọc theo ưu tiên"
+            aria-label={t('tasks.filterPriority')}
             value={filters.prio}
             onChange={(e) => setFilters({ prio: e.target.value as TaskPriority | '' })}
           >
-            <option value="">Mọi mức ưu tiên</option>
-            {Object.entries(PRIORITIES).map(([k, v]) => (
+            <option value="">{t('tasks.allPriorities')}</option>
+            {Object.entries(PRIORITY_KEYS).map(([k, v]) => (
               <option key={k} value={k}>
-                {v}
+                {t(v)}
               </option>
             ))}
           </select>
@@ -159,8 +161,8 @@ export function TasksPage() {
             <span className="fchip">
               <Who id={filters.who} size={16} /> {people.name(filters.who)}
               <button
-                title="Bỏ lọc"
-                aria-label="Bỏ lọc người làm"
+                title={t('tasks.clearFilter')}
+                aria-label={t('tasks.clearWho')}
                 onClick={() => setFilters({ who: null })}
               >
                 <Icon name="x" size={12} />
@@ -168,15 +170,18 @@ export function TasksPage() {
             </span>
           )}
           <span className="tk-count">
-            {list.length} task{filtered ? ' khớp bộ lọc' : ''}
+            {t('tasks.count', { n: list.length })}
+            {filtered ? t('tasks.matchingFilter') : ''}
           </span>
         </div>
 
         <div className="tk-body">
           {tasksQuery.isPending ? (
-            <div className="loading">Đang tải…</div>
+            <div className="loading">{t('tasks.loading')}</div>
           ) : tasksQuery.isError ? (
-            <div className="loading">Không tải được task. {tasksQuery.error.message}</div>
+            <div className="loading">
+              {t('tasks.loadFailed', { message: tasksQuery.error.message })}
+            </div>
           ) : view === 'list' ? (
             <ListView tasks={list} onOpen={open} />
           ) : view === 'agents' ? (

@@ -1,9 +1,12 @@
+import { Link } from '@tanstack/react-router';
+import { DemoBadge } from '../../components/DemoBadge';
 import type { Message } from '@repo/shared';
 import { AgentAvatar, MemberAvatar } from '../../components/Avatar';
 import { Icon } from '../../components/Icon';
 import { Markdown } from '../../components/Markdown';
 import { usd } from '../../lib/format';
-import { usePeople } from '../workspace/workspace.api';
+import { useT, type MessageKey } from '../../i18n';
+import { useComputers, usePeople } from '../workspace/workspace.api';
 import { useSendDraft } from './chat.api';
 
 const CHANNEL: Record<string, { name: string; color: string }> = {
@@ -12,14 +15,29 @@ const CHANNEL: Record<string, { name: string; color: string }> = {
   gmail: { name: 'Google', color: '#ea4335' },
 };
 
+type AssignmentStatus = NonNullable<Message['assignment']>['status'];
+const ASSIGNMENT_STATUS: Record<AssignmentStatus, MessageKey> = {
+  pending: 'chat.assignmentStatus.pending',
+  offered: 'chat.assignmentStatus.offered',
+  claimed: 'chat.assignmentStatus.claimed',
+  running: 'chat.assignmentStatus.running',
+  completed: 'chat.assignmentStatus.completed',
+  failed: 'chat.assignmentStatus.failed',
+  expired: 'chat.assignmentStatus.expired',
+  cancelled: 'chat.assignmentStatus.cancelled',
+};
+
 export function MessageItem({ message: m }: { message: Message }) {
+  const t = useT();
   const people = usePeople();
+  const computers = useComputers();
   const sendDraft = useSendDraft();
   const a = m.author;
   const agent = a.kind === 'agent' ? people.agent(a.id) : undefined;
   const member = a.kind === 'human' ? people.member(a.id) : undefined;
   const as = m.assignment;
   const streaming = m.status === 'streaming';
+  const hasRealComputer = computers.some((c) => !c.simulated && !c.revokedAt);
 
   let avatar;
   let name;
@@ -32,7 +50,10 @@ export function MessageItem({ message: m }: { message: Message }) {
     );
     name = (
       <>
-        {a.name} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>qua {ch?.name}</span>
+        {a.name}{' '}
+        <span style={{ color: 'var(--muted)', fontWeight: 400 }}>
+          {t('chat.via', { channel: ch?.name ?? '' })}
+        </span>
       </>
     );
   } else if (agent) {
@@ -40,7 +61,7 @@ export function MessageItem({ message: m }: { message: Message }) {
     name = agent.name;
   } else {
     avatar = member ? <MemberAvatar member={member} /> : <span className="av human">?</span>;
-    name = member?.name ?? 'Unknown';
+    name = member?.name ?? t('chat.unknown');
   }
 
   return (
@@ -66,11 +87,11 @@ export function MessageItem({ message: m }: { message: Message }) {
             ) : (
               <div className="mini-spin" />
             )}
-            <span>assignment</span>
-            <span className="st">{as.status}</span>
+            <span>{t('chat.assignment')}</span>
+            <span className="st">{t(ASSIGNMENT_STATUS[as.status])}</span>
             {as.status === 'completed' && (
               <span style={{ color: 'var(--muted)' }}>
-                · {as.toolCalls.length} tool calls · {as.turns} turns
+                {t('chat.assignmentStats', { calls: as.toolCalls.length, turns: as.turns })}
                 {as.costUsd != null && ` · ${usd(as.costUsd)}`}
               </span>
             )}
@@ -106,21 +127,33 @@ export function MessageItem({ message: m }: { message: Message }) {
             <Markdown text={m.markdown}>{streaming && <span className="caret" />}</Markdown>
           </div>
         )}
+        {agent?.simulated && !streaming && m.markdown && (
+          <div className="demo-cta">
+            <DemoBadge />
+            {!hasRealComputer && (
+              <Link to="/computers" className="btn sm">
+                {t('billing.connectComputer')}
+              </Link>
+            )}
+          </div>
+        )}
         {m.draft &&
           (m.draft.state === 'pending' ? (
             <div className="draft">
-              <Icon name="clock" size={13} /> Nháp chờ duyệt
+              <Icon name="clock" size={13} /> {t('chat.draft.pending')}
               <button
                 className="btn sm primary"
                 disabled={sendDraft.isPending}
                 onClick={() => sendDraft.mutate(m.id)}
               >
-                Gửi
+                {t('chat.draft.send')}
               </button>
-              <button className="btn sm">Sửa</button>
+              <button className="btn sm">{t('chat.draft.edit')}</button>
             </div>
           ) : (
-            <div className="draft sent">✓ Đã gửi qua {CHANNEL[m.draft.connectionId]?.name}</div>
+            <div className="draft sent">
+              ✓ {t('chat.draft.sent', { channel: CHANNEL[m.draft.connectionId]?.name ?? '' })}
+            </div>
           ))}
       </div>
     </div>

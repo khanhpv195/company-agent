@@ -8,7 +8,7 @@ import { ASSIGNMENT_ENDED_EVENT, type AssignmentEndedPayload } from '../events/e
 import { AgentGatewayService, type Effect } from '../gateway/agent-gateway.service';
 import { TaskCommand, type CommandDeps, type DaemonProgress, type Via } from './task-command';
 import { Random, TaskTimers } from './task-timers';
-import { WorkspaceLockService } from './workspace-lock.service';
+import { WorkspaceGoneException, WorkspaceLockService } from './workspace-lock.service';
 
 const CHANGED_COALESCE_MS = 1000;
 
@@ -90,6 +90,32 @@ export class TaskEngineService implements OnModuleDestroy {
     by: string | null,
     fn: (cmd: TaskCommand) => Promise<T>,
     options: { skipDone?: boolean; coalesce?: boolean; via?: Via } = {},
+  ): Promise<T> {
+    return this.quietWhenGone(workspaceId, by, () => this.execLocked(workspaceId, by, fn, options));
+  }
+
+  /** Timers and listeners (no acting member) skip a deleted workspace; HTTP callers get the 404. */
+  private async quietWhenGone<T>(
+    workspaceId: string,
+    by: string | null,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await run();
+    } catch (error) {
+      if (by === null && error instanceof WorkspaceGoneException) {
+        this.logger.debug(`Workspace ${workspaceId} is gone; system command skipped`);
+        return undefined as T;
+      }
+      throw error;
+    }
+  }
+
+  private execLocked<T>(
+    workspaceId: string,
+    by: string | null,
+    fn: (cmd: TaskCommand) => Promise<T>,
+    options: { skipDone?: boolean; coalesce?: boolean; via?: Via },
   ): Promise<T> {
     return this.lock.run(workspaceId, async (manager, effects) => {
       const cmd = new TaskCommand(this.deps, manager, effects, workspaceId, by);

@@ -1,5 +1,6 @@
 import type { DailyAssignments } from '@repo/shared';
 import { useLayoutEffect, useRef, useState } from 'react';
+import { useT, type TFunction } from '../../i18n';
 import { C_DONE, C_FAIL } from '../tasks/tasks.logic';
 
 const H = 230;
@@ -7,8 +8,8 @@ const L = 28;
 const B = 26;
 const T = 22;
 
-const dayLabel = (days: DailyAssignments[], i: number) => {
-  if (i === days.length - 1) return 'Hôm nay';
+const dayLabel = (days: DailyAssignments[], i: number, t: TFunction) => {
+  if (i === days.length - 1) return t('dashboard.chart.today');
   const d = new Date(days[i].date);
   return `${d.getDate()}/${d.getMonth() + 1}`;
 };
@@ -18,6 +19,7 @@ const topRound = (x: number, y0: number, w: number, h: number, r: number) =>
 
 /** Stacked daily bars (completed + failed) with a hover tooltip. */
 export function AssignmentsChart({ days }: { days: DailyAssignments[] }) {
+  const t = useT();
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<number | null>(null);
@@ -47,24 +49,19 @@ export function AssignmentsChart({ days }: { days: DailyAssignments[] }) {
   return (
     <div ref={ref} className="chart" style={{ position: 'relative', height: H }}>
       {width > 0 && (
-        <svg
-          width={width}
-          height={H}
-          role="img"
-          aria-label="Assignments 14 ngày: hoàn thành và lỗi theo ngày"
-        >
-          {ticks.map((t) => (
-            <g key={t}>
+        <svg width={width} height={H} role="img" aria-label={t('dashboard.chart.ariaLabel')}>
+          {ticks.map((tick) => (
+            <g key={tick}>
               <line
                 x1={L}
                 x2={width}
-                y1={y(t)}
-                y2={y(t)}
-                stroke={t ? '#f0efec' : '#d9d7d0'}
+                y1={y(tick)}
+                y2={y(tick)}
+                stroke={tick ? 'var(--chart-grid)' : 'var(--chart-axis)'}
                 strokeWidth="1"
               />
-              <text x={L - 8} y={y(t) + 4} textAnchor="end">
-                {t}
+              <text x={L - 8} y={y(tick) + 4} textAnchor="end">
+                {tick}
               </text>
             </g>
           ))}
@@ -84,7 +81,7 @@ export function AssignmentsChart({ days }: { days: DailyAssignments[] }) {
                   width={slot}
                   height={H - T - B + 10}
                   rx="6"
-                  fill={hover === i ? '#f5f4ef' : 'transparent'}
+                  fill={hover === i ? 'var(--chart-hover)' : 'transparent'}
                   style={{ pointerEvents: 'all' }}
                   onMouseEnter={() => setHover(i)}
                   onMouseLeave={() => setHover(null)}
@@ -117,7 +114,7 @@ export function AssignmentsChart({ days }: { days: DailyAssignments[] }) {
                     textAnchor="middle"
                     style={last ? { fill: 'var(--text)', fontWeight: 500 } : undefined}
                   >
-                    {dayLabel(days, i)}
+                    {dayLabel(days, i, t)}
                   </text>
                 )}
               </g>
@@ -130,17 +127,20 @@ export function AssignmentsChart({ days }: { days: DailyAssignments[] }) {
           className="tip"
           style={{ display: 'block', left: tipLeft(hover), top: 20, minWidth: 150 }}
         >
-          <div style={{ color: '#bdbab1', marginBottom: 2 }}>{dayLabel(days, hover)}</div>
+          <div style={{ color: '#bdbab1', marginBottom: 2 }}>{dayLabel(days, hover, t)}</div>
           <div>
             <i style={{ background: C_DONE }} />
-            Hoàn thành<b>{h.completed}</b>
+            {t('dashboard.chart.completed')}
+            <b>{h.completed}</b>
           </div>
           <div>
             <i style={{ background: C_FAIL }} />
-            Lỗi<b>{h.failed}</b>
+            {t('dashboard.chart.failed')}
+            <b>{h.failed}</b>
           </div>
           <div style={{ borderTop: '1px solid #3a3b3f', marginTop: 4, paddingTop: 4 }}>
-            Tổng<b>{h.completed + h.failed}</b>
+            {t('dashboard.chart.total')}
+            <b>{h.completed + h.failed}</b>
           </div>
         </div>
       )}
@@ -149,22 +149,23 @@ export function AssignmentsChart({ days }: { days: DailyAssignments[] }) {
 }
 
 export function AssignmentsTable({ days }: { days: DailyAssignments[] }) {
+  const t = useT();
   return (
     <div style={{ maxHeight: 230, overflow: 'auto' }}>
       <table className="dtable">
         <thead>
           <tr>
-            <th>Ngày</th>
-            <th style={{ textAlign: 'right' }}>Hoàn thành</th>
-            <th style={{ textAlign: 'right' }}>Lỗi</th>
-            <th style={{ textAlign: 'right' }}>Tổng</th>
+            <th>{t('dashboard.table.day')}</th>
+            <th style={{ textAlign: 'right' }}>{t('dashboard.chart.completed')}</th>
+            <th style={{ textAlign: 'right' }}>{t('dashboard.chart.failed')}</th>
+            <th style={{ textAlign: 'right' }}>{t('dashboard.chart.total')}</th>
           </tr>
         </thead>
         <tbody>
           {days
             .map((d, i) => (
               <tr key={d.date}>
-                <td>{dayLabel(days, i)}</td>
+                <td>{dayLabel(days, i, t)}</td>
                 <td style={{ textAlign: 'right' }}>{d.completed}</td>
                 <td style={{ textAlign: 'right' }}>{d.failed}</td>
                 <td style={{ textAlign: 'right' }}>

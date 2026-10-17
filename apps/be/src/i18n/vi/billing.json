@@ -1,0 +1,17 @@
+{
+  "LOADED": "Đã tải thông tin thanh toán",
+  "CHECKOUT_CREATED": "Đã tạo phiên thanh toán",
+  "PORTAL_CREATED": "Đã tạo phiên quản lý thanh toán",
+  "WEBHOOK_RECEIVED": "Đã nhận webhook",
+  "LIMIT_REACHED": "Gói {plan} chỉ cho tối đa {limit} {resource}. Hãy nâng cấp gói để thêm.",
+  "UNAVAILABLE": "Máy chủ này chưa bật thanh toán trực tuyến",
+  "ALREADY_SUBSCRIBED": "Workspace này đã có gói đăng ký. Hãy dùng cổng quản lý thanh toán để thay đổi.",
+  "NO_CUSTOMER": "Workspace này chưa có tài khoản thanh toán",
+  "CANCEL_FAILED": "Không thể hủy gói đăng ký với nhà cung cấp thanh toán. Chưa xóa gì cả, hãy thử lại sau ít phút.",
+  "INVALID_SIGNATURE": "Chữ ký webhook không hợp lệ",
+  "resources": {
+    "seats": "thành viên (chỗ ngồi)",
+    "agents": "agent",
+    "computers": "máy tính"
+  }
+}

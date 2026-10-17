@@ -225,6 +225,7 @@ export class DaemonGatewayService {
       ? await manager.findOneBy(Member, {
           id: row.requestedByMemberId,
           workspaceId: row.workspaceId,
+          removedAt: IsNull(),
         })
       : null;
     const brief = await this.brief.build(row, agent, requester);

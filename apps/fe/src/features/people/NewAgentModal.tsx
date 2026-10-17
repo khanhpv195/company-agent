@@ -1,6 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { Modal } from '../../components/Modal';
+import { useT } from '../../i18n';
 import { useUi } from '../../stores/ui';
 import { selectableComputers } from '../computers/computers.logic';
 import { usePeople } from '../workspace/workspace.api';
@@ -29,6 +30,7 @@ function NewAgentForm({
   initialComputerId: string | null;
   onClose: () => void;
 }) {
+  const t = useT();
   const people = usePeople();
   const catalog = useSkillCatalog();
   const create = useCreateAgent();
@@ -64,6 +66,7 @@ function NewAgentForm({
   const submit = () => {
     if (create.isPending) return;
     const found = validateAgentForm(
+      t,
       values,
       people.agents.map((a) => a.name),
       people.computers.map((c) => c.id),
@@ -86,14 +89,14 @@ function NewAgentForm({
     errors[key] ? { borderColor: 'var(--err)' } : undefined;
 
   return (
-    <Modal onClose={onClose} label="Thêm agent">
-      <h3>Thêm agent</h3>
-      <p>Agent chạy Claude Code trên một computer đã kết nối.</p>
+    <Modal onClose={onClose} label={t('people.newAgent.title')}>
+      <h3>{t('people.newAgent.title')}</h3>
+      <p>{t('people.newAgent.lead')}</p>
       <input
         className="field"
         autoFocus
-        placeholder="Tên agent, ví dụ: Ops Bot"
-        aria-label="Tên agent"
+        placeholder={t('people.newAgent.namePlaceholder')}
+        aria-label={t('people.agentName')}
         autoComplete="off"
         maxLength={MAX_NAME + 20}
         value={values.name}
@@ -104,29 +107,29 @@ function NewAgentForm({
       {errors.name && <div className="err-line">{errors.name}</div>}
       <div className="nt-grid" style={{ gridTemplateColumns: '2fr 1fr' }}>
         <label>
-          Computer
+          {t('people.computer')}
           <select
             value={values.computerId}
             style={invalid('computerId')}
             onChange={(e) => set({ computerId: e.target.value })}
           >
-            <option value="">Chọn computer…</option>
+            <option value="">{t('people.form.chooseComputerOption')}</option>
             {selectableComputers(people.computers).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
-                {c.status === 'offline' ? ' (offline)' : ''}
+                {c.status === 'offline' ? t('people.offlineSuffix') : ''}
               </option>
             ))}
           </select>
         </label>
         <label>
-          Max turns
+          {t('people.maxTurns')}
           <input
             className="field"
             style={{ height: 36, marginTop: 5, ...invalid('maxTurns') }}
             inputMode="numeric"
             placeholder={String(DEFAULT_MAX_TURNS)}
-            aria-label="Max turns"
+            aria-label={t('people.maxTurns')}
             value={values.maxTurns}
             onChange={(e) => set({ maxTurns: e.target.value })}
           />
@@ -137,8 +140,8 @@ function NewAgentForm({
       <input
         className="field"
         style={{ marginTop: 10 }}
-        placeholder="Workdir (mặc định ~/.agent/agents/<tên>)"
-        aria-label="Workdir"
+        placeholder={t('people.newAgent.workdirPlaceholder')}
+        aria-label={t('people.workdir')}
         autoComplete="off"
         value={values.workdir}
         onChange={(e) => set({ workdir: e.target.value })}
@@ -146,13 +149,13 @@ function NewAgentForm({
       <textarea
         className="field"
         style={{ height: 84, padding: '10px 14px', marginTop: 8, resize: 'none' }}
-        placeholder="Persona (để trống để dùng persona mặc định)"
-        aria-label="Persona"
+        placeholder={t('people.newAgent.personaPlaceholder')}
+        aria-label={t('people.persona')}
         value={values.persona}
         onChange={(e) => set({ persona: e.target.value })}
       />
       <div className="nt-chk" style={{ marginBottom: 6 }}>
-        Skills ({checked.size}/{catalog?.length ?? 0} đang bật)
+        {t('people.newAgent.skillsOn', { on: checked.size, total: catalog?.length ?? 0 })}
       </div>
       <div className="chips" style={{ maxHeight: 110, overflowY: 'auto' }}>
         {(catalog ?? []).map((s) => (
@@ -170,10 +173,10 @@ function NewAgentForm({
       {create.error && <div className="err-line">{create.error.message}</div>}
       <div className="wz-foot">
         <button className="btn" onClick={onClose}>
-          Huỷ
+          {t('people.cancel')}
         </button>
         <button className="btn primary" onClick={submit} disabled={create.isPending}>
-          Tạo agent
+          {t('people.newAgent.create')}
         </button>
       </div>
     </Modal>

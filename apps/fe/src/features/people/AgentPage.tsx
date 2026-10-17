@@ -1,3 +1,4 @@
+import { DemoBadge } from '../../components/DemoBadge';
 import type { Agent, UpdateAgentInput } from '@repo/shared';
 import { getRouteApi, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -7,6 +8,7 @@ import { Icon } from '../../components/Icon';
 import { Modal } from '../../components/Modal';
 import { rel } from '../../lib/format';
 import { useNow } from '../../lib/use-now';
+import { useT, type MessageKey } from '../../i18n';
 import { useOpenDm } from '../chat/chat.api';
 import { selectableComputers } from '../computers/computers.logic';
 import { useTasks } from '../tasks/tasks.api';
@@ -21,14 +23,33 @@ import { useAgentActivity, useCanManage, useDeleteAgent, useUpdateAgent } from '
 
 const route = getRouteApi('/_app/people/agents/$agentId');
 const TABS = ['Overview', 'Persona', 'Skills', 'Activity'] as const;
+type Tab = (typeof TABS)[number];
+const TAB_KEY: Record<Tab, MessageKey> = {
+  Overview: 'people.tabs.overview',
+  Persona: 'people.tabs.persona',
+  Skills: 'people.tabs.skills',
+  Activity: 'people.tabs.activity',
+};
 const STATUS_COLOR = {
   completed: 'var(--ok)',
   failed: 'var(--err)',
   expired: 'var(--muted)',
   cancelled: 'var(--muted)',
 };
+const RUN_STATUS_KEY: Record<keyof typeof STATUS_COLOR, MessageKey> = {
+  completed: 'tasks.runStatus.completed',
+  failed: 'tasks.runStatus.failed',
+  expired: 'tasks.runStatus.expired',
+  cancelled: 'tasks.runStatus.cancelled',
+};
+const AGENT_STATUS_KEY: Record<Agent['status'], MessageKey> = {
+  idle: 'people.agentStatus.idle',
+  working: 'people.agentStatus.working',
+  offline: 'people.agentStatus.offline',
+};
 
 export function AgentPage() {
+  const t = useT();
   const { agentId } = route.useParams();
   const { tab = 'Overview' } = route.useSearch();
   const nav = route.useNavigate();
@@ -47,13 +68,15 @@ export function AgentPage() {
 
   if (!agent)
     return (
-      <div className="loading">{people.agents.length ? 'Không tìm thấy agent.' : 'Đang tải…'}</div>
+      <div className="loading">
+        {people.agents.length ? t('people.agentNotFound') : t('people.loading')}
+      </div>
     );
   const pc = people.computerOf(agent);
   const enabled = agent.skills.filter((s) => s.enabled).length;
-  const mine = tasks.filter((t) => t.assigneeId === agent.id);
-  const current = mine.find((t) => t.activeRun);
-  const runs = mine.flatMap((t) => t.runs);
+  const mine = tasks.filter((task) => task.assigneeId === agent.id);
+  const current = mine.find((task) => task.activeRun);
+  const runs = mine.flatMap((task) => task.runs);
 
   const message = () =>
     openDm.mutate(agent.id, {
@@ -68,10 +91,11 @@ export function AgentPage() {
           <div>
             <h2>
               {agent.name} <span className="spark">✳</span>
+              {agent.simulated && <DemoBadge />}
             </h2>
             <div style={{ color: 'var(--muted)', display: 'flex', gap: 8, alignItems: 'center' }}>
               <Dot state={agentPresence(agent.status)} />
-              {agent.status} · {agent.provider}
+              {t(AGENT_STATUS_KEY[agent.status])} · {agent.provider}
               {current && (
                 <>
                   {' '}
@@ -80,7 +104,7 @@ export function AgentPage() {
                     className="link"
                     onClick={() => void navigate({ to: '/tasks', search: { task: current.id } })}
                   >
-                    đang làm {current.id}
+                    {t('people.workingOn', { id: current.id })}
                   </a>
                 </>
               )}
@@ -92,33 +116,33 @@ export function AgentPage() {
             className="btn"
             style={{ color: 'var(--err)' }}
             disabled={!canManage}
-            title={canManage ? 'Xoá agent' : MANAGER_ONLY_HINT}
+            title={canManage ? t('people.deleteAgent') : t(MANAGER_ONLY_HINT)}
             onClick={() => setConfirmDelete(true)}
           >
-            <Icon name="x" size={16} /> Xoá agent
+            <Icon name="x" size={16} /> {t('people.deleteAgent')}
           </button>
           <button className="btn" onClick={message} disabled={openDm.isPending}>
-            <Icon name="chat" size={16} /> Nhắn tin
+            <Icon name="chat" size={16} /> {t('people.message')}
           </button>
           <button
             className="btn"
             onClick={() => void navigate({ to: '/tasks', search: { view: 'agents' } })}
-            title="Xem trên Tasks"
+            title={t('people.viewOnTasks')}
           >
             <Icon name="gantt" size={16} />
           </button>
         </div>
       </div>
       <div className="ptabs" role="tablist">
-        {TABS.map((t) => (
+        {TABS.map((tabId) => (
           <button
-            key={t}
+            key={tabId}
             role="tab"
-            aria-selected={t === tab}
-            className={t === tab ? 'on' : ''}
-            onClick={() => void nav({ search: { tab: t === 'Overview' ? undefined : t } })}
+            aria-selected={tabId === tab}
+            className={tabId === tab ? 'on' : ''}
+            onClick={() => void nav({ search: { tab: tabId === 'Overview' ? undefined : tabId } })}
           >
-            {t}
+            {t(TAB_KEY[tabId])}
           </button>
         ))}
       </div>
@@ -126,15 +150,15 @@ export function AgentPage() {
         <div className="grid2">
           <div className="box">
             <h4 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              Runtime
+              {t('people.runtime')}
               {!editing && (
                 <button
                   className="btn sm"
                   disabled={!canManage}
-                  title={canManage ? 'Sửa tên, computer, workdir, max turns' : MANAGER_ONLY_HINT}
+                  title={canManage ? t('people.editTip') : t(MANAGER_ONLY_HINT)}
                   onClick={() => setEditing(true)}
                 >
-                  Sửa
+                  {t('people.edit')}
                 </button>
               )}
             </h4>
@@ -156,33 +180,39 @@ export function AgentPage() {
               />
             ) : (
               <dl className="kv">
-                <dt>Provider</dt>
+                <dt>{t('people.provider')}</dt>
                 <dd>{agent.provider}</dd>
-                <dt>Computer</dt>
+                <dt>{t('people.computer')}</dt>
                 <dd>
                   <Dot state={pc?.status === 'online' ? 'on' : 'off'} /> {pc?.name}
                 </dd>
-                <dt>Workdir</dt>
+                <dt>{t('people.workdir')}</dt>
                 <dd>
                   <code>{agent.workdir}</code>
                 </dd>
-                <dt>Max turns</dt>
+                <dt>{t('people.maxTurns')}</dt>
                 <dd>{agent.maxTurns}</dd>
               </dl>
             )}
           </div>
           <div className="box">
-            <h4>Tasks</h4>
+            <h4>{t('tasks.title')}</h4>
             <dl className="kv">
-              <dt>Runs</dt>
+              <dt>{t('tasks.drawer.runs')}</dt>
               <dd>
-                {runs.filter((r) => r.status === 'completed').length} completed ·{' '}
-                {runs.filter((r) => r.status === 'failed').length} failed
+                {t('people.runsSummary', {
+                  completed: runs.filter((r) => r.status === 'completed').length,
+                  failed: runs.filter((r) => r.status === 'failed').length,
+                })}
               </dd>
-              <dt>Hàng đợi</dt>
-              <dd>{mine.filter((t) => t.status === 'todo').length} task</dd>
-              <dt>Chờ duyệt</dt>
-              <dd>{mine.filter((t) => t.status === 'review').length} task</dd>
+              <dt>{t('people.queue')}</dt>
+              <dd>
+                {t('tasks.count', { n: mine.filter((task) => task.status === 'todo').length })}
+              </dd>
+              <dt>{t('people.waitingReview')}</dt>
+              <dd>
+                {t('tasks.count', { n: mine.filter((task) => task.status === 'review').length })}
+              </dd>
             </dl>
           </div>
         </div>
@@ -205,7 +235,7 @@ export function AgentPage() {
                 className={`chip ${s.enabled ? 'on' : ''}`}
                 aria-pressed={s.enabled}
                 disabled={!canManage}
-                title={canManage ? undefined : MANAGER_ONLY_HINT}
+                title={canManage ? undefined : t(MANAGER_ONLY_HINT)}
                 onClick={() => update.mutate({ skills: [{ id: s.id, enabled: !s.enabled }] })}
               >
                 {s.name}
@@ -213,8 +243,8 @@ export function AgentPage() {
             ))}
           </div>
           <p style={{ color: 'var(--muted)', fontSize: 12.5, marginTop: 14 }}>
-            {enabled}/{agent.skills.length} skill đang bật.{' '}
-            {canManage ? 'Bấm để bật/tắt.' : `${MANAGER_ONLY_HINT} được đổi skill.`}
+            {t('people.skillsOn', { on: enabled, total: agent.skills.length })}{' '}
+            {canManage ? t('people.toggleSkills') : t('people.skillsChangeHint')}
           </p>
         </>
       )}
@@ -222,10 +252,10 @@ export function AgentPage() {
         <table>
           <thead>
             <tr>
-              <th>Room</th>
-              <th>Yêu cầu</th>
-              <th>Trạng thái</th>
-              <th>Thời gian</th>
+              <th>{t('people.activity.room')}</th>
+              <th>{t('people.activity.request')}</th>
+              <th>{t('people.activity.status')}</th>
+              <th>{t('people.activity.time')}</th>
             </tr>
           </thead>
           <tbody>
@@ -234,7 +264,9 @@ export function AgentPage() {
                 <td>{r.where}</td>
                 <td>{r.request}</td>
                 <td>
-                  <span style={{ color: STATUS_COLOR[r.status], fontWeight: 600 }}>{r.status}</span>
+                  <span style={{ color: STATUS_COLOR[r.status], fontWeight: 600 }}>
+                    {t(RUN_STATUS_KEY[r.status])}
+                  </span>
                 </td>
                 <td style={{ color: 'var(--muted)' }}>{rel(r.at, now)}</td>
               </tr>
@@ -243,16 +275,13 @@ export function AgentPage() {
         </table>
       )}
       {confirmDelete && (
-        <Modal onClose={() => setConfirmDelete(false)} label="Xoá agent">
-          <h3>Xoá {agent.name}?</h3>
-          <p>
-            Run đang chạy sẽ bị huỷ và các task đang giao cho agent được bỏ giao (về Cần làm). DM
-            với agent bị ẩn. Lịch sử đã chạy được giữ lại. Không hoàn tác được.
-          </p>
+        <Modal onClose={() => setConfirmDelete(false)} label={t('people.deleteAgent')}>
+          <h3>{t('people.deleteTitle', { name: agent.name })}</h3>
+          <p>{t('people.deleteBody')}</p>
           {remove.error && <div className="err-line">{remove.error.message}</div>}
           <div className="wz-foot">
             <button className="btn" onClick={() => setConfirmDelete(false)}>
-              Huỷ
+              {t('people.cancel')}
             </button>
             <button
               className="btn primary"
@@ -272,7 +301,7 @@ export function AgentPage() {
                 })
               }
             >
-              Xoá agent
+              {t('people.deleteAgent')}
             </button>
           </div>
         </Modal>
@@ -294,6 +323,7 @@ function RuntimeEditor({
   onSave: (patch: UpdateAgentInput) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const people = usePeople();
   const [name, setName] = useState(agent.name);
   const computers = selectableComputers(people.computers);
@@ -307,6 +337,7 @@ function RuntimeEditor({
 
   const submit = () => {
     const found = validateAgentForm(
+      t,
       { name, computerId, persona: '', workdir, maxTurns },
       people.agents.filter((a) => a.id !== agent.id).map((a) => a.name),
       computers.map((c) => c.id),
@@ -328,49 +359,51 @@ function RuntimeEditor({
   return (
     <div style={{ display: 'grid', gap: 8 }}>
       <label>
-        Tên
+        {t('people.name')}
         <input
           className="field"
           style={border('name')}
-          aria-label="Tên agent"
+          aria-label={t('people.agentName')}
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
       </label>
       <label>
-        Computer
+        {t('people.computer')}
         <select
           className="field"
           style={border('computerId')}
-          aria-label="Computer"
+          aria-label={t('people.computer')}
           value={computerId}
           onChange={(e) => setComputerId(e.target.value)}
         >
-          {!computers.some((c) => c.id === computerId) && <option value="">Chọn computer…</option>}
+          {!computers.some((c) => c.id === computerId) && (
+            <option value="">{t('people.form.chooseComputerOption')}</option>
+          )}
           {computers.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
-              {c.status === 'offline' ? ' (offline)' : ''}
+              {c.status === 'offline' ? t('people.offlineSuffix') : ''}
             </option>
           ))}
         </select>
       </label>
       <label>
-        Workdir
+        {t('people.workdir')}
         <input
           className="field"
           style={border('workdir')}
-          aria-label="Workdir"
+          aria-label={t('people.workdir')}
           value={workdir}
           onChange={(e) => setWorkdir(e.target.value)}
         />
       </label>
       <label>
-        Max turns
+        {t('people.maxTurns')}
         <input
           className="field"
           style={border('maxTurns')}
-          aria-label="Max turns"
+          aria-label={t('people.maxTurns')}
           inputMode="numeric"
           value={maxTurns}
           onChange={(e) => setMaxTurns(e.target.value)}
@@ -388,10 +421,10 @@ function RuntimeEditor({
       )}
       <div style={{ display: 'flex', gap: 8 }}>
         <button className="btn primary" disabled={saving} onClick={submit}>
-          Lưu
+          {t('people.save')}
         </button>
         <button className="btn" onClick={onCancel}>
-          Huỷ
+          {t('people.cancel')}
         </button>
       </div>
     </div>
@@ -409,15 +442,16 @@ function PersonaEditor({
   saving: boolean;
   onSave: (v: string) => void;
 }) {
+  const t = useT();
   const [draft, setDraft] = useState(value);
   return (
     <>
       <textarea
         className="persona"
         style={{ width: '100%', minHeight: 180, resize: 'vertical', outline: 'none' }}
-        aria-label="Persona"
+        aria-label={t('people.persona')}
         readOnly={readOnly}
-        title={readOnly ? MANAGER_ONLY_HINT : undefined}
+        title={readOnly ? t(MANAGER_ONLY_HINT) : undefined}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
       />
@@ -425,14 +459,14 @@ function PersonaEditor({
         <button
           className="btn primary"
           disabled={readOnly || saving || draft === value}
-          title={readOnly ? MANAGER_ONLY_HINT : undefined}
+          title={readOnly ? t(MANAGER_ONLY_HINT) : undefined}
           onClick={() => onSave(draft)}
         >
-          Lưu persona
+          {t('people.savePersona')}
         </button>
         {draft !== value && (
           <button className="btn" onClick={() => setDraft(value)}>
-            Huỷ thay đổi
+            {t('people.discardChanges')}
           </button>
         )}
       </div>

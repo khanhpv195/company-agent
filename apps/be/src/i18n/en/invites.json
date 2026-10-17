@@ -1,0 +1,12 @@
+{
+  "CREATED": "Invite sent",
+  "LISTED": "Invites loaded",
+  "REVOKED": "Invite revoked",
+  "PREVIEWED": "Invite loaded",
+  "ACCEPTED": "Welcome aboard",
+  "INVALID": "This invite is invalid or has expired",
+  "NOT_FOUND": "Invite not found",
+  "EMAIL_TAKEN": "This email already has an account",
+  "ADMIN_REQUIRES_OWNER": "Only the owner can invite admins",
+  "ALREADY_MEMBER": "This person is already a member of this workspace"
+}

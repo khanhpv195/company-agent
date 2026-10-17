@@ -8,6 +8,10 @@ export type RealtimeEvent =
   | { type: 'computers.changed' }
   | { type: 'connections.changed' }
   | { type: 'dashboard.changed' }
+  /** Members, roles or pending invites changed (also a signal to refetch the session). */
+  | { type: 'members.changed' }
+  /** Workspace name or owner changed. */
+  | { type: 'workspace.changed' }
   | {
       type: 'notice';
       /** Inline markdown. */

@@ -1,6 +1,7 @@
 export const qk = {
   session: ['session'] as const,
   members: ['members'] as const,
+  invites: ['invites'] as const,
   computers: ['computers'] as const,
   agents: ['agents'] as const,
   agent: (id: string) => ['agents', id] as const,
@@ -13,4 +14,7 @@ export const qk = {
   scheduler: ['scheduler'] as const,
   dashboard: ['dashboard'] as const,
   connections: ['connections'] as const,
+  accountSessions: ['account', 'sessions'] as const,
+  audit: ['audit-events'] as const,
+  billing: ['billing'] as const,
 };

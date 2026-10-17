@@ -1,5 +1,6 @@
 import type { Agent, Member } from '@repo/shared';
 import type { CSSProperties } from 'react';
+import { translate } from '../i18n';
 
 const BG = ['#d8f0ec', '#f3e6d4', '#e5e3f5'];
 const HEAD = ['#f4a6c7', '#e9b46b', '#a8a2e6'];
@@ -65,7 +66,11 @@ export function MemberAvatar({
 
 /** Dashed circle for "not assigned". */
 export const NoAvatar = ({ size = 20 }: { size?: number }) => (
-  <span className="av-none" style={{ width: size, height: size }} title="Chưa giao" />
+  <span
+    className="av-none"
+    style={{ width: size, height: size }}
+    title={translate('common.unassigned')}
+  />
 );
 
 import type { Presence } from './presence';

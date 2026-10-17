@@ -45,6 +45,25 @@ export class Member {
   @Column({ type: 'varchar', nullable: true })
   color: string | null;
 
+  @Column({ name: 'email_verified_at', type: 'timestamptz', nullable: true })
+  emailVerifiedAt: Date | null;
+
+  @Column({ name: 'failed_login_count', type: 'int', default: 0 })
+  failedLoginCount: number;
+
+  @Column({ name: 'locked_until', type: 'timestamptz', nullable: true })
+  lockedUntil: Date | null;
+
+  @Column({ name: 'terms_accepted_at', type: 'timestamptz', nullable: true })
+  termsAcceptedAt: Date | null;
+
+  /** Soft removal: the row stays so history keeps its author, but the member can no longer sign in. */
+  @Column({ name: 'removed_at', type: 'timestamptz', nullable: true })
+  removedAt: Date | null;
+
+  @Column({ name: 'password_changed_at', type: 'timestamptz', nullable: true })
+  passwordChangedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

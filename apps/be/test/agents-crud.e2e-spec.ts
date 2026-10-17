@@ -24,6 +24,7 @@ import {
   createWorld,
   LoggedInClient,
   registerAndLogin,
+  setPlan,
   truncateAll,
   World,
 } from './utils';
@@ -50,7 +51,9 @@ describe('Agent management (e2e)', () => {
   beforeEach(async () => {
     await engine.settled();
     await truncateAll(dataSource);
-    w = await createWorld(dataSource, await registerAndLogin(app), Date.now());
+    const me = await registerAndLogin(app);
+    await setPlan(dataSource, me.workspaceId, 'pro');
+    w = await createWorld(dataSource, me, Date.now());
     admin = await addMemberWithRole(dataSource, w.me, 'admin');
     member = await addMemberWithRole(dataSource, w.me, 'member');
   });

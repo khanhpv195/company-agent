@@ -5,3 +5,4 @@ export const escapeLikePattern = (value: string): string => value.replace(/[\\%_
 export * from './parse-duration';
 export * from './query-rows';
 export * from './transaction';
+export * from './text.util';

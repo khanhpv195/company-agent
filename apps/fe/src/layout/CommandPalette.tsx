@@ -7,6 +7,7 @@ import { useRooms } from '../features/chat/chat.api';
 import { useTasks } from '../features/tasks/tasks.api';
 import { StatusIcon } from '../features/tasks/task-ui';
 import { usePeople } from '../features/workspace/workspace.api';
+import { useT } from '../i18n';
 import { useUi } from '../stores/ui';
 
 interface Item {
@@ -27,6 +28,7 @@ export function CommandPalette() {
 }
 
 function Palette({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const navigate = useNavigate();
   const rooms = useRooms();
   const people = usePeople();
@@ -41,7 +43,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   };
   const page = (label: string, icon: IconName, to: string): Item => ({
     id: `p:${to}`,
-    group: 'Trang',
+    group: t('palette.groupPages'),
     label,
     icon: <Icon name={icon} size={16} />,
     go: run(() => void navigate({ to })),
@@ -49,55 +51,55 @@ function Palette({ onClose }: { onClose: () => void }) {
   const items: Item[] = [
     {
       id: 'new-task',
-      group: 'Lệnh',
-      label: 'Tạo task mới',
+      group: t('palette.groupCommands'),
+      label: t('palette.newTask'),
       hint: 'c',
       icon: <Icon name="plus" size={16} />,
       go: run(() => openNewTask('todo')),
     },
-    page('Dashboard', 'dash', '/'),
-    page('Tasks', 'kanban', '/tasks'),
-    page('Chat', 'chat', '/chat'),
-    page('People & Agents', 'users', '/people'),
-    page('Connections', 'plug', '/connections'),
-    page('Computers', 'monitor', '/computers'),
-    page('Settings', 'sliders', '/settings'),
+    page(t('rail.dashboard'), 'dash', '/'),
+    page(t('rail.tasks'), 'kanban', '/tasks'),
+    page(t('rail.chat'), 'chat', '/chat'),
+    page(t('rail.people'), 'users', '/people'),
+    page(t('rail.connections'), 'plug', '/connections'),
+    page(t('rail.computers'), 'monitor', '/computers'),
+    page(t('rail.settings'), 'sliders', '/settings'),
     ...rooms.flatMap((r) =>
       r.kind === 'dm'
         ? [
             {
               id: r.id,
-              group: 'Chat',
+              group: t('palette.groupChat'),
               label: r.name,
-              hint: 'DM',
+              hint: t('palette.dm'),
               icon: <Icon name="user" size={16} />,
               go: run(() => void navigate({ to: '/chat/$chatId', params: { chatId: r.id } })),
             },
           ]
-        : r.threads.map((t) => ({
-            id: t.id,
-            group: 'Chat',
-            label: t.name,
+        : r.threads.map((th) => ({
+            id: th.id,
+            group: t('palette.groupChat'),
+            label: th.name,
             hint: `#${r.name}`,
             icon: <Icon name="chat" size={16} />,
-            go: run(() => void navigate({ to: '/chat/$chatId', params: { chatId: t.id } })),
+            go: run(() => void navigate({ to: '/chat/$chatId', params: { chatId: th.id } })),
           })),
     ),
     ...people.agents.map((a) => ({
       id: a.id,
-      group: 'Agents',
+      group: t('palette.groupAgents'),
       label: a.name,
       hint: a.status,
       icon: <AgentAvatar agent={a} size={18} />,
       go: run(() => void navigate({ to: '/people/agents/$agentId', params: { agentId: a.id } })),
     })),
-    ...tasks.map((t) => ({
-      id: t.id,
-      group: 'Tasks',
-      label: t.title,
-      hint: t.id,
-      icon: <StatusIcon status={t.status} size={15} />,
-      go: run(() => void navigate({ to: '/tasks', search: { task: t.id } })),
+    ...tasks.map((task) => ({
+      id: task.id,
+      group: t('palette.groupTasks'),
+      label: task.title,
+      hint: task.id,
+      icon: <StatusIcon status={task.status} size={15} />,
+      go: run(() => void navigate({ to: '/tasks', search: { task: task.id } })),
     })),
   ];
   const needle = q.trim().toLowerCase();
@@ -109,13 +111,13 @@ function Palette({ onClose }: { onClose: () => void }) {
   const active = Math.min(sel, shown.length - 1);
 
   return (
-    <Modal onClose={onClose} label="Tìm kiếm">
+    <Modal onClose={onClose} label={t('palette.label')}>
       <div className="srch" style={{ width: '100%', height: 40 }}>
         <Icon name="search" size={16} />
         <input
           autoFocus
-          placeholder="Tìm trang, chat, agent, task…"
-          aria-label="Tìm kiếm"
+          placeholder={t('palette.placeholder')}
+          aria-label={t('palette.label')}
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
@@ -153,7 +155,7 @@ function Palette({ onClose }: { onClose: () => void }) {
         ))}
         {!shown.length && (
           <div className="pal-h" style={{ textTransform: 'none' }}>
-            Không có kết quả
+            {t('palette.empty')}
           </div>
         )}
       </div>

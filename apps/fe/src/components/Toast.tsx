@@ -1,4 +1,5 @@
 import { useNavigate } from '@tanstack/react-router';
+import { useT } from '../i18n';
 import { usePeople } from '../features/workspace/workspace.api';
 import { useUi } from '../stores/ui';
 import { AgentAvatar } from './Avatar';
@@ -9,15 +10,31 @@ export function Toast() {
   const hide = useUi((s) => s.hideToast);
   const people = usePeople();
   const navigate = useNavigate();
+  const t = useT();
   const agent = people.agent(toast?.agentId);
   return (
-    <div className={`toast ${toast ? 'on' : ''}`} role="status" aria-live="polite">
+    <div
+      className={`toast ${toast ? 'on' : ''} ${toast?.tone === 'error' ? 'err' : ''}`}
+      role="status"
+      aria-live="polite"
+    >
       {toast && (
         <>
           {agent && <AgentAvatar agent={agent} />}
           <span>
             <Inline text={toast.text} />
           </span>
+          {toast.action && (
+            <button
+              className="lnk"
+              onClick={() => {
+                hide();
+                void navigate({ to: toast.action?.to });
+              }}
+            >
+              {toast.action.label}
+            </button>
+          )}
           {toast.taskId && (
             <button
               className="lnk"
@@ -29,7 +46,7 @@ export function Toast() {
                 });
               }}
             >
-              Xem
+              {t('common.view')}
             </button>
           )}
         </>

@@ -1,6 +1,18 @@
 # Monorepo — NestJS + Tauri
 
-Backend REST (NestJS 12) và ứng dụng desktop (Tauri v2 + React) dùng chung type qua `@repo/shared`. Docker chỉ chạy API và PostgreSQL; frontend là app desktop nên không đưa vào image.
+Không gian làm việc "AI-native": con người và agent Claude Code chat trong phòng, bảng task cho admin thấy agent nào đang chạy việc gì. Backend REST (NestJS 12) và ứng dụng desktop (Tauri v2 + React 19) dùng chung type qua `@repo/shared`. Docker chỉ chạy API và PostgreSQL; frontend là app desktop nên không đưa vào image.
+
+Stack hiện tại: Node 24, pnpm 11, NestJS 12 (ESM), TypeORM 1, TypeScript 6, React 19, Vite 8, Tauri 2, ESLint 10, Jest 30 (be), Vitest (fe, cli), PostgreSQL 16.
+
+## Tính năng
+
+- **Tài khoản và bảo mật:** đăng ký (đồng ý điều khoản), xác minh email, quên/đặt lại mật khẩu, khoá tạm sau 5 lần sai, danh sách phiên đăng nhập và thu hồi, xoá tài khoản, nhật ký kiểm toán (owner/admin).
+- **Nhóm:** mời thành viên bằng link/mã (mail), đổi vai trò, gỡ thành viên, chuyển quyền owner, đổi tên hoặc xoá workspace.
+- **Gói và thanh toán:** Free / Pro / Team với giới hạn ghế, agent, máy; thống kê chi phí theo tháng, theo agent, theo ngày; Stripe Checkout + portal (tuỳ chọn, `BILLING_PROVIDER=stripe`).
+- **Chat và task:** phòng, DM, thread, nháp trả lời; bảng task (board / list / timeline theo agent), mỗi agent một run, hàng đợi ưu tiên, duyệt trước khi xong.
+- **Agent thật:** daemon `packages/cli` chạy agent trên Claude Code ở máy của bạn; máy/agent giả lập (`AGENT_SIMULATOR=true`) chỉ để demo.
+- **Kết nối Zalo / Facebook / Gmail:** bản demo (`CONNECTIONS_MODE=simulated`); production tắt (`disabled`) cho tới khi có OAuth thật.
+- **Vận hành:** log JSON có request id, `/health` và `/health/ready`, rate limit toàn cục, job dọn dữ liệu hằng ngày, CI GitHub Actions. Xem [`docs/deployment.md`](docs/deployment.md).
 
 ```
 apps/be          NestJS API  (http://localhost:3000)
@@ -87,7 +99,7 @@ pnpm docker:down
 
 ### Kết nối máy thật (agent chạy trên Claude Code)
 
-Máy giả lập (`AGENT_SIMULATOR=true`) chỉ để dev UI. Muốn agent chạy thật:
+Máy giả lập (`AGENT_SIMULATOR=true`) chỉ để dev UI và demo. Muốn agent chạy thật:
 
 1. Cài và đăng nhập Claude Code trên máy đó (`claude`), hoặc đặt `ANTHROPIC_API_KEY`.
 2. Trong app: trang **Computers** → tạo mã ghép đối (dạng `ABCD-EFGH`, hết hạn sau 10 phút, dùng một lần).
@@ -104,25 +116,21 @@ Lần sau chỉ cần `pnpm agent start`. Chi tiết quyền của agent: `packa
 
 ### Backend — `apps/be/.env`
 
-| Biến                | Mặc định                                                         | Ý nghĩa                                                                                 |
-| ------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `NODE_ENV`          | `development`                                                    | `development` \| `production` \| `test`                                                 |
-| `PORT`              | `3000`                                                           | Port HTTP                                                                               |
-| `CORS_ORIGINS`      | `tauri://localhost,http://tauri.localhost,http://localhost:1420` | Origin được phép (Tauri macOS/Linux, Tauri Windows, Vite)                               |
-| `JWT_ACCESS_SECRET` | _(bắt buộc, >= 32 ký tự)_                                        | Tạo bằng `openssl rand -base64 48`. Giá trị trong `.env.example` chỉ là placeholder     |
-| `SEED_PASSWORD`     | `password123` (ngoài production)                                 | Mật khẩu của các user seed. Bắt buộc khi `NODE_ENV=production`                          |
-| `AGENT_SIMULATOR`   | `false`                                                          | `true` chạy simulator thay cho daemon máy thật. `.env.example` và docker dev đặt `true` |
-| `SWAGGER_ENABLED`   | `true`                                                           | Tắt bằng `false` nếu không muốn `/docs`                                                 |
-| `FALLBACK_LANGUAGE` | `en`                                                             | `en` \| `vi` — khi thiếu header `Accept-Language`                                       |
-| `DB_HOST`           | `localhost`                                                      | Trong Compose đặt thành `postgres`                                                      |
-| `DB_PORT`           | `5432`                                                           |                                                                                         |
-| `DB_USERNAME`       | _(bắt buộc)_                                                     |                                                                                         |
-| `DB_PASSWORD`       | _(bắt buộc, được phép rỗng)_                                     | Compose prod **không** có default — phải truyền                                         |
-| `DB_NAME`           | _(bắt buộc)_                                                     |                                                                                         |
-| `DB_LOGGING`        | `false`                                                          | Log SQL TypeORM                                                                         |
-| `DB_SYNCHRONIZE`    | `false`                                                          | Bị từ chối khi `NODE_ENV=production`. Dùng migration                                    |
-| `RUN_MIGRATIONS`    | `true` (runtime entrypoint)                                      | Chạy `migration:run` trước `node dist/main.js`                                          |
-| `RUN_SEED`          | `false` (runtime); `true` trong `docker/be.dev.env`              | Chạy `scripts/seed.sh` sau migration lúc container start (seed idempotent)              |
+Bảng đầy đủ của **mọi** biến (mail, Stripe, giới hạn, log, retention...) nằm ở [`docs/deployment.md`](docs/deployment.md#environment-reference); `apps/be/.env.example` có giá trị mẫu cho dev. Những biến cần biết khi bắt đầu:
+
+| Biến                | Mặc định                  | Ý nghĩa                                                                               |
+| ------------------- | ------------------------- | ------------------------------------------------------------------------------------- |
+| `NODE_ENV`          | `development`             | `development` \| `production` \| `test`. Production bật thêm các kiểm tra an toàn     |
+| `JWT_ACCESS_SECRET` | _(bắt buộc, >= 32 ký tự)_ | Tạo bằng `openssl rand -base64 48`. Production từ chối giá trị placeholder trong repo |
+| `APP_URL`           | `http://localhost:1420`   | Gốc của link trong mail. Bắt buộc ở production                                        |
+| `MAIL_TRANSPORT`    | `log`                     | `log` (dev, mail nằm trong bộ nhớ) \| `smtp` (bắt buộc ở production, kèm `SMTP_*`)    |
+| `AGENT_SIMULATOR`   | `false`                   | `true` chạy simulator thay cho daemon máy thật (dev). Bị từ chối ở production         |
+| `CONNECTIONS_MODE`  | `simulated`               | `simulated` \| `disabled`. Production chỉ nhận `disabled`                             |
+| `BILLING_PROVIDER`  | `none`                    | `none` \| `stripe`                                                                    |
+| `LOG_LEVEL`         | `info`                    | Log JSON; `pino-pretty` khi `NODE_ENV=development`                                    |
+| `DB_*`              | _(xem `.env.example`)_    | `DB_PASSWORD` không được rỗng ở production; `DB_SYNCHRONIZE` bị từ chối ở production  |
+| `RUN_MIGRATIONS`    | `true` (runtime)          | Chạy migration trước `node dist/main.js`                                              |
+| `RUN_SEED`          | `false`; `true` ở dev     | Seed idempotent lúc container start (chỉ dev)                                         |
 
 ### Frontend — `apps/fe/.env`
 
@@ -201,27 +209,45 @@ API phải chạy (Docker hoặc `pnpm dev:be`) thì app mới gọi được ba
 ## Docker
 
 - `docker-compose.yml` — Postgres 16 (volume + healthcheck) và `be` target `dev`: mount source, `storage/` ra volume, đợi Postgres healthy. CMD chạy migration, seed nếu `RUN_SEED=true`, rồi `nest start --watch`.
-- `docker-compose.prod.yml` — image `runtime` (user `node`, `HEALTHCHECK` gọi `/api/v1/health`), **không** mount source. Entrypoint chạy migration (và seed nếu `RUN_SEED=true`). Bắt buộc `DB_PASSWORD` và `JWT_ACCESS_SECRET`.
+- `docker-compose.prod.yml` — image `runtime` (user `node`, `HEALTHCHECK` gọi `/api/v1/health`), **không** mount source. Entrypoint chạy migration. Bắt buộc `DB_PASSWORD`, `JWT_ACCESS_SECRET`, `APP_URL`, cộng `SMTP_HOST` và `MAIL_FROM`. Hướng dẫn đầy đủ (SMTP, Stripe, backup, nâng cấp): [`docs/deployment.md`](docs/deployment.md).
 
 ```bash
-# production-like local
-DB_PASSWORD=secret docker compose -f docker-compose.prod.yml up -d --build
+DB_PASSWORD=... JWT_ACCESS_SECRET=$(openssl rand -base64 48) APP_URL=https://app.example.com \
+SMTP_HOST=smtp.example.com MAIL_FROM='App <no-reply@example.com>' \
+  docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 Image multi-stage (`apps/be/Dockerfile`): `turbo prune be --docker` → install → build → `pnpm deploy` → runtime non-root.
 
 ## API
 
-|          |                                                                                             |
-| -------- | ------------------------------------------------------------------------------------------- |
-| Prefix   | `/api` + URI version `/v1`                                                                  |
-| Health   | `GET /api/v1/health` → `{ status: "ok", uptime }`                                           |
-| Auth     | `POST /api/v1/auth/register`, `/login`, `/refresh`, `/logout` (JWT Bearer cho phần còn lại) |
-| Realtime | `GET /api/v1/events` (Server-Sent Events, ping định kỳ theo `SSE_HEARTBEAT_MS`)             |
-| Envelope | `{ success, data, message, meta? }`                                                         |
-| i18n     | Header `Accept-Language: en` hoặc `vi`                                                      |
-| Swagger  | http://localhost:3000/docs                                                                  |
+|          |                                                                                                                      |
+| -------- | -------------------------------------------------------------------------------------------------------------------- |
+| Prefix   | `/api` + URI version `/v1`                                                                                           |
+| Health   | `GET /api/v1/health` (liveness) và `GET /api/v1/health/ready` (kiểm tra DB, 503 khi lỗi)                             |
+| Auth     | `POST /api/v1/auth/register`, `/login`, `/refresh`, `/logout`, `/forgot-password`, ... (JWT Bearer cho phần còn lại) |
+| Request  | Header `x-request-id` được trả lại; lỗi có `meta.requestId`                                                          |
+| Realtime | `GET /api/v1/events` (Server-Sent Events, ping định kỳ theo `SSE_HEARTBEAT_MS`)                                      |
+| Envelope | `{ success, data, message, meta? }`                                                                                  |
+| i18n     | Header `Accept-Language: en` hoặc `vi`                                                                               |
+| Swagger  | http://localhost:3000/docs (mặc định tắt ở production)                                                               |
 
 ## Debug backend
 
 Mở folder `apps/be` trong VS Code/Cursor: launch **Debug Nest (watch)** hoặc **Attach to Nest (port 9229)** (port này được expose bởi Compose dev).
+
+## Build the desktop app for production
+
+The desktop app talks to the API configured by `VITE_API_URL`, and the production CSP only allows
+that origin. Set it (https is required unless the host is localhost), then build:
+
+```bash
+echo 'VITE_API_URL=https://api.example.com/api/v1' > apps/fe/.env.production
+pnpm --filter fe tauri:build
+```
+
+`tauri:build` first runs `apps/fe/scripts/tauri-prod-config.mjs`, which writes the git-ignored
+`apps/fe/src-tauri/tauri.prod.conf.json` (CSP with `connect-src` for that origin) and passes it
+to `tauri build --config`. `VITE_API_URL` from the environment overrides the `.env` files. The
+backend `CORS_ORIGINS` must include `tauri://localhost` and `http://tauri.localhost`. Installers
+land in `apps/fe/src-tauri/target/release/bundle/`.

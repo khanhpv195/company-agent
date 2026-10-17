@@ -15,7 +15,7 @@ import {
   Public,
   ResponseMessage,
 } from '../../common/decorators';
-import { AuthThrottlerGuard } from '../../common/guards';
+import { AuthThrottlerGuard, GatewayThrottlerGuard } from '../../common/guards';
 import type { ComputerContext } from '../../common/types';
 import { ComputerAuthGuard } from './computer-auth.guard';
 import { DaemonGatewayService } from './daemon-gateway.service';
@@ -56,7 +56,7 @@ export class GatewayPairController {
 @ApiTags('gateway')
 @ApiBearerAuth()
 @Public()
-@UseGuards(ComputerAuthGuard)
+@UseGuards(ComputerAuthGuard, GatewayThrottlerGuard)
 @Controller('gateway')
 export class GatewayController {
   constructor(

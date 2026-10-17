@@ -1,6 +1,7 @@
 import type { Task, TaskStatus } from '@repo/shared';
 import { useState, type DragEvent } from 'react';
 import { Icon } from '../../components/Icon';
+import { useT } from '../../i18n';
 import { useUi } from '../../stores/ui';
 import { StatusIcon } from './task-ui';
 import { TaskCard } from './TaskCard';
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function BoardView({ tasks, openId, onOpen, onApprove, onMove }: Props) {
+  const t = useT();
   const openNewTask = useUi((s) => s.openNewTask);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<TaskStatus | null>(null);
@@ -38,7 +40,7 @@ export function BoardView({ tasks, openId, onOpen, onApprove, onMove }: Props) {
           <section
             key={c.id}
             className={`col ${over === c.id ? 'over' : ''}`}
-            aria-label={c.name}
+            aria-label={t(c.nameKey)}
             onDragOver={(e) => {
               if (!dragging) return;
               e.preventDefault();
@@ -52,17 +54,17 @@ export function BoardView({ tasks, openId, onOpen, onApprove, onMove }: Props) {
           >
             <div className="col-h">
               <StatusIcon status={c.id} />
-              <span>{c.name}</span>
+              <span>{t(c.nameKey)}</span>
               <span
                 className={`n ${overWip ? 'over' : ''}`}
-                title={c.wip ? `Giới hạn WIP ${c.wip}` : undefined}
+                title={c.wip ? t('tasks.wipLimit', { n: c.wip }) : undefined}
               >
                 {items.length}
                 {c.wip ? `/${c.wip}` : ''}
               </span>
               <button
                 className="icon-btn"
-                title={`Thêm task vào ${c.name}`}
+                title={t('tasks.addTo', { name: t(c.nameKey) })}
                 onClick={() => openNewTask(c.id)}
               >
                 <Icon name="plus" size={15} />
@@ -86,9 +88,9 @@ export function BoardView({ tasks, openId, onOpen, onApprove, onMove }: Props) {
               ))}
               {!items.length && (
                 <div className="col-empty">
-                  {c.hint ?? 'Trống'}
+                  {c.hintKey ? t(c.hintKey) : t('tasks.empty')}
                   <br />
-                  Kéo task vào đây
+                  {t('tasks.dropHere')}
                 </div>
               )}
             </div>

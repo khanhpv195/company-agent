@@ -9,7 +9,7 @@ import {
 import { OnEvent } from '@nestjs/event-emitter';
 import { InjectDataSource } from '@nestjs/typeorm';
 import type { Task, TaskPriority, TaskStatus } from '@repo/shared';
-import { DataSource } from 'typeorm';
+import { DataSource, IsNull } from 'typeorm';
 import { ClockService } from '../../common/clock';
 import { ASSIGNMENT_ENDED_EVENT, type AssignmentEndedPayload } from '../events';
 import type { AuthContext, ComputerContext } from '../../common/types';
@@ -197,6 +197,7 @@ export class GatewayToolsService {
       ? await manager.findOneBy(Member, {
           id: row.requestedByMemberId,
           workspaceId: row.workspaceId,
+          removedAt: IsNull(),
         })
       : null;
     // A task run acts on text that any member can edit (description, comments), so it never gets
@@ -297,7 +298,7 @@ export class GatewayToolsService {
 
   private async listMembers(ctx: ToolContext) {
     const members = await this.dataSource.getRepository(Member).find({
-      where: { workspaceId: ctx.workspaceId },
+      where: { workspaceId: ctx.workspaceId, removedAt: IsNull() },
       order: { createdAt: 'ASC', id: 'ASC' },
     });
     return members.map((member) => ({ id: member.id, name: member.name, role: member.role }));
@@ -423,14 +424,18 @@ export class GatewayToolsService {
     const name = reqString(input, 'name', MAX_NAME_LENGTH).trim();
     const skills = optStringList(input, 'skills');
     const computerId = optString(input, 'computerId', 100);
-    const created = await this.agents.create(ctx.workspaceId, {
-      name,
-      computerId: computerId ?? ctx.computerId,
-      persona: optString(input, 'persona', MAX_PERSONA_LENGTH),
-      skills: skills?.map((id) => ({ id, enabled: true })),
-      workdir: toolWorkdir(optString(input, 'workdir', MAX_WORKDIR_LENGTH)),
-      maxTurns: optInt(input, 'maxTurns', 1, MAX_TURNS_LIMIT),
-    });
+    const created = await this.agents.create(
+      ctx.workspaceId,
+      {
+        name,
+        computerId: computerId ?? ctx.computerId,
+        persona: optString(input, 'persona', MAX_PERSONA_LENGTH),
+        skills: skills?.map((id) => ({ id, enabled: true })),
+        workdir: toolWorkdir(optString(input, 'workdir', MAX_WORKDIR_LENGTH)),
+        maxTurns: optInt(input, 'maxTurns', 1, MAX_TURNS_LIMIT),
+      },
+      { memberId: ctx.member?.id ?? null },
+    );
     await this.recordAgentChange(ctx, `tạo agent **${created.name}**`);
     return this.agentSummary(created);
   }
@@ -447,13 +452,18 @@ export class GatewayToolsService {
       // The list is the full set of enabled skills.
       skills = catalog.map((skill) => ({ id: skill.id, enabled: wanted.includes(skill.id) }));
     }
-    const updated = await this.agents.update(ctx.workspaceId, id, {
-      persona: optString(input, 'persona', MAX_PERSONA_LENGTH),
-      skills,
-      name: optString(input, 'name', MAX_NAME_LENGTH)?.trim(),
-      workdir: toolWorkdir(optString(input, 'workdir', MAX_WORKDIR_LENGTH)),
-      maxTurns: optInt(input, 'maxTurns', 1, MAX_TURNS_LIMIT),
-    });
+    const updated = await this.agents.update(
+      ctx.workspaceId,
+      id,
+      {
+        persona: optString(input, 'persona', MAX_PERSONA_LENGTH),
+        skills,
+        name: optString(input, 'name', MAX_NAME_LENGTH)?.trim(),
+        workdir: toolWorkdir(optString(input, 'workdir', MAX_WORKDIR_LENGTH)),
+        maxTurns: optInt(input, 'maxTurns', 1, MAX_TURNS_LIMIT),
+      },
+      { memberId: ctx.member?.id ?? null },
+    );
     await this.recordAgentChange(ctx, `sửa agent **${updated.name}**`);
     return this.agentSummary(updated);
   }

@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "tauri": "tauri",
-    "tauri:build": "tauri build",
+    "tauri:build": "node scripts/tauri-prod-config.mjs && tauri build --config src-tauri/tauri.prod.conf.json",
     "test": "vitest run"
   },
   "dependencies": {
@@ -21,6 +21,7 @@
     "@tanstack/react-query": "^5.104.3",
     "@tanstack/react-router": "^1.170.44",
     "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-opener": "2.6.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "zustand": "^5.0.15"

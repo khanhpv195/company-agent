@@ -1,4 +1,17 @@
 {
   "SESSION_LOADED": "Session loaded",
-  "MEMBERS_LISTED": "Members loaded"
+  "MEMBERS_LISTED": "Members loaded",
+  "ROLE_CHANGED": "Role updated",
+  "MEMBER_REMOVED": "Member removed",
+  "MEMBER_NOT_FOUND": "Member not found",
+  "CANNOT_CHANGE_SELF": "You cannot change your own role",
+  "CANNOT_CHANGE_OWNER": "The owner role can only move through a transfer",
+  "CANNOT_REMOVE_SELF": "You cannot remove yourself here",
+  "CANNOT_REMOVE_TARGET": "Admins can only remove members",
+  "CANNOT_TRANSFER_TO_SELF": "Choose another member to hand the workspace to",
+  "OWNERSHIP_TRANSFERRED": "Ownership transferred",
+  "RENAMED": "Workspace renamed",
+  "DELETED": "Workspace deleted",
+  "CONFIRM_NAME_MISMATCH": "The name you typed does not match the workspace name",
+  "NOT_FOUND": "Workspace not found"
 }

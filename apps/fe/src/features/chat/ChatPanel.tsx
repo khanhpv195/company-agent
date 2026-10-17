@@ -1,3 +1,4 @@
+import { DemoBadge } from '../../components/DemoBadge';
 import type { Room, Thread } from '@repo/shared';
 import { Link } from '@tanstack/react-router';
 import { useState, type ReactNode } from 'react';
@@ -5,12 +6,19 @@ import { AgentAvatar } from '../../components/Avatar';
 import { Icon, type IconName } from '../../components/Icon';
 import { short } from '../../lib/format';
 import { useNow } from '../../lib/use-now';
+import { useT, type MessageKey } from '../../i18n';
 import { useUi } from '../../stores/ui';
 import { usePeople } from '../workspace/workspace.api';
 import { useRooms } from './chat.api';
 
 const TABS = ['Home', 'Recent', 'Unread', '@me'] as const;
 type Tab = (typeof TABS)[number];
+const TAB_KEY: Record<Tab, MessageKey> = {
+  Home: 'chat.tabs.home',
+  Recent: 'chat.tabs.recent',
+  Unread: 'chat.tabs.unread',
+  '@me': 'chat.tabs.mentions',
+};
 
 function Section({
   id,
@@ -48,6 +56,7 @@ function Section({
 }
 
 export function ChatPanel({ activeId }: { activeId: string | undefined }) {
+  const t = useT();
   const rooms = useRooms();
   const people = usePeople();
   const now = useNow();
@@ -65,7 +74,10 @@ export function ChatPanel({ activeId }: { activeId: string | undefined }) {
         {agent ? <AgentAvatar agent={agent} /> : <span className="av human">{r.name[0]}</span>}
         <div className="meta">
           <div className="row">
-            <span className="name">{agent?.name ?? r.name}</span>
+            <span className="name">
+              {agent?.name ?? r.name}
+              {agent?.simulated && <DemoBadge />}
+            </span>
             <span className="time">{short(r.lastMessageAt, now)}</span>
           </div>
           <div className="prev">{r.preview}</div>
@@ -111,7 +123,7 @@ export function ChatPanel({ activeId }: { activeId: string | undefined }) {
   if (tab === 'Home')
     body = (
       <>
-        <Section id="dm" icon="user" title="Direct messages">
+        <Section id="dm" icon="user" title={t('chat.dms')}>
           {dms.map(dmItem)}
         </Section>
         {channels.map((c) => (
@@ -122,7 +134,7 @@ export function ChatPanel({ activeId }: { activeId: string | undefined }) {
             title={c.name}
             extra={
               c.isPrivate ? (
-                <span style={{ color: 'var(--muted)', display: 'flex' }} title="Riêng tư">
+                <span style={{ color: 'var(--muted)', display: 'flex' }} title={t('chat.private')}>
                   <Icon name="lock" size={13} />
                 </span>
               ) : null
@@ -131,7 +143,7 @@ export function ChatPanel({ activeId }: { activeId: string | undefined }) {
             {c.threads.length ? (
               c.threads.map(threadItem)
             ) : (
-              <div className="empty-line">No participating threads yet.</div>
+              <div className="empty-line">{t('chat.noThreads')}</div>
             )}
           </Section>
         ))}
@@ -144,31 +156,31 @@ export function ChatPanel({ activeId }: { activeId: string | undefined }) {
       unread
     ) : (
       <div className="empty-line" style={{ paddingLeft: 20 }}>
-        Đã đọc hết.
+        {t('chat.allRead')}
       </div>
     );
   } else
     body = (
       <div className="empty-line" style={{ paddingLeft: 20 }}>
-        Chưa có ai nhắc đến bạn.
+        {t('chat.noMentions')}
       </div>
     );
 
   return (
-    <aside className="panel" aria-label="Chat">
+    <aside className="panel" aria-label={t('chat.title')}>
       <div className="panel-head drag" data-tauri-drag-region>
-        <h3>Chat</h3>
+        <h3>{t('chat.title')}</h3>
       </div>
       <div className="tabs" role="tablist">
-        {TABS.map((t) => (
+        {TABS.map((tabId) => (
           <button
-            key={t}
+            key={tabId}
             role="tab"
-            aria-selected={t === tab}
-            className={t === tab ? 'on' : ''}
-            onClick={() => setTab(t)}
+            aria-selected={tabId === tab}
+            className={tabId === tab ? 'on' : ''}
+            onClick={() => setTab(tabId)}
           >
-            {t}
+            {t(TAB_KEY[tabId])}
           </button>
         ))}
       </div>

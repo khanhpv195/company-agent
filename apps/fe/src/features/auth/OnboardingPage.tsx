@@ -1,6 +1,7 @@
 import type { CliStatus, Computer, Session } from '@repo/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
+import { useT } from '../../i18n';
 import { api } from '../../lib/api-client';
 import { ago } from '../../lib/format';
 import { qk } from '../../lib/query-keys';
@@ -11,6 +12,7 @@ import { useComputerArrivals } from '../computers/computers.api';
 export function OnboardingPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const t = useT();
   const now = useNow();
   const status = useQuery({
     queryKey: ['onboarding', 'cli-status'],
@@ -33,44 +35,47 @@ export function OnboardingPage() {
     <div className="app">
       <section className="screen onboard drag" data-tauri-drag-region>
         <div className="ob">
-          <div className="steps" aria-label="Bước 3/4">
+          <div className="steps" aria-label={t('auth.onboarding.steps', { n: 3, total: 4 })}>
             <span className="done" />
             <span className="done" />
             <span className="done" />
             <span />
           </div>
-          <h2>Connect this computer</h2>
-          <p className="lead">
-            Agent chạy Claude Code ngay trên máy của bạn. Tạo mã kết nối và chạy lệnh trên máy đó để
-            máy nhận việc khi có người @mention agent trong room.
-          </p>
+          <h2>{t('auth.onboarding.title')}</h2>
+          <p className="lead">{t('auth.onboarding.lead')}</p>
           <PairingPanel arrived={arrived} onAgain={rebase} />
-          <ol>
-            <li>Mở Terminal trên máy muốn kết nối và chạy lệnh trên.</li>
-            <li>Giữ CLI chạy nền, máy sẽ hiện online bên dưới.</li>
-          </ol>
+          {!shown && (
+            <ol>
+              <li>{t('auth.onboarding.step1')}</li>
+              <li>{t('auth.onboarding.step2')}</li>
+            </ol>
+          )}
           <div className="status" aria-live="polite">
             {shown ? (
               <>
                 <span className="dot on" />
                 <div>
-                  <b>{shown.name}</b> đã kết nối
+                  <b>{shown.name}</b>
+                  {t('auth.onboarding.connectedSuffix')}
                   <div style={{ color: 'var(--muted)', fontSize: 12 }}>
-                    {shown.os} · CLI {shown.cliVersion} · heartbeat{' '}
-                    {ago(shown.lastHeartbeatAt, now)}
+                    {t('auth.onboarding.heartbeat', {
+                      os: shown.os,
+                      version: shown.cliVersion,
+                      ago: ago(shown.lastHeartbeatAt, now),
+                    })}
                   </div>
                 </div>
               </>
             ) : (
               <>
                 <div className="spinner" />
-                <span>Đang chờ máy kết nối…</span>
+                <span>{t('auth.onboarding.waiting')}</span>
               </>
             )}
           </div>
           {!shown && (
             <p style={{ color: 'var(--muted)', fontSize: 12, textAlign: 'center' }}>
-              Đang dùng máy mô phỏng (demo)? Máy đó sẽ tự kết nối sau vài giây.
+              {t('auth.onboarding.simulatorHint')}
             </p>
           )}
           <button
@@ -78,10 +83,10 @@ export function OnboardingPage() {
             disabled={!shown || finish.isPending}
             onClick={() => finish.mutate()}
           >
-            Tạo agent đầu tiên&nbsp;&nbsp;›
+            {t('auth.onboarding.createAgent')}&nbsp;&nbsp;›
           </button>
           <button className="skip" onClick={() => finish.mutate()}>
-            Bỏ qua, làm sau
+            {t('auth.onboarding.skip')}
           </button>
         </div>
       </section>

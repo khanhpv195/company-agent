@@ -18,6 +18,7 @@ import {
   type Task,
   type TaskActivity,
   type TaskRunStatus,
+  type TaskStep,
   type TaskStatus,
   type ToolCall,
   type UpdateTaskInput,
@@ -34,6 +35,7 @@ import type { AgentGatewayService, Effect, GatewayTx } from '../gateway/agent-ga
 import { Assignment, TERMINAL_STATUSES } from '../gateway/entities/assignment.entity';
 import { Member } from '../workspace/entities/member.entity';
 import { Workspace } from '../workspace/entities/workspace.entity';
+import { WorkspaceGoneException } from './workspace-lock.service';
 import { TaskActivityRow } from './entities/task-activity.entity';
 import { TaskRun } from './entities/task-run.entity';
 import { TaskEntity } from './entities/task.entity';
@@ -51,6 +53,9 @@ import {
   type TaskRunEndedPayload,
 } from './task-events';
 import { assigneeIdOf, toActiveRun } from './task.mapper';
+
+/** Marks a scripted step of a demo run so the board never passes it off as real work. */
+const demoStep = (step: TaskStep): TaskStep => ({ ...step, input: `[demo] ${step.input}` });
 
 export interface CommandDeps {
   clock: ClockService;
@@ -153,7 +158,9 @@ export class TaskCommand {
    */
   async load(options: { skipDone?: boolean } = {}): Promise<void> {
     const { manager, workspaceId } = this;
-    this.workspace = await manager.findOneByOrFail(Workspace, { id: workspaceId });
+    const workspace = await manager.findOneBy(Workspace, { id: workspaceId });
+    if (!workspace) throw new WorkspaceGoneException();
+    this.workspace = workspace;
     const runs = await manager.find(TaskRun, { where: { workspaceId, finalizedAt: IsNull() } });
     this.tasks = await manager.find(TaskEntity, {
       where: options.skipDone
@@ -262,7 +269,8 @@ export class TaskCommand {
   }
 
   private memberExists(id: string): boolean {
-    return this.members.some((m) => m.id === id);
+    // Removed members stay in the list (history shows their name) but cannot be assigned.
+    return this.members.some((m) => m.id === id && !m.removedAt);
   }
 
   isOnline(agent: Agent): boolean {
@@ -391,8 +399,9 @@ export class TaskCommand {
         assignmentId: assignment.id,
         n: Number(rows[0].n),
         step: 0,
-        // Real daemons report their own tool calls; only simulated runs follow a script.
-        steps: agent.computer.simulated ? stepsFor(t.labels) : [],
+        // Real daemons report their own tool calls; only simulated (demo) runs follow a script,
+        // and every step says so.
+        steps: agent.computer.simulated ? stepsFor(t.labels).map(demoStep) : [],
         status: null,
         durationSec: null,
         toolCalls: null,
@@ -403,7 +412,13 @@ export class TaskCommand {
     this.activeRuns.set(t.id, run);
     this.assignments.set(assignment.id, assignment);
     this.changed();
-    await this.log(t, agent.id, `nhận task, bắt đầu run #${run.n}`);
+    await this.log(
+      t,
+      agent.id,
+      agent.computer.simulated
+        ? `nhận task, bắt đầu run #${run.n} (agent demo, máy mô phỏng: kết quả không có thật)`
+        : `nhận task, bắt đầu run #${run.n}`,
+    );
   }
 
   /** Finalizes the active run and ends its assignment when the daemon has not already. */

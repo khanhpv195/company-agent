@@ -1,5 +1,7 @@
 import type { ApiErrorResponse, ApiResponse, AuthResult } from '@repo/shared';
+import { getLocale, translate } from '../i18n';
 import { clearTokens, getTokens, setTokens } from './auth-tokens';
+import { reportApiReachable } from './connectivity';
 
 export const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1').replace(
   /\/+$/,
@@ -45,14 +47,18 @@ async function execute<TData, TMeta>(
       ...init,
       headers: {
         'Content-Type': 'application/json',
-        'Accept-Language': navigator.language,
+        'Accept-Language': getLocale(),
         ...(tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : {}),
         ...init.headers,
       },
     });
-  } catch {
-    throw new ApiError(`Cannot reach the API at ${API_URL}`, 0);
+  } catch (e) {
+    // A caller-initiated abort says nothing about the API.
+    if ((e as { name?: string } | null)?.name === 'AbortError') throw e;
+    reportApiReachable(false);
+    throw new ApiError(translate('errors.unreachable'), 0);
   }
+  reportApiReachable(true);
 
   const body = (await response.json().catch(() => null)) as
     ApiResponse<TData, TMeta> | ApiErrorResponse | null;

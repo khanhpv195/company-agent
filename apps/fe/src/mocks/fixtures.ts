@@ -140,7 +140,7 @@ export function seed(now: number = Date.now()): MockDb {
       lastHeartbeatAt: iso(T0 - 7240_000),
       keepAwake: false,
       cliVersion: '0.13.9',
-      simulated: false,
+      simulated: true,
       revokedAt: null,
     },
   ];
@@ -156,6 +156,7 @@ export function seed(now: number = Date.now()): MockDb {
       workdir: '~/.agent/agents/a1',
       maxTurns: 40,
       status: 'idle',
+      simulated: false,
       skills: skills(SKILL_NAMES, DEFAULT_ENABLED_SKILLS),
     },
     {
@@ -168,6 +169,7 @@ export function seed(now: number = Date.now()): MockDb {
       workdir: '~/.agent/agents/a2',
       maxTurns: 40,
       status: 'idle',
+      simulated: false,
       skills: skills(['web-research', 'summarize', 'pdf-reader', 'translate'], 4),
     },
     {
@@ -180,6 +182,7 @@ export function seed(now: number = Date.now()): MockDb {
       workdir: '/srv/agent/a3',
       maxTurns: 40,
       status: 'offline',
+      simulated: true,
       skills: skills(['deploy-app', 'git-ops', 'build-app'], 3),
     },
   ];
@@ -606,6 +609,7 @@ export function seed(now: number = Date.now()): MockDb {
       shortName: 'Zalo',
       color: '#0068ff',
       status: 'off',
+      availability: 'simulated',
       roomName: 'zalo-inbox',
       description:
         'Nhận tin nhắn gửi tới Official Account. Agent đọc, soạn trả lời và gửi lại khách trên Zalo.',
@@ -631,6 +635,7 @@ export function seed(now: number = Date.now()): MockDb {
       shortName: 'Facebook',
       color: '#1877f2',
       status: 'off',
+      availability: 'simulated',
       roomName: 'facebook-inbox',
       description: 'Nối Fanpage để agent xử lý inbox Messenger và comment dưới bài viết.',
       capabilities: ['Messenger', 'Comment', 'Trả lời khách'],
@@ -655,6 +660,7 @@ export function seed(now: number = Date.now()): MockDb {
       shortName: 'Google',
       color: '#ea4335',
       status: 'off',
+      availability: 'simulated',
       roomName: 'gmail-inbox',
       description:
         'Agent đọc email mới, tóm tắt, gắn nhãn và soạn nháp trả lời. Chỉ gửi khi bạn cho phép.',

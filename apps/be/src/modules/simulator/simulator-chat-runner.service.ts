@@ -2,12 +2,10 @@ import { ConflictException, Inject, Injectable, Logger, NotFoundException } from
 import { ConfigType } from '@nestjs/config';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { InjectDataSource } from '@nestjs/typeorm';
-import type { ToolCall } from '@repo/shared';
-import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import { ClockService } from '../../common/clock';
 import { transactionWithEffects } from '../../common/utils';
-import { agentConfig } from '../../config';
+import { agentConfig, i18nConfig } from '../../config';
 import { CHAT_REPLY_REQUESTED_EVENT, type ChatReplyRequestedPayload } from '../chat/chat.constants';
 import { ChatService, type ReplyContext } from '../chat/chat.service';
 import { ChatMessage } from '../chat/entities/chat-message.entity';
@@ -16,14 +14,10 @@ import { AgentGatewayService } from '../gateway/agent-gateway.service';
 import { Random, TaskTimers } from '../tasks/task-timers';
 import {
   CHAT_CHUNK_MS,
-  CHAT_FAIL_ERROR,
-  CHAT_FAIL_RATE,
   CHAT_OFFLINE_MS,
   CHAT_RUN_SECONDS,
   CHAT_STEP_MS,
-  CHAT_TOOL_MS,
-  replyFor,
-  toolCallsFor,
+  demoReplyFor,
 } from './chat-script';
 
 /**
@@ -31,8 +25,11 @@ import {
  * Port of the FE mock's `runAssignment`, driven through the agent gateway so every state is
  * a real assignment transition:
  *
- *   pending -> (+450 ms) offered -> (+450) claimed -> (+450) running, two tool calls (900 ms
- *   each), then either a 8 % failure or the reply streamed in 3-8 character chunks every 28 ms.
+ *   pending -> (+450 ms) offered -> (+450) claimed -> (+450) running, then the reply streamed in
+ *   3-8 character chunks every 28 ms.
+ *
+ * The agent is a demo: it answers with an honest message saying so (see `chat-script.ts`),
+ * with no scripted tool calls and no random failure.
  *
  * Streamed chunks are only published (from memory, nothing is written); the final markdown,
  * `complete` status, turns and the `completed` result are committed once. A computer that is
@@ -50,6 +47,7 @@ export class SimulatorChatRunner {
 
   constructor(
     @Inject(agentConfig.KEY) private readonly config: ConfigType<typeof agentConfig>,
+    @Inject(i18nConfig.KEY) private readonly i18n: ConfigType<typeof i18nConfig>,
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly chat: ChatService,
     private readonly gateway: AgentGatewayService,
@@ -124,7 +122,7 @@ export class SimulatorChatRunner {
 
     if (agent.computer.status !== 'online') {
       await this.sleep(CHAT_OFFLINE_MS);
-      await this.fail(ctx, 'expire', `${agent.computer.name} offline, không có máy nhận việc`, 0);
+      await this.expire(ctx, `${agent.computer.name} offline, không có máy nhận việc`);
       return;
     }
 
@@ -140,70 +138,37 @@ export class SimulatorChatRunner {
     this.events.publish(workspaceId, { type: 'agents.changed' });
     const attempt = claimed.attempt;
 
-    for (const spec of toolCallsFor(text)) {
-      const call: ToolCall = { id: randomUUID(), ...spec, status: 'running' };
-      await this.gateway.progress(id, attempt, [{ kind: 'tool', payload: call }]);
-      await publish();
-      await this.sleep(CHAT_TOOL_MS);
-      await this.gateway.progress(id, attempt, [
-        { kind: 'tool', payload: { ...call, status: 'ok' } satisfies ToolCall },
-      ]);
-      await publish();
+    const full = demoReplyFor(text, this.i18n.fallbackLanguage);
+    const base = await this.chat.loadMessage(messageId);
+    let shown = 0;
+    while (shown < full.length) {
+      // The assignment ended meanwhile (offline expiry, cancel): its message is already failed.
+      if (this.ended.has(id)) return;
+      shown = Math.min(full.length, shown + 3 + Math.floor(this.random.next() * 6));
+      this.chat.publishMessage(workspaceId, { ...base, markdown: full.slice(0, shown) }, memberIds);
+      await this.sleep(CHAT_CHUNK_MS);
     }
-
-    const failed = this.random.next() < CHAT_FAIL_RATE;
-    if (failed) {
-      await this.fail(ctx, 'result', CHAT_FAIL_ERROR, attempt, text);
-    } else {
-      const full = replyFor(text);
-      const base = await this.chat.loadMessage(messageId);
-      let shown = 0;
-      while (shown < full.length) {
-        // The assignment ended meanwhile (offline expiry, cancel): its message is already failed.
-        if (this.ended.has(id)) return;
-        shown = Math.min(full.length, shown + 3 + Math.floor(this.random.next() * 6));
-        this.chat.publishMessage(
-          workspaceId,
-          { ...base, markdown: full.slice(0, shown) },
-          memberIds,
-        );
-        await this.sleep(CHAT_CHUNK_MS);
-      }
-      await transactionWithEffects(this.dataSource, async (manager, effects) => {
-        const tx = { manager, effects };
-        await this.gateway.progress(id, attempt, [{ kind: 'step', payload: { turns: 2 } }], tx);
-        await this.gateway.result(id, attempt, { status: 'completed' }, tx);
-        await manager.update(
-          ChatMessage,
-          { id: messageId },
-          { markdown: full, status: 'complete' },
-        );
-        const message = await this.chat.loadMessage(messageId, manager);
-        effects.push(() => this.chat.publishMessage(workspaceId, message, memberIds));
-        await this.recordRun(manager, effects, ctx, text, true);
-      });
-    }
-  }
-
-  /** Ends the reply as failed in one transaction: the assignment and its message together. */
-  private async fail(
-    ctx: ReplyContext,
-    how: 'expire' | 'result',
-    error: string,
-    attempt: number,
-    runText?: string,
-  ): Promise<void> {
-    const id = ctx.assignment.id;
     await transactionWithEffects(this.dataSource, async (manager, effects) => {
       const tx = { manager, effects };
-      if (how === 'expire') await this.gateway.expire(id, error, tx);
-      else await this.gateway.result(id, attempt, { status: 'failed', error }, tx);
+      await this.gateway.progress(id, attempt, [{ kind: 'step', payload: { turns: 1 } }], tx);
+      await this.gateway.result(id, attempt, { status: 'completed' }, tx);
+      await manager.update(ChatMessage, { id: messageId }, { markdown: full, status: 'complete' });
+      const message = await this.chat.loadMessage(messageId, manager);
+      effects.push(() => this.chat.publishMessage(workspaceId, message, memberIds));
+      await this.recordRun(manager, effects, ctx, text, true);
+    });
+  }
+
+  /** Expires the reply in one transaction: the assignment and its message together. */
+  private async expire(ctx: ReplyContext, error: string): Promise<void> {
+    const id = ctx.assignment.id;
+    await transactionWithEffects(this.dataSource, async (manager, effects) => {
+      await this.gateway.expire(id, error, { manager, effects });
       await manager.update(ChatMessage, { id: ctx.message.id }, { status: 'failed' });
       const message = await this.chat.loadMessage(ctx.message.id, manager);
       effects.push(() =>
         this.chat.publishMessage(ctx.assignment.workspaceId, message, ctx.memberIds),
       );
-      if (runText !== undefined) await this.recordRun(manager, effects, ctx, runText, false);
     });
   }
 

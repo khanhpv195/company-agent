@@ -1,6 +1,7 @@
 import { getRouteApi, useNavigate } from '@tanstack/react-router';
 import { MemberAvatar } from '../../components/Avatar';
 import { Icon } from '../../components/Icon';
+import { useT } from '../../i18n';
 import { useTasks } from '../tasks/tasks.api';
 import { StatusIcon } from '../tasks/task-ui';
 import { ROLE_NAME, usePeople } from '../workspace/workspace.api';
@@ -8,6 +9,7 @@ import { ROLE_NAME, usePeople } from '../workspace/workspace.api';
 const route = getRouteApi('/_app/people/members/$memberId');
 
 export function MemberPage() {
+  const t = useT();
   const { memberId } = route.useParams();
   const people = usePeople();
   const navigate = useNavigate();
@@ -18,7 +20,7 @@ export function MemberPage() {
   if (!m)
     return (
       <div className="loading">
-        {people.members.length ? 'Không tìm thấy thành viên.' : 'Đang tải…'}
+        {people.members.length ? t('people.member.notFound') : t('people.loading')}
       </div>
     );
   return (
@@ -33,7 +35,7 @@ export function MemberPage() {
         </div>
       </div>
       <div className="box" style={{ maxWidth: 640 }}>
-        <h4>Task đang giữ</h4>
+        <h4>{t('people.member.holding')}</h4>
         {tasks.length ? (
           <div className="wl-q" style={{ margin: 0 }}>
             {tasks.map((t) => (
@@ -51,16 +53,16 @@ export function MemberPage() {
             ))}
           </div>
         ) : (
-          <div style={{ color: 'var(--muted)', fontSize: 13 }}>Không có task nào.</div>
+          <div style={{ color: 'var(--muted)', fontSize: 13 }}>{t('people.member.noTasks')}</div>
         )}
       </div>
       <button
         className="btn"
         style={{ marginTop: 16 }}
         disabled
-        title="Nhắn tin giữa người với người (sắp có)"
+        title={t('people.member.messageSoon')}
       >
-        <Icon name="chat" size={16} /> Nhắn tin
+        <Icon name="chat" size={16} /> {t('people.message')}
       </button>
     </div>
   );

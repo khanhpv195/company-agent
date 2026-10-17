@@ -28,6 +28,12 @@ export const decideRefresh = (
   return 'ok';
 };
 
+/** Client of a login or refresh, kept on the refresh row for the sessions list. */
+export interface ClientMeta {
+  ip: string | null;
+  userAgent: string | null;
+}
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -40,11 +46,15 @@ export class TokenService {
     @Inject(authConfig.KEY) private readonly config: ConfigType<typeof authConfig>,
   ) {}
 
-  signAccess(member: Pick<Member, 'id' | 'workspaceId' | 'role'>): Promise<string> {
+  signAccess(
+    member: Pick<Member, 'id' | 'workspaceId' | 'role'>,
+    familyId: string,
+  ): Promise<string> {
     const payload = {
       sub: member.id,
       wid: member.workspaceId,
       role: member.role,
+      sid: familyId,
     } satisfies AccessTokenPayload;
     return this.jwt.signAsync(payload, {
       secret: this.config.accessSecret,
@@ -54,13 +64,20 @@ export class TokenService {
   }
 
   /** Creates and stores a refresh token in `familyId`; returns the raw token (never stored). */
-  async issueRefresh(manager: EntityManager, memberId: string, familyId: string): Promise<string> {
+  async issueRefresh(
+    manager: EntityManager,
+    memberId: string,
+    familyId: string,
+    meta: ClientMeta = { ip: null, userAgent: null },
+  ): Promise<string> {
     const token = randomBytes(32).toString('base64url');
     await manager.insert(RefreshToken, {
       memberId,
       familyId,
       tokenHash: hashToken(token),
       expiresAt: new Date(Date.now() + parseDuration(this.config.refreshTtl)),
+      ip: meta.ip,
+      userAgent: meta.userAgent,
     });
     return token;
   }
@@ -69,10 +86,11 @@ export class TokenService {
     manager: EntityManager,
     member: Pick<Member, 'id' | 'workspaceId' | 'role'>,
     familyId: string,
+    meta?: ClientMeta,
   ): Promise<TokenPair> {
     return {
-      accessToken: await this.signAccess(member),
-      refreshToken: await this.issueRefresh(manager, member.id, familyId),
+      accessToken: await this.signAccess(member, familyId),
+      refreshToken: await this.issueRefresh(manager, member.id, familyId, meta),
     };
   }
 }

@@ -5,6 +5,7 @@ import { Icon } from '../../components/Icon';
 import { Who } from '../../components/Who';
 import { ago, dur, HOUR, hhmm, mmss, ms, MIN } from '../../lib/format';
 import { useNow } from '../../lib/use-now';
+import { useT, type MessageKey } from '../../i18n';
 import { ROLE_NAME, usePeople } from '../workspace/workspace.api';
 import { useRunSpans } from './tasks.api';
 import { PriorityIcon, StatusIcon } from './task-ui';
@@ -12,10 +13,10 @@ import { C_CANCEL, C_DONE, C_FAIL, C_RUN } from './tasks.logic';
 
 const WINDOW = 8 * HOUR;
 const COLOR: Record<RunSpan['result'], string> = { done: C_DONE, fail: C_FAIL, cancel: C_CANCEL };
-const RESULT: Record<RunSpan['result'], string> = {
-  done: 'Hoàn thành',
-  fail: 'Lỗi',
-  cancel: 'Đã dừng',
+const RESULT: Record<RunSpan['result'], MessageKey> = {
+  done: 'tasks.result.done',
+  fail: 'tasks.result.fail',
+  cancel: 'tasks.result.cancel',
 };
 
 interface Tip {
@@ -34,6 +35,7 @@ export function WorkloadView({
   who: string | null;
   onOpen: (id: string) => void;
 }) {
+  const t = useT();
   const people = usePeople();
   const spans = useRunSpans();
   const now = useNow();
@@ -68,32 +70,33 @@ export function WorkloadView({
   return (
     <div className="wl">
       <div className="wl-top">
-        <div className="sub">8 giờ gần nhất · mỗi thanh là một run. Rê chuột để xem chi tiết.</div>
+        <div className="sub">{t('tasks.workload.hint')}</div>
         <div className="legend">
           <span>
             <i style={{ background: C_DONE }} />
-            Hoàn thành
+            {t('tasks.result.done')}
           </span>
           <span>
             <i style={{ background: C_FAIL }} />
-            Lỗi
+            {t('tasks.result.fail')}
           </span>
           <span>
             <i style={{ background: C_RUN }} />
-            Đang chạy
+            {t('tasks.legend.running')}
           </span>
           <span>
             <i style={{ background: C_CANCEL }} />
-            Đã dừng
+            {t('tasks.result.cancel')}
           </span>
           <span>
             <i
               style={{
-                background: 'repeating-linear-gradient(135deg,#fff 0 2px,#ccc 2px 3px)',
-                border: '1px solid #ddd',
+                background:
+                  'repeating-linear-gradient(135deg, var(--swatch-a) 0 2px, var(--swatch-b) 2px 3px)',
+                border: '1px solid var(--swatch-line)',
               }}
             />
-            Offline
+            {t('tasks.legend.offline')}
           </span>
         </div>
       </div>
@@ -122,22 +125,31 @@ export function WorkloadView({
                 <div>
                   <h4>{a.name}</h4>
                   <div className="sub">
-                    {off ? 'Offline' : cur ? 'Đang làm' : 'Rảnh'} · {pc?.name}
+                    {off
+                      ? t('tasks.workload.offlineCap')
+                      : cur
+                        ? t('tasks.workload.working')
+                        : t('tasks.workload.idle')}{' '}
+                    · {pc?.name}
                   </div>
                 </div>
               </div>
               <div className="wl-stats">
                 <span>
-                  <b>{done}</b>xong
+                  <b>{done}</b>
+                  {t('tasks.workload.doneShort')}
                 </span>
                 <span>
-                  <b>{fail}</b>lỗi
+                  <b>{fail}</b>
+                  {t('tasks.workload.failShort')}
                 </span>
                 <span>
-                  <b>{dur(Math.round(busyMs / 1000)).replace(/ \d+s$/, '')}</b>đã chạy
+                  <b>{dur(Math.round(busyMs / 1000)).replace(/ \d+s$/, '')}</b>
+                  {t('tasks.workload.ranFor')}
                 </span>
                 <span>
-                  <b>{Math.round((busyMs / WINDOW) * 100)}%</b>bận
+                  <b>{Math.round((busyMs / WINDOW) * 100)}%</b>
+                  {t('tasks.workload.busy')}
                 </span>
               </div>
             </div>
@@ -154,7 +166,8 @@ export function WorkloadView({
                   <div className="t">
                     <b>{cur.id}</b> · {cur.title}
                     <div>
-                      Bước {run.step + 1}/{run.steps.length} · {step.tool} {step.input}
+                      {t('tasks.step', { n: run.step + 1, total: run.steps.length })} · {step.tool}{' '}
+                      {step.input}
                     </div>
                   </div>
                   <span className="elapsed" style={{ color: 'var(--claude)', fontWeight: 600 }}>
@@ -165,20 +178,24 @@ export function WorkloadView({
                 <div className={`wl-idle ${off ? 'off' : ''}`}>
                   {off ? (
                     <>
-                      <Icon name="monitor" size={15} /> Máy <b>{pc?.name}</b> offline{' '}
-                      {pc && ago(pc.lastHeartbeatAt, now)}. Việc trong hàng đợi đang bị chặn.
+                      <Icon name="monitor" size={15} /> {t('tasks.workload.machine')}{' '}
+                      <b>{pc?.name}</b> {t('tasks.workload.offline')}{' '}
+                      {pc && ago(pc.lastHeartbeatAt, now)}
+                      {t('tasks.workload.queueBlocked')}
                     </>
                   ) : (
                     <>
-                      <Icon name="clock" size={15} /> Đang rảnh
+                      <Icon name="clock" size={15} /> {t('tasks.workload.idleNow')}
                       {pickableOf(tasks, a.id)[0] ? (
                         <>
-                          , sẽ nhận <b>{pickableOf(tasks, a.id)[0].id}</b> tiếp theo
+                          {t('tasks.workload.willTake')}
+                          <b>{pickableOf(tasks, a.id)[0].id}</b>
+                          {t('tasks.workload.next')}
                         </>
                       ) : queue.length ? (
-                        '. Việc trong hàng đợi bị lỗi hoặc bị chặn, cần xem lại.'
+                        t('tasks.workload.queueNeedsReview')
                       ) : (
-                        '. Hàng đợi trống, hãy giao thêm việc.'
+                        t('tasks.workload.queueEmpty')
                       )}
                     </>
                   )}
@@ -187,7 +204,7 @@ export function WorkloadView({
               <div
                 className="lane"
                 role="img"
-                aria-label={`${a.name}: ${done} run xong, ${fail} lỗi trong 8 giờ`}
+                aria-label={t('tasks.workload.laneAria', { name: a.name, done, fail })}
               >
                 {hist.map((s, i) => (
                   <div
@@ -200,7 +217,7 @@ export function WorkloadView({
                     }}
                     {...tipProps(
                       s.title,
-                      `${hhmm(ms(s.startedAt))}–${hhmm(ms(s.endedAt))} · ${RESULT[s.result]}`,
+                      `${hhmm(ms(s.startedAt))}–${hhmm(ms(s.endedAt))} · ${t(RESULT[s.result])}`,
                     )}
                   />
                 ))}
@@ -212,12 +229,15 @@ export function WorkloadView({
                       width: `${((now - ms(run.startedAt)) / WINDOW) * 100}%`,
                       backgroundColor: C_RUN,
                     }}
-                    {...tipProps(cur.title, `Từ ${hhmm(ms(run.startedAt))} · đang chạy`)}
+                    {...tipProps(
+                      cur.title,
+                      t('tasks.workload.runningFrom', { time: hhmm(ms(run.startedAt)) }),
+                    )}
                   />
                 )}
                 {off && pc && (
                   <div className="offz" style={{ left: `${pos(ms(pc.lastHeartbeatAt))}%` }}>
-                    offline
+                    {t('tasks.workload.offline')}
                   </div>
                 )}
                 <span className="now" />
@@ -230,7 +250,7 @@ export function WorkloadView({
                 ))}
               </div>
               <div className="wl-q">
-                <span className="h">Hàng đợi ({queue.length})</span>
+                <span className="h">{t('tasks.workload.queueCount', { n: queue.length })}</span>
                 {queue.map((t) => (
                   <span
                     key={t.id}
@@ -246,7 +266,7 @@ export function WorkloadView({
                     {t.blockedReason && <Icon name="lock" size={12} />}
                   </span>
                 ))}
-                {!queue.length && <span className="h">trống</span>}
+                {!queue.length && <span className="h">{t('tasks.workload.empty')}</span>}
               </div>
             </div>
           </div>
@@ -256,7 +276,7 @@ export function WorkloadView({
       {humans.length > 0 && (
         <>
           <div className="dsec" style={{ marginTop: 26 }}>
-            Thành viên
+            {t('tasks.members')}
           </div>
           {humans.map((m) => (
             <div

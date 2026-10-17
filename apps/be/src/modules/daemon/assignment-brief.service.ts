@@ -75,7 +75,8 @@ export class AssignmentBriefService {
       ]),
     )[0];
     if (!placeholder) return null;
-    const workspace = await manager.findOneByOrFail(Workspace, { id: row.workspaceId });
+    const workspace = await manager.findOneBy(Workspace, { id: row.workspaceId });
+    if (!workspace) return null;
     const where = await this.chatLabel(placeholder.chat_id, placeholder.chat_kind, requester);
     const history = returnedRows<{
       author_kind: string;
@@ -157,7 +158,8 @@ export class AssignmentBriefService {
       id: row.sourceId,
     });
     if (!task) return null;
-    const workspace = await manager.findOneByOrFail(Workspace, { id: row.workspaceId });
+    const workspace = await manager.findOneBy(Workspace, { id: row.workspaceId });
+    if (!workspace) return null;
     const activity = await manager.find(TaskActivityRow, {
       where: { workspaceId: row.workspaceId, taskId: task.id },
       order: { at: 'DESC', seq: 'DESC' },

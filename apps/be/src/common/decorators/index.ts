@@ -4,3 +4,4 @@ export * from './current-auth.decorator';
 export * from './public.decorator';
 export * from './roles.decorator';
 export * from './current-computer.decorator';
+export * from './request-meta.decorator';

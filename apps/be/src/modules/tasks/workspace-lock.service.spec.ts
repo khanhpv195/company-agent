@@ -1,7 +1,8 @@
 import type { DataSource, EntityManager } from 'typeorm';
-import { WorkspaceLockService } from './workspace-lock.service';
+import { WorkspaceGoneException, WorkspaceLockService } from './workspace-lock.service';
 
-const manager = { query: jest.fn().mockResolvedValue([]) } as unknown as EntityManager;
+const query = jest.fn().mockResolvedValue([{ '?column?': 1 }]);
+const manager = { query } as unknown as EntityManager;
 let transactions = 0;
 let rollback = false;
 const dataSource = {
@@ -22,6 +23,13 @@ describe('WorkspaceLockService', () => {
     transactions = 0;
     rollback = false;
     lock = new WorkspaceLockService(dataSource);
+  });
+
+  it('rejects with WorkspaceGoneException once the workspace row is missing', async () => {
+    query.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    const fn = jest.fn();
+    await expect(lock.run('w1', fn)).rejects.toBeInstanceOf(WorkspaceGoneException);
+    expect(fn).not.toHaveBeenCalled();
   });
 
   it('runs commands of one workspace one after the other, in call order', async () => {

@@ -7,6 +7,10 @@ export interface Toast {
   text: string;
   agentId: string | null;
   taskId: string | null;
+  /** `error` styles the toast as a failure. */
+  tone?: 'error';
+  /** One extra button that navigates to an app route. */
+  action?: { label: string; to: string };
 }
 
 interface UiState {

@@ -104,6 +104,7 @@ describe('Connections (e2e)', () => {
           roomId: null,
           agentId: null,
           mode: 'draft',
+          availability: 'simulated',
         });
       }
       expect(connections[0]).toMatchObject({

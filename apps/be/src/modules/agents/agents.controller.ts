@@ -53,7 +53,7 @@ export class AgentsController {
   @ApiOperation({ summary: 'Create an agent on one of the workspace computers' })
   @ApiWrappedResponse(AgentDto)
   create(@CurrentAuth() auth: AuthContext, @Body() dto: CreateAgentDto) {
-    return this.agents.create(auth.workspaceId, dto);
+    return this.agents.create(auth.workspaceId, dto, { memberId: auth.memberId, ip: auth.ip });
   }
 
   @Get(':id')
@@ -70,7 +70,7 @@ export class AgentsController {
   @ApiOperation({ summary: 'Update an agent: name, computer, workdir, max turns, persona, skills' })
   @ApiWrappedResponse(AgentDto)
   update(@CurrentAuth() auth: AuthContext, @Param('id') id: string, @Body() dto: UpdateAgentDto) {
-    return this.agents.update(auth.workspaceId, id, dto);
+    return this.agents.update(auth.workspaceId, id, dto, { memberId: auth.memberId, ip: auth.ip });
   }
 
   @Delete(':id')
@@ -83,7 +83,7 @@ export class AgentsController {
   })
   @ApiWrappedResponse(null)
   remove(@CurrentAuth() auth: AuthContext, @Param('id') id: string) {
-    return this.agents.remove(auth.workspaceId, auth.memberId, id);
+    return this.agents.remove(auth.workspaceId, { memberId: auth.memberId, ip: auth.ip }, id);
   }
 
   @Get(':id/activity')

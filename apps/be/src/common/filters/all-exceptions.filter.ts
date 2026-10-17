@@ -14,6 +14,7 @@ import { flattenValidationErrors, translate, translateValidationMessage } from '
 interface HttpExceptionBody {
   message?: string | string[];
   args?: Record<string, unknown>;
+  details?: Record<string, unknown>;
 }
 
 @Catch()
@@ -32,6 +33,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     let message: string;
     let errors: ApiFieldError[] | undefined;
+    let details: Record<string, unknown> | undefined;
 
     if (exception instanceof I18nValidationException) {
       errors = exception.errorsAlreadyTranslated
@@ -43,6 +45,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     } else if (exception instanceof HttpException) {
       const { key, args } = this.extractMessage(exception);
       message = translate(i18n, key, args);
+      details = this.extractDetails(exception);
     } else {
       message = translate(i18n, 'common.errors.INTERNAL_SERVER_ERROR');
     }
@@ -54,6 +57,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       );
     }
 
+    const request = ctx.getRequest<{ id?: unknown }>();
+    const requestId = typeof request.id === 'string' ? request.id : undefined;
+
     const body: ApiErrorResponse = {
       success: false,
       data: null,
@@ -63,10 +69,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
         path: httpAdapter.getRequestUrl(ctx.getRequest()) as string,
         timestamp: new Date().toISOString(),
         ...(errors && { errors }),
+        ...(details && { details }),
+        ...(requestId && { requestId }),
       },
     };
 
     httpAdapter.reply(ctx.getResponse(), body, status);
+  }
+
+  private extractDetails(exception: HttpException): Record<string, unknown> | undefined {
+    const response = exception.getResponse();
+    if (typeof response === 'string') return undefined;
+    return (response as HttpExceptionBody).details;
   }
 
   private extractMessage(exception: HttpException): {

@@ -1,4 +1,17 @@
 {
   "SESSION_LOADED": "Đã tải phiên làm việc",
-  "MEMBERS_LISTED": "Đã tải danh sách thành viên"
+  "MEMBERS_LISTED": "Đã tải danh sách thành viên",
+  "ROLE_CHANGED": "Đã cập nhật vai trò",
+  "MEMBER_REMOVED": "Đã xóa thành viên",
+  "MEMBER_NOT_FOUND": "Không tìm thấy thành viên",
+  "CANNOT_CHANGE_SELF": "Bạn không thể đổi vai trò của chính mình",
+  "CANNOT_CHANGE_OWNER": "Vai trò chủ sở hữu chỉ chuyển được bằng cách chuyển quyền",
+  "CANNOT_REMOVE_SELF": "Bạn không thể tự xóa mình ở đây",
+  "CANNOT_REMOVE_TARGET": "Quản trị viên chỉ xóa được thành viên thường",
+  "CANNOT_TRANSFER_TO_SELF": "Hãy chọn một thành viên khác để chuyển quyền",
+  "OWNERSHIP_TRANSFERRED": "Đã chuyển quyền sở hữu",
+  "RENAMED": "Đã đổi tên không gian làm việc",
+  "DELETED": "Đã xóa không gian làm việc",
+  "CONFIRM_NAME_MISMATCH": "Tên bạn nhập không khớp với tên không gian làm việc",
+  "NOT_FOUND": "Không tìm thấy không gian làm việc"
 }

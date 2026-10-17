@@ -1,0 +1,13 @@
+{
+  "PROFILE_UPDATED": "Profile updated",
+  "PASSWORD_CHANGED": "Password changed",
+  "SESSIONS_LISTED": "Sessions loaded",
+  "SESSIONS_REVOKED": "Other sessions signed out",
+  "SESSION_REVOKED": "Session signed out",
+  "SESSION_NOT_FOUND": "Session not found",
+  "VERIFY_EMAIL_SENT": "Verification email sent",
+  "VERIFY_RESEND_TOO_SOON": "A verification email was sent a moment ago, please wait a minute",
+  "DELETED": "Account deleted",
+  "OWNER_MUST_TRANSFER": "Transfer ownership of the workspace before deleting your account",
+  "NOT_FOUND": "Account not found"
+}

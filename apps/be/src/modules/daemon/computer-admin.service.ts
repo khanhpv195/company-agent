@@ -5,6 +5,7 @@ import { DataSource, In, Not } from 'typeorm';
 import { ClockService } from '../../common/clock';
 import type { AuthContext } from '../../common/types';
 import { Computer } from '../computers/entities/computer.entity';
+import { AuditService } from '../audit/audit.service';
 import { EventsService } from '../events';
 import { AgentGatewayService } from '../gateway/agent-gateway.service';
 import { Assignment, TERMINAL_STATUSES } from '../gateway/entities/assignment.entity';
@@ -16,6 +17,7 @@ export class ComputerAdminService {
     private readonly clock: ClockService,
     private readonly gateway: AgentGatewayService,
     private readonly events: EventsService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -54,6 +56,15 @@ export class ComputerAdminService {
           throw error;
       }
     }
+    await this.audit.record({
+      workspaceId: auth.workspaceId,
+      actorMemberId: auth.memberId,
+      action: 'computer.revoked',
+      targetType: 'computer',
+      targetId: id,
+      meta: { name: computer.name },
+      ip: auth.ip,
+    });
     this.events.publish(auth.workspaceId, { type: 'computers.changed' });
     this.events.publish(auth.workspaceId, { type: 'agents.changed' });
     return null;

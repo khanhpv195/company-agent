@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      # Same major version as docker-compose.yml.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d app"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # test/setup-env.ts forces NODE_ENV, DB_NAME (agent_test), JWT secret and the rest; only the
+      # connection settings are read from here (the defaults already match this service).
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      # The pnpm version comes from `packageManager` in package.json.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # pnpm's `minimumReleaseAge` also checks the lockfile: a dependency published less than a
+      # day before the run fails the install until it is old enough (or is listed in
+      # `minimumReleaseAgeExclude` in pnpm-workspace.yaml). Do not disable the policy here.
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm format:check
+      - run: pnpm --filter @repo/shared build
+      - run: pnpm build
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - name: Backend unit tests
+        run: pnpm --filter be test
+      - name: Backend e2e tests (serial, database agent_test)
+        run: pnpm --filter be test:e2e
+      - name: Frontend tests
+        run: pnpm --filter fe test
+      - name: CLI tests
+        run: pnpm --filter @agent/cli test
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the API production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/be/Dockerfile
+          target: runtime
+          push: false
+          load: true
+          tags: be-runtime:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # Catches a runtime image that cannot resolve the workspace package (missing dist, bad links).
+      - name: Smoke test the image
+        run: docker run --rm --entrypoint node be-runtime:ci -e "require('@repo/shared')"

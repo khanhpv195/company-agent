@@ -2,10 +2,11 @@ import type { TaskPriority, TaskStatus } from '@repo/shared';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { Modal } from '../../components/Modal';
+import { useT } from '../../i18n';
 import { useUi } from '../../stores/ui';
 import { usePeople } from '../workspace/workspace.api';
 import { useTaskActions } from './tasks.api';
-import { COLUMNS, PRIORITIES } from './tasks.logic';
+import { COLUMNS, PRIORITY_KEYS } from './tasks.logic';
 
 export function NewTaskModal() {
   const status = useUi((s) => s.newTask);
@@ -21,6 +22,7 @@ function NewTaskForm({
   initialStatus: TaskStatus;
   onClose: () => void;
 }) {
+  const t = useT();
   const people = usePeople();
   const who = useUi((s) => s.taskFilters.who);
   const { create } = useTaskActions();
@@ -49,14 +51,14 @@ function NewTaskForm({
   };
 
   return (
-    <Modal onClose={onClose} label="Task mới">
-      <h3>Task mới</h3>
-      <p>Giao cho agent thì task vào hàng đợi; agent rảnh sẽ tự nhận.</p>
+    <Modal onClose={onClose} label={t('tasks.newTask')}>
+      <h3>{t('tasks.newTask')}</h3>
+      <p>{t('tasks.newForm.lead')}</p>
       <input
         className="field"
         autoFocus
-        placeholder="Ví dụ: Tóm tắt báo cáo doanh thu tuần này"
-        aria-label="Tên task"
+        placeholder={t('tasks.newForm.namePlaceholder')}
+        aria-label={t('tasks.newForm.nameLabel')}
         autoComplete="off"
         value={title}
         style={invalid ? { borderColor: 'var(--err)' } : undefined}
@@ -69,29 +71,29 @@ function NewTaskForm({
       <textarea
         className="field"
         style={{ height: 84, padding: '10px 14px', marginTop: 8, resize: 'none' }}
-        placeholder="Mô tả, đầu ra mong muốn (không bắt buộc)"
-        aria-label="Mô tả"
+        placeholder={t('tasks.newForm.descPlaceholder')}
+        aria-label={t('tasks.newForm.descLabel')}
         value={description}
         onChange={(e) => setDescription(e.target.value)}
       />
       <div className="nt-grid">
         <label>
-          Người làm
+          {t('tasks.drawer.assignee')}
           <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
-            <option value="">Chưa giao</option>
-            <optgroup label="Agents">
+            <option value="">{t('tasks.drawer.unassigned')}</option>
+            <optgroup label={t('tasks.newForm.agents')}>
               {people.agents.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                   {a.status === 'offline'
-                    ? ' (offline)'
+                    ? t('tasks.drawer.offlineSuffix')
                     : a.status === 'working'
-                      ? ' (đang bận)'
-                      : ' (rảnh)'}
+                      ? t('tasks.drawer.busySuffix')
+                      : t('tasks.newForm.idleSuffix')}
                 </option>
               ))}
             </optgroup>
-            <optgroup label="Thành viên">
+            <optgroup label={t('tasks.members')}>
               {people.members.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
@@ -101,21 +103,21 @@ function NewTaskForm({
           </select>
         </label>
         <label>
-          Ưu tiên
+          {t('tasks.drawer.priority')}
           <select value={priority} onChange={(e) => setPriority(e.target.value as TaskPriority)}>
-            {Object.entries(PRIORITIES).map(([k, v]) => (
+            {Object.entries(PRIORITY_KEYS).map(([k, v]) => (
               <option key={k} value={k}>
-                {v}
+                {t(v)}
               </option>
             ))}
           </select>
         </label>
         <label>
-          Cột
+          {t('tasks.newForm.column')}
           <select value={status} onChange={(e) => setStatus(e.target.value as TaskStatus)}>
             {COLUMNS.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {t(c.nameKey)}
               </option>
             ))}
           </select>
@@ -127,14 +129,14 @@ function NewTaskForm({
           checked={requiresReview}
           onChange={(e) => setRequiresReview(e.target.checked)}
         />{' '}
-        Cần người duyệt kết quả trước khi chuyển sang Xong
+        {t('tasks.newForm.requiresReview')}
       </label>
       <div className="wz-foot">
         <button className="btn" onClick={onClose}>
-          Huỷ
+          {t('tasks.newForm.cancel')}
         </button>
         <button className="btn primary" onClick={submit} disabled={create.isPending}>
-          Tạo task
+          {t('tasks.newForm.create')}
         </button>
       </div>
     </Modal>

@@ -20,6 +20,8 @@ import { TaskEngineService } from '../tasks/task-engine.service';
 import { WorkspaceLockService } from '../tasks/workspace-lock.service';
 import { slugify } from '../workspace/slug.util';
 import { EventsService } from '../events';
+import { AuditService, type AuditActor } from '../audit/audit.service';
+import { PlanLimitsService } from '../billing/plan-limits.service';
 import {
   Assignment,
   BUSY_STATUSES,
@@ -46,6 +48,8 @@ export class AgentsService {
     private readonly events: EventsService,
     private readonly lock: WorkspaceLockService,
     private readonly engine: TaskEngineService,
+    private readonly audit: AuditService,
+    private readonly limits: PlanLimitsService,
   ) {}
 
   async list(workspaceId: string): Promise<AgentContract[]> {
@@ -68,7 +72,7 @@ export class AgentsService {
     return defaultSkills();
   }
 
-  create(workspaceId: string, dto: CreateAgentDto): Promise<AgentContract> {
+  create(workspaceId: string, dto: CreateAgentDto, actor: AuditActor): Promise<AgentContract> {
     return this.lock.run(workspaceId, async (manager, effects) => {
       const computer = await this.requireComputer(manager, workspaceId, dto.computerId);
       await this.assertNameFree(manager, workspaceId, dto.name);
@@ -82,6 +86,10 @@ export class AgentsService {
         ...skill,
         enabled: dto.skills ? (enabledById.get(skill.id) ?? false) : skill.enabled,
       }));
+      // Row lock + count in this transaction: two creates (or create_agent tool calls) cannot both
+      // take the last slot.
+      const plan = await this.limits.lockPlan(manager, workspaceId);
+      await this.limits.assertCanAdd(manager, workspaceId, plan, 'agents');
       const existing = await manager.count(Agent, { where: { workspaceId }, withDeleted: true });
       // Names get reused (delete + create): the id suffix keeps a new agent out of an old workdir.
       const id = randomUUID();
@@ -100,12 +108,29 @@ export class AgentsService {
         }),
       );
       row.computer = computer;
+      await this.audit.record(
+        {
+          workspaceId,
+          actorMemberId: actor.memberId,
+          action: 'agent.created',
+          targetType: 'agent',
+          targetId: row.id,
+          meta: { name: row.name },
+          ip: actor.ip,
+        },
+        manager,
+      );
       effects.push(() => this.events.publish(workspaceId, { type: 'agents.changed' }));
       return toAgent(row, false);
     });
   }
 
-  async update(workspaceId: string, id: string, dto: UpdateAgentDto): Promise<AgentContract> {
+  async update(
+    workspaceId: string,
+    id: string,
+    dto: UpdateAgentDto,
+    actor: AuditActor,
+  ): Promise<AgentContract> {
     // Under the workspace lock: concurrent PATCHes (skills jsonb, name uniqueness) never interleave.
     return this.lock.run(workspaceId, async (manager, effects) => {
       const row = isUUID(id)
@@ -140,6 +165,18 @@ export class AgentsService {
         );
       }
       await manager.save(row);
+      await this.audit.record(
+        {
+          workspaceId,
+          actorMemberId: actor.memberId,
+          action: 'agent.updated',
+          targetType: 'agent',
+          targetId: row.id,
+          meta: { name: row.name },
+          ip: actor.ip,
+        },
+        manager,
+      );
       effects.push(() => this.events.publish(workspaceId, { type: 'agents.changed' }));
       if (renamed) {
         // The agent's DMs carry its name.
@@ -152,9 +189,19 @@ export class AgentsService {
   }
 
   /** Soft delete (see `TaskCommand.removeAgent`): history keeps the agent id. */
-  async remove(workspaceId: string, by: string | null, id: string): Promise<null> {
+  async remove(workspaceId: string, actor: AuditActor, id: string): Promise<null> {
     if (!isUUID(id)) throw new NotFoundException({ message: 'agents.NOT_FOUND' });
-    await this.engine.deleteAgent(workspaceId, by, id);
+    const agent = await this.agents.findOne({ where: { id, workspaceId }, select: { name: true } });
+    await this.engine.deleteAgent(workspaceId, actor.memberId, id);
+    await this.audit.record({
+      workspaceId,
+      actorMemberId: actor.memberId,
+      action: 'agent.deleted',
+      targetType: 'agent',
+      targetId: id,
+      meta: { name: agent?.name ?? null },
+      ip: actor.ip,
+    });
     return null;
   }
 

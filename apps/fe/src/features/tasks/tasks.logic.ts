@@ -1,22 +1,27 @@
-import {
-  placeBefore,
-  PRIORITY_NAME,
-  STATUS_NAME,
-  type Task,
-  type TaskPriority,
-  type TaskStatus,
-} from '@repo/shared';
+import { placeBefore, type Task, type TaskPriority, type TaskStatus } from '@repo/shared';
+import type { MessageKey, TFunction } from '../../i18n';
 
-export const COLUMNS: { id: TaskStatus; name: string; hint?: string; wip?: number }[] = [
-  { id: 'backlog', name: STATUS_NAME.backlog, hint: 'Ý tưởng, chưa lên lịch' },
-  { id: 'todo', name: STATUS_NAME.todo, hint: 'Agent sẽ tự nhận khi rảnh' },
-  { id: 'doing', name: STATUS_NAME.doing, wip: 4 },
-  { id: 'review', name: STATUS_NAME.review, hint: 'Agent xong, chờ người duyệt' },
-  { id: 'done', name: STATUS_NAME.done },
+export const COLUMNS: {
+  id: TaskStatus;
+  nameKey: MessageKey;
+  hintKey?: MessageKey;
+  wip?: number;
+}[] = [
+  { id: 'backlog', nameKey: 'tasks.status.backlog', hintKey: 'tasks.hint.backlog' },
+  { id: 'todo', nameKey: 'tasks.status.todo', hintKey: 'tasks.hint.todo' },
+  { id: 'doing', nameKey: 'tasks.status.doing', wip: 4 },
+  { id: 'review', nameKey: 'tasks.status.review', hintKey: 'tasks.hint.review' },
+  { id: 'done', nameKey: 'tasks.status.done' },
 ];
-export const statusName = (s: TaskStatus) => COLUMNS.find((c) => c.id === s)!.name;
+export const statusName = (s: TaskStatus, t: TFunction) =>
+  t(COLUMNS.find((c) => c.id === s)!.nameKey);
 
-export const PRIORITIES: Record<TaskPriority, string> = PRIORITY_NAME;
+export const PRIORITY_KEYS: Record<TaskPriority, MessageKey> = {
+  urgent: 'tasks.priority.urgent',
+  high: 'tasks.priority.high',
+  med: 'tasks.priority.med',
+  low: 'tasks.priority.low',
+};
 
 export const LABEL_COLORS: Record<string, string> = {
   email: '#c98a1b',

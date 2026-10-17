@@ -9,5 +9,11 @@
   "MAX_LENGTH": "{property} must be at most {constraints.0} characters",
   "IS_EMAIL": "{property} must be a valid email address",
   "MIN_LENGTH": "{property} must be at least {constraints.0} characters",
-  "IS_ARRAY": "{property} must be an array"
+  "IS_ARRAY": "{property} must be an array",
+  "WEAK_PASSWORD": "{property} must be 8-128 characters with a letter and a digit, and not your email",
+  "MUST_ACCEPT_TERMS": "You must accept the terms to continue",
+  "IS_CURSOR": "{property} is not a valid cursor",
+  "IS_ISO_DATE": "{property} must be an ISO 8601 date",
+  "IS_HEX_COLOR": "{property} must be a color like #b0516f",
+  "IS_UUID": "{property} must be a valid id"
 }

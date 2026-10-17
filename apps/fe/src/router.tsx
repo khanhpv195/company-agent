@@ -10,6 +10,10 @@ import {
 import { ApiError } from './lib/api-client';
 import { LoginPage } from './features/auth/LoginPage';
 import { RegisterPage } from './features/auth/RegisterPage';
+import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from './features/auth/ResetPasswordPage';
+import { InvitePage } from './features/auth/InvitePage';
+import { VerifyEmailPage } from './features/auth/VerifyEmailPage';
 import { OnboardingPage } from './features/auth/OnboardingPage';
 import { ChatLayout } from './features/chat/ChatLayout';
 import { ChatEmpty, RoomView } from './features/chat/RoomView';
@@ -23,6 +27,7 @@ import { SettingsPage } from './features/settings/SettingsPage';
 import { TasksPage, type TasksView } from './features/tasks/TasksPage';
 import { agentsQuery, sessionQuery } from './features/workspace/workspace.api';
 import { AppShell } from './layout/AppShell';
+import { ErrorScreen, NotFoundScreen } from './components/ErrorScreens';
 
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: Outlet });
 
@@ -38,6 +43,39 @@ const registerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/register',
   component: RegisterPage,
+});
+
+const forgotPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forgot-password',
+  component: ForgotPasswordPage,
+});
+
+const tokenSearch = (s: Record<string, unknown>): { token?: string } => ({
+  token: typeof s.token === 'string' && s.token ? s.token : undefined,
+});
+
+const resetPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/reset-password',
+  validateSearch: tokenSearch,
+  component: ResetPasswordPage,
+});
+
+/** Public: an invitee has no account yet. */
+const inviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/invite',
+  validateSearch: tokenSearch,
+  component: InvitePage,
+});
+
+/** Public: the emailed link has to work signed in or out. */
+const verifyEmailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/verify-email',
+  validateSearch: tokenSearch,
+  component: VerifyEmailPage,
 });
 
 const onboardingRoute = createRoute({
@@ -151,6 +189,9 @@ const settingsRoute = createRoute({
 const settingsSectionRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: '$section',
+  validateSearch: (s: Record<string, unknown>): { checkout?: 'success' | 'cancel' } => ({
+    checkout: s.checkout === 'success' || s.checkout === 'cancel' ? s.checkout : undefined,
+  }),
   component: SettingsPage,
 });
 
@@ -163,6 +204,10 @@ const connectionsRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   loginRoute,
   registerRoute,
+  forgotPasswordRoute,
+  resetPasswordRoute,
+  inviteRoute,
+  verifyEmailRoute,
   onboardingRoute,
   appRoute.addChildren([
     dashboardRoute,
@@ -182,6 +227,8 @@ export function createAppRouter(queryClient: QueryClient) {
     history: createHashHistory(),
     context: { queryClient },
     defaultPreload: 'intent',
+    defaultErrorComponent: ({ error }) => <ErrorScreen error={error} />,
+    defaultNotFoundComponent: NotFoundScreen,
   });
 }
 

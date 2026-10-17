@@ -4,7 +4,7 @@ import { ApiResponse } from '@repo/shared';
 import { I18nContext } from 'nestjs-i18n';
 import { map, Observable } from 'rxjs';
 import { DEFAULT_SUCCESS_MESSAGE, RAW_RESPONSE_KEY, RESPONSE_MESSAGE_KEY } from '../../contacts';
-import { PaginatedResult } from '../dto/response.dto';
+import { CursorResult, PaginatedResult } from '../dto/response.dto';
 import { translate } from '../utils';
 
 @Injectable()
@@ -27,7 +27,7 @@ export class TransformResponseInterceptor implements NestInterceptor {
       map((body: unknown): ApiResponse => {
         const message = translate(I18nContext.current(context), messageKey);
 
-        if (body instanceof PaginatedResult) {
+        if (body instanceof PaginatedResult || body instanceof CursorResult) {
           return { success: true, data: body.items, message, meta: { ...body.meta } };
         }
         return { success: true, data: body ?? null, message };

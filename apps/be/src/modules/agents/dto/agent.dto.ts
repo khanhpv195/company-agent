@@ -76,6 +76,9 @@ export class AgentDto implements AgentContract {
 
   @ApiProperty({ enum: ['idle', 'working', 'offline'], description: 'Derived on read' })
   status: AgentStatus;
+
+  @ApiProperty({ description: 'Demo agent on a simulated computer (it cannot do real work)' })
+  simulated: boolean;
 }
 
 export class AgentActivityDto implements AgentActivityContract {

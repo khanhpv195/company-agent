@@ -39,6 +39,13 @@ export class RefreshToken {
   @Column({ name: 'revoked_at', type: 'timestamptz', nullable: true })
   revokedAt: Date | null;
 
+  /** Client that logged in or last refreshed this family; shown in the sessions list. */
+  @Column({ name: 'user_agent', type: 'varchar', length: 256, nullable: true })
+  userAgent: string | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  ip: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 }

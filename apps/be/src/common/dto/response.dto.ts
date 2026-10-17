@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ApiResponse, PaginationMeta } from '@repo/shared';
+import { ApiResponse, CursorPageMeta, PaginationMeta } from '@repo/shared';
 
 export class PaginationMetaDto implements PaginationMeta {
   @ApiProperty({ example: 1 })
@@ -44,4 +44,15 @@ export class PaginatedResult<T> {
       totalPages: Math.ceil(total / limit),
     });
   }
+}
+
+/**
+ * Keyset-paged list: `data = items`, `meta = { limit, nextCursor }` and no total, so no
+ * `count(*)` per page. `nextCursor` is null when the list has ended.
+ */
+export class CursorResult<T> {
+  constructor(
+    readonly items: T[],
+    readonly meta: CursorPageMeta,
+  ) {}
 }

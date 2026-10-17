@@ -104,7 +104,11 @@ export class EventsController {
       cleanup();
       res.end();
     };
-    const unregister = this.events.registerStream(end);
+    const unregister = this.events.registerStream(end, {
+      memberId: auth.memberId,
+      workspaceId: auth.workspaceId,
+      ...(auth.sessionId ? { sessionId: auth.sessionId } : {}),
+    });
     // End the stream when its access token runs out (setTimeout caps at 2^31-1 ms).
     const expiry =
       auth.exp === undefined

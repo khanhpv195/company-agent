@@ -5,10 +5,7 @@
   "compilerOptions": {
     "deleteOutDir": true,
     "tsConfigPath": "tsconfig.build.json",
-    "assets": [
-      { "include": "i18n/**/*", "watchAssets": true },
-      { "include": "resources/**/*", "watchAssets": true }
-    ],
+    "assets": [{ "include": "i18n/**/*", "watchAssets": true }],
     "plugins": [
       {
         "name": "@nestjs/swagger",

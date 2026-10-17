@@ -8,7 +8,9 @@ import { NewTaskModal } from '../features/tasks/NewTaskModal';
 import { useRealtimeSync } from '../lib/use-realtime-sync';
 import { useUi } from '../stores/ui';
 import { CommandPalette } from './CommandPalette';
+import { ConnectivityBanner } from './ConnectivityBanner';
 import { Rail } from './Rail';
+import { VerifyEmailBanner } from './VerifyEmailBanner';
 
 export function AppShell() {
   useRealtimeSync();
@@ -25,11 +27,13 @@ export function AppShell() {
   }, [setPaletteOpen]);
 
   return (
-    <div className="app">
+    <div className="app app-col">
+      <VerifyEmailBanner />
       <section className="screen" id="app">
         <Rail />
         <Outlet />
       </section>
+      <ConnectivityBanner />
       <Toast />
       <ConnectComputerModal />
       <NewTaskModal />

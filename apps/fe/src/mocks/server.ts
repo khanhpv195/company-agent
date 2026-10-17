@@ -1,5 +1,6 @@
 import type {
   AuthResult,
+  BillingSummary,
   CommentInput,
   ConnectInput,
   CreateAgentInput,
@@ -14,7 +15,19 @@ import type {
   UpdateAgentInput,
   UpdateTaskInput,
 } from '@repo/shared';
+import { isStrongPassword, planById, type WorkspacePlan } from '@repo/shared';
 import { HttpError, MockBackend } from './backend';
+import {
+  account,
+  auditPage,
+  changePassword,
+  resendVerification,
+  resetPassword,
+  updateProfile,
+  verifyEmail,
+  WithMeta,
+} from './account';
+import { createInvite, previewInvite, revokeInvite, seedTeam, takeInvite, team } from './team';
 import { skillCatalog } from './fixtures';
 import {
   connect,
@@ -69,7 +82,11 @@ const body = <T>(ctx: Ctx) => (ctx.body ?? {}) as T;
 
 const session = (): Session => {
   const user = db.members.find((m) => m.id === db.meId)!;
-  return { user, workspace: db.workspace, onboarded: db.session.onboarded };
+  return {
+    user: { ...user, emailVerified: account.emailVerified },
+    workspace: db.workspace,
+    onboarded: db.session.onboarded,
+  };
 };
 const authResult = (): AuthResult => ({
   session: session(),
@@ -94,18 +111,31 @@ on('POST', '/auth/login', (ctx) => {
   return authResult();
 });
 on('POST', '/auth/register', (ctx) => {
-  const { name, email, password, workspaceName } = body<RegisterInput>(ctx);
+  const { name, email, password, workspaceName, acceptTerms } = body<RegisterInput>(ctx);
   if (!name?.trim()) throw new HttpError(400, 'Vui lòng nhập tên');
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) throw new HttpError(400, 'Email không hợp lệ');
-  if (!password || password.length < 8) throw new HttpError(400, 'Mật khẩu tối thiểu 8 ký tự');
+  if (!isStrongPassword(password ?? '', email))
+    throw new HttpError(400, 'Mật khẩu cần 8-128 ký tự, gồm chữ và số');
+  if (acceptTerms !== true) throw new HttpError(400, 'Bạn cần đồng ý với điều khoản');
   const me = db.members.find((m) => m.id === db.meId)!;
   me.name = name.trim();
   me.email = email;
   if (workspaceName?.trim()) db.workspace.name = workspaceName.trim();
+  account.emailVerified = false;
   db.session.loggedIn = true;
   db.session.onboarded = false;
   saveSession();
   return authResult();
+});
+// Like the real API: always success, so the response never reveals whether an email has an account.
+on('POST', '/auth/forgot-password', () => null);
+on('POST', '/auth/reset-password', (ctx) => {
+  resetPassword(body<{ token?: string; newPassword?: string }>(ctx));
+  return null;
+});
+on('POST', '/auth/verify-email', (ctx) => {
+  verifyEmail(body<{ token?: string }>(ctx).token);
+  return null;
 });
 on('POST', '/auth/refresh', () => {
   requireAuth();
@@ -127,6 +157,218 @@ on('POST', '/onboarding/complete', () => {
   db.cliPolledAt = null;
   saveSession();
   return session();
+});
+
+// ----- account -----
+const me = () => db.members.find((m) => m.id === db.meId)!;
+on('PATCH', '/me', (ctx) => {
+  updateProfile(me(), body<{ name?: unknown; color?: unknown }>(ctx));
+  backend.emit({ type: 'members.changed' });
+  return session();
+});
+on('POST', '/me/password', (ctx) => {
+  changePassword(me(), body<{ currentPassword?: string; newPassword?: string }>(ctx));
+  return null;
+});
+on('GET', '/me/sessions', () => account.sessions);
+on('POST', '/me/sessions/revoke-others', () => {
+  account.sessions = account.sessions.filter((s) => s.current);
+  return null;
+});
+on('DELETE', '/me/sessions/:id', ({ params }) => {
+  const target = account.sessions.find((s) => s.id === params.id);
+  if (!target) throw new HttpError(404, 'Session not found');
+  account.sessions = account.sessions.filter((s) => s !== target);
+  return null;
+});
+on('POST', '/me/verify-email/resend', () => {
+  resendVerification(backend.now());
+  return null;
+});
+on('DELETE', '/me', (ctx) => {
+  if (!body<{ password?: string }>(ctx).password)
+    throw new HttpError(400, 'Vui lòng nhập mật khẩu');
+  if (me().role === 'owner')
+    throw new HttpError(409, 'Hãy chuyển quyền sở hữu workspace trước khi xoá tài khoản');
+  db.session.loggedIn = false;
+  saveSession();
+  return null;
+});
+on('GET', '/audit-events', ({ query }) => {
+  requireManager();
+  const page = auditPage(query.get('before'), Number(query.get('limit')) || 50);
+  return new WithMeta(page.items, page.meta);
+});
+
+// ----- billing -----
+const plan = (id: WorkspacePlan) => planById(id);
+const mockBilling = { plan: 'pro' as WorkspacePlan };
+const requireOwner = () => {
+  if (me().role !== 'owner') throw new HttpError(403, 'Chỉ chủ sở hữu mới quản lý được gói');
+};
+on('GET', '/billing', (): BillingSummary => {
+  const now = new Date(backend.now());
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const byDay = Array.from({ length: now.getDate() }, (_, i) => {
+    const runs = (i * 7) % 6;
+    return {
+      date: new Date(start.getFullYear(), start.getMonth(), i + 1).toISOString().slice(0, 10),
+      runs,
+      costUsd: Math.round(runs * 0.37 * 100) / 100,
+    };
+  });
+  const byAgent = db.agents.map((a, i) => ({
+    agentId: a.id,
+    name: a.name,
+    runs: 12 - i * 4,
+    costUsd: Math.round((12 - i * 4) * 0.41 * 100) / 100,
+  }));
+  const p = plan(mockBilling.plan);
+  return {
+    plan: p.id,
+    limits: { seats: p.seats, agents: p.agents, computers: p.computers },
+    usage: {
+      seats: db.members.length + team.invites.length,
+      agents: db.agents.filter((a) => !a.simulated).length,
+      computers: db.computers.filter((c) => !c.simulated && !c.revokedAt).length,
+    },
+    period: { start: start.toISOString(), end: end.toISOString() },
+    costUsd: Math.round(byDay.reduce((s, d) => s + d.costUsd, 0) * 100) / 100,
+    runs: byDay.reduce((s, d) => s + d.runs, 0),
+    byAgent,
+    byDay,
+    subscription:
+      p.id === 'free'
+        ? null
+        : {
+            status: 'active',
+            currentPeriodEnd: end.toISOString(),
+            cancelAtPeriodEnd: false,
+          },
+    checkoutAvailable: true,
+  };
+});
+on('POST', '/billing/checkout', () => {
+  requireOwner();
+  return { url: `${window.location.origin}/#/settings/billing?checkout=success` };
+});
+on('POST', '/billing/portal', () => {
+  requireOwner();
+  return { url: `${window.location.origin}/#/settings/billing` };
+});
+
+// ----- team & workspace -----
+seedTeam(Date.now());
+const PALETTE = ['#5157b0', '#3d8a6a', '#d97757', '#8a5db0'];
+const checkPassword = (password: string | undefined) => {
+  if (!password) throw new HttpError(400, 'Vui lòng nhập mật khẩu');
+  if (password === 'wrong') throw new HttpError(400, 'Mật khẩu không đúng');
+};
+const memberOr404 = (id: string) => {
+  const m = db.members.find((x) => x.id === id);
+  if (!m) throw new HttpError(404, 'Không tìm thấy thành viên');
+  return m;
+};
+on('GET', '/invites', () => {
+  requireManager();
+  return team.invites.map((i) => i.invite);
+});
+on('POST', '/invites', (ctx) => {
+  requireManager();
+  const invite = createInvite(backend.now(), me().name, body(ctx), me().role);
+  if (db.members.some((m) => m.email.toLowerCase() === invite.invite.email))
+    throw new HttpError(409, 'Email này đã có tài khoản');
+  return invite;
+});
+on('DELETE', '/invites/:id', ({ params }) => {
+  requireManager();
+  revokeInvite(params.id);
+  return null;
+});
+on('GET', '/invites/preview', ({ query }) => previewInvite(query.get('token'), db.workspace.name));
+on('POST', '/invites/accept', (ctx) => {
+  const { token, name, password, acceptTerms } = body<{
+    token?: string;
+    name?: string;
+    password?: string;
+    acceptTerms?: boolean;
+  }>(ctx);
+  const invite = previewInvite(token ?? null, db.workspace.name);
+  if (db.members.some((m) => m.email.toLowerCase() === invite.email.toLowerCase()))
+    throw new HttpError(409, 'An account with this email already exists');
+  if (!name?.trim()) throw new HttpError(400, 'Vui lòng nhập tên');
+  if (!isStrongPassword(password ?? '', invite.email))
+    throw new HttpError(400, 'Mật khẩu cần 8-128 ký tự, gồm chữ và số');
+  if (acceptTerms !== true) throw new HttpError(400, 'Bạn cần đồng ý với điều khoản');
+  takeInvite(token);
+  const member = {
+    id: `u${db.members.length + 1}-${Math.floor(backend.now() % 10000)}`,
+    name: name.trim(),
+    email: invite.email,
+    role: invite.role,
+    color: PALETTE[db.members.length % PALETTE.length],
+  };
+  db.members.push(member);
+  db.meId = member.id;
+  db.session.loggedIn = true;
+  db.session.onboarded = true;
+  saveSession();
+  account.emailVerified = true;
+  backend.emit({ type: 'members.changed' });
+  return authResult();
+});
+on('PATCH', '/members/:id', ({ params, body: raw }) => {
+  if (me().role !== 'owner') throw new HttpError(403, 'Chỉ chủ sở hữu mới đổi được vai trò');
+  const target = memberOr404(params.id);
+  const role = (raw as { role?: string } | undefined)?.role;
+  if (role !== 'admin' && role !== 'member') throw new HttpError(400, 'Vai trò không hợp lệ');
+  if (target.id === me().id || target.role === 'owner')
+    throw new HttpError(403, 'Không thể đổi vai trò của chủ sở hữu');
+  target.role = role;
+  backend.emit({ type: 'members.changed' });
+  return target;
+});
+on('DELETE', '/members/:id', ({ params }) => {
+  requireManager();
+  const target = memberOr404(params.id);
+  if (target.id === me().id || target.role === 'owner')
+    throw new HttpError(403, 'Không thể xoá chủ sở hữu hoặc chính bạn');
+  if (me().role === 'admin' && target.role !== 'member')
+    throw new HttpError(403, 'Quản trị viên chỉ xoá được thành viên');
+  db.members = db.members.filter((m) => m !== target);
+  backend.emit({ type: 'members.changed' });
+  return null;
+});
+on('POST', '/workspace/transfer-ownership', (ctx) => {
+  if (me().role !== 'owner') throw new HttpError(403, 'Chỉ chủ sở hữu mới chuyển được quyền');
+  const { memberId, password } = body<{ memberId?: string; password?: string }>(ctx);
+  checkPassword(password);
+  const target = memberOr404(memberId ?? '');
+  if (target.id === me().id) throw new HttpError(400, 'Hãy chọn người khác');
+  target.role = 'owner';
+  me().role = 'admin';
+  backend.emit({ type: 'members.changed' });
+  backend.emit({ type: 'workspace.changed' });
+  return null;
+});
+on('PATCH', '/workspace', (ctx) => {
+  requireManager();
+  const name = body<{ name?: string }>(ctx).name?.trim() ?? '';
+  if (!name || name.length > 80) throw new HttpError(400, 'Tên workspace cần từ 1 đến 80 ký tự');
+  db.workspace.name = name;
+  backend.emit({ type: 'workspace.changed' });
+  return db.workspace;
+});
+on('DELETE', '/workspace', (ctx) => {
+  if (me().role !== 'owner') throw new HttpError(403, 'Chỉ chủ sở hữu mới xoá được workspace');
+  const { password, confirmName } = body<{ password?: string; confirmName?: string }>(ctx);
+  checkPassword(password);
+  if (confirmName !== db.workspace.name) throw new HttpError(400, 'Tên workspace không khớp');
+  db.session.loggedIn = false;
+  db.session.onboarded = false;
+  saveSession();
+  return null;
 });
 
 // ----- people & machines -----
@@ -302,6 +544,13 @@ export async function mockFetch(url: string, init: RequestInit = {}): Promise<Re
       const parsed =
         typeof init.body === 'string' && init.body ? (JSON.parse(init.body) as Body) : undefined;
       const data = await handler({ params, body: parsed, query: searchParams });
+      if (data instanceof WithMeta)
+        return json(200, {
+          success: true,
+          data: structuredClone(data.items),
+          message: 'OK',
+          meta: data.meta,
+        });
       return json(200, { success: true, data: structuredClone(data ?? null), message: 'OK' });
     }
     throw new HttpError(404, `No mock route for ${method} ${path}`);

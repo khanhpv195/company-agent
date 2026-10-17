@@ -1,4 +1,5 @@
 import type { RealtimeEvent } from '@repo/shared';
+import { reportApiReachable } from './connectivity';
 import { API_URL, MOCK, refreshTokens, triggerSessionExpired } from './api-client';
 import { getTokens } from './auth-tokens';
 
@@ -228,6 +229,7 @@ export class SseRealtimeClient implements RealtimeClient {
         if (!gotBytes) {
           // The server sends `: connected` right away; only now is the connection healthy.
           gotBytes = true;
+          reportApiReachable(true);
           if (this.hasConnected || this.attempt > 0)
             for (const event of RESYNC_EVENTS) this.emit(event);
           this.hasConnected = true;

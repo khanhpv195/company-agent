@@ -3,76 +3,79 @@ import { Icon } from '../../components/Icon';
 import { Who } from '../../components/Who';
 import { rel } from '../../lib/format';
 import { useNow } from '../../lib/use-now';
+import { useT } from '../../i18n';
 import { usePeople } from '../workspace/workspace.api';
 import { Elapsed, Label, PriorityIcon, StatusIcon } from './task-ui';
-import { COLUMNS, PRIORITIES } from './tasks.logic';
+import { COLUMNS, PRIORITY_KEYS } from './tasks.logic';
 
 export function ListView({ tasks, onOpen }: { tasks: Task[]; onOpen: (id: string) => void }) {
+  const t = useT();
   const people = usePeople();
   const now = useNow();
-  const groups = COLUMNS.map((c) => ({ c, items: tasks.filter((t) => t.status === c.id) })).filter(
-    (g) => g.items.length,
-  );
+  const groups = COLUMNS.map((c) => ({
+    c,
+    items: tasks.filter((task) => task.status === c.id),
+  })).filter((g) => g.items.length);
   if (!groups.length)
     return (
       <div className="tlist">
         <div className="col-empty" style={{ marginTop: 24 }}>
-          Không có task nào khớp bộ lọc
+          {t('tasks.noMatch')}
         </div>
       </div>
     );
   return (
     <div className="tlist">
       {groups.map(({ c, items }) => (
-        <div key={c.id} role="group" aria-label={c.name}>
+        <div key={c.id} role="group" aria-label={t(c.nameKey)}>
           <div className="tl-grp">
-            <StatusIcon status={c.id} /> {c.name} <span className="n">{items.length}</span>
+            <StatusIcon status={c.id} /> {t(c.nameKey)} <span className="n">{items.length}</span>
           </div>
-          {items.map((t) => {
-            const step = currentStep(t);
+          {items.map((task) => {
+            const step = currentStep(task);
             return (
               <div
-                key={t.id}
+                key={task.id}
                 className="tl-row"
                 role="button"
                 tabIndex={0}
-                onClick={() => onOpen(t.id)}
-                onKeyDown={(e) => e.key === 'Enter' && onOpen(t.id)}
+                onClick={() => onOpen(task.id)}
+                onKeyDown={(e) => e.key === 'Enter' && onOpen(task.id)}
               >
-                <StatusIcon status={t.status} />
-                <span className="id">{t.id}</span>
+                <StatusIcon status={task.status} />
+                <span className="id">{task.id}</span>
                 <span className="ttl">
-                  <span>{t.title}</span>
-                  {t.labels.map((l) => (
+                  <span>{task.title}</span>
+                  {task.labels.map((l) => (
                     <Label key={l} name={l} />
                   ))}
                 </span>
                 <span className="who">
-                  <Who id={t.assigneeId} /> {people.name(t.assigneeId)}
+                  <Who id={task.assigneeId} /> {people.name(task.assigneeId)}
                 </span>
-                {t.activeRun && step ? (
+                {task.activeRun && step ? (
                   <span className="st run">
-                    <Elapsed since={t.activeRun.startedAt} className="" /> · {step.tool}{' '}
+                    <Elapsed since={task.activeRun.startedAt} className="" /> · {step.tool}{' '}
                     {step.input}
                   </span>
-                ) : t.blockedReason ? (
+                ) : task.blockedReason ? (
                   <span className="st">
-                    <Icon name="lock" size={12} /> {t.blockedReason}
+                    <Icon name="lock" size={12} /> {task.blockedReason}
                   </span>
-                ) : t.error ? (
+                ) : task.error ? (
                   <span className="st" style={{ color: 'var(--err)' }}>
-                    {t.error}
+                    {task.error}
                   </span>
                 ) : (
                   <span className="st">
-                    {t.runs[0]
-                      ? `Run gần nhất ${rel(t.runs[0].at, now)}`
-                      : `Tạo ${rel(t.createdAt, now)}`}
+                    {task.runs[0]
+                      ? t('tasks.lastRun', { when: rel(task.runs[0].at, now) })
+                      : t('tasks.createdAgo', { when: rel(task.createdAt, now) })}
                   </span>
                 )}
                 <span className="pr">
-                  <PriorityIcon priority={t.priority} />
-                  {PRIORITIES[t.priority]}
+                  <PriorityIcon priority={task.priority} />
+                  {t(PRIORITY_KEYS[task.priority])}
                 </span>
               </div>
             );

@@ -1,5 +1,6 @@
 import type { Computer } from '@repo/shared';
 import { Modal } from '../../components/Modal';
+import { useT } from '../../i18n';
 import { useUi } from '../../stores/ui';
 import { useRevokeComputer } from './computers.api';
 
@@ -11,19 +12,17 @@ export function RevokeComputerModal({
   computer: Computer;
   onClose: () => void;
 }) {
+  const t = useT();
   const revoke = useRevokeComputer();
   const showToast = useUi((s) => s.showToast);
   return (
-    <Modal onClose={onClose} label="Gỡ máy">
-      <h3>Gỡ {computer.name}?</h3>
-      <p>
-        Máy sẽ bị ngắt khỏi workspace và các run đang chạy trên máy này bị huỷ. Agent trên máy vẫn
-        còn nhưng không chạy được cho đến khi máy được kết nối lại.
-      </p>
+    <Modal onClose={onClose} label={t('computers.remove')}>
+      <h3>{t('computers.revokeTitle', { name: computer.name })}</h3>
+      <p>{t('computers.revokeBody')}</p>
       {revoke.error && <div className="err-line">{revoke.error.message}</div>}
       <div className="wz-foot">
         <button className="btn" onClick={onClose}>
-          Huỷ
+          {t('computers.cancel')}
         </button>
         <button
           className="btn primary"
@@ -32,13 +31,17 @@ export function RevokeComputerModal({
           onClick={() =>
             revoke.mutate(computer.id, {
               onSuccess: () => {
-                showToast({ text: `Đã gỡ **${computer.name}**`, agentId: null, taskId: null });
+                showToast({
+                  text: t('computers.revoked', { name: computer.name }),
+                  agentId: null,
+                  taskId: null,
+                });
                 onClose();
               },
             })
           }
         >
-          Gỡ máy
+          {t('computers.remove')}
         </button>
       </div>
     </Modal>

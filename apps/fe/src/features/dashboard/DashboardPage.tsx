@@ -9,6 +9,7 @@ import { Inline } from '../../components/Markdown';
 import { ago, mmss, ms, rel } from '../../lib/format';
 import { useNow } from '../../lib/use-now';
 import { useUi } from '../../stores/ui';
+import { formatDate, formatNumber, useT } from '../../i18n';
 import { useOpenDm } from '../chat/chat.api';
 import { chatLabel } from '../chat/chat.logic';
 import { useRooms } from '../chat/chat.api';
@@ -28,6 +29,7 @@ const ATTN_ICON: Record<string, [IconName, string]> = {
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
 export function DashboardPage() {
+  const t = useT();
   const session = useSession().data;
   const summary = useDashboard();
   const tasks = useTasks().data ?? [];
@@ -45,12 +47,13 @@ export function DashboardPage() {
   const [quickAgent, setQuickAgent] = useState(0);
 
   const hour = new Date(now).getHours();
-  const hello = hour < 12 ? 'Chào buổi sáng' : hour < 18 ? 'Chào buổi chiều' : 'Chào buổi tối';
-  const date = new Date(now).toLocaleDateString('vi-VN', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
+  const hello =
+    hour < 12
+      ? t('dashboard.greetingMorning')
+      : hour < 18
+        ? t('dashboard.greetingAfternoon')
+        : t('dashboard.greetingEvening');
+  const date = formatDate(now, { weekday: 'long', day: 'numeric', month: 'long' });
   const live = tasks.filter((t) => t.activeRun && people.agent(t.assigneeId));
   const available = people.agents.filter((a) => a.status !== 'offline');
   const qa = available[quickAgent % Math.max(1, available.length)];
@@ -95,8 +98,8 @@ export function DashboardPage() {
               }}
             >
               <input
-                placeholder="Giao việc nhanh cho agent…"
-                aria-label="Giao việc nhanh"
+                placeholder={t('dashboard.quickPlaceholder')}
+                aria-label={t('dashboard.quickLabel')}
                 autoComplete="off"
                 value={quick}
                 onChange={(e) => setQuick(e.target.value)}
@@ -105,7 +108,7 @@ export function DashboardPage() {
                 <button
                   type="button"
                   className="who-chip"
-                  title="Đổi agent"
+                  title={t('dashboard.changeAgent')}
                   onClick={() => setQuickAgent((i) => i + 1)}
                 >
                   <AgentAvatar agent={qa} size={20} />
@@ -114,8 +117,8 @@ export function DashboardPage() {
               )}
               <button
                 className="go"
-                title="Giao việc"
-                aria-label="Giao việc"
+                title={t('dashboard.assign')}
+                aria-label={t('dashboard.assign')}
                 disabled={openDm.isPending}
               >
                 <Icon name="arrow" size={16} />
@@ -126,7 +129,7 @@ export function DashboardPage() {
           <div className="live">
             <div className="live-head">
               <span className="pulse" />
-              Đang chạy · {live.length}
+              {t('dashboard.runningCount', { n: live.length })}
               <span
                 className="link"
                 style={{ marginLeft: 'auto' }}
@@ -134,25 +137,26 @@ export function DashboardPage() {
                 tabIndex={0}
                 onClick={() => void navigate({ to: '/tasks' })}
               >
-                Mở board Tasks
+                {t('dashboard.openTasks')}
               </span>
             </div>
-            {live.map((t) => {
-              const a = people.agent(t.assigneeId)!;
-              const step = currentStep(t);
+            {live.map((task) => {
+              const a = people.agent(task.assigneeId)!;
+              const step = currentStep(task);
               return (
                 <div
-                  key={t.id}
+                  key={task.id}
                   className="live-row"
                   role="button"
                   tabIndex={0}
-                  onClick={() => void navigate({ to: '/tasks', search: { task: t.id } })}
+                  onClick={() => void navigate({ to: '/tasks', search: { task: task.id } })}
                 >
                   <AgentAvatar agent={a} />
                   <div className="what">
-                    <b>{t.title}</b>
+                    <b>{task.title}</b>
                     <div>
-                      {a.name} · {t.chatId ? chatLabel(rooms, t.chatId) : 'Tasks'} ·{' '}
+                      {a.name} ·{' '}
+                      {task.chatId ? chatLabel(rooms, task.chatId, t) : t('dashboard.tasksLabel')} ·{' '}
                       <code style={{ fontSize: 11.5 }}>
                         {step ? `${step.tool} · ${step.input}` : ''}
                       </code>
@@ -163,15 +167,15 @@ export function DashboardPage() {
                   </div>
                   <span className="stage">
                     <span className="mini-spin" />
-                    running
+                    {t('dashboard.stageRunning')}
                   </span>
-                  <span className="elapsed">{mmss(now - ms(t.activeRun!.startedAt))}</span>
+                  <span className="elapsed">{mmss(now - ms(task.activeRun!.startedAt))}</span>
                 </div>
               );
             })}
             {!live.length && (
               <div className="empty-line" style={{ padding: '8px 12px 12px' }}>
-                Không agent nào đang chạy.
+                {t('dashboard.noAgentRunning')}
               </div>
             )}
           </div>
@@ -179,50 +183,60 @@ export function DashboardPage() {
           <div className="kpis">
             <div className="kpi">
               <div className="lbl">
-                <Icon name="zap" size={14} /> Assignments hôm nay
+                <Icon name="zap" size={14} /> {t('dashboard.assignmentsToday')}
               </div>
               <div className="val">{today}</div>
               <div className={`delta ${today >= yday ? 'up' : ''}`}>
                 {today >= yday ? '+' : ''}
-                {today - yday} so với hôm qua
+                {today - yday} {t('dashboard.vsYesterday')}
               </div>
             </div>
             <div className="kpi">
               <div className="lbl">
-                <Icon name="check" size={14} /> Hoàn thành · 7 ngày
+                <Icon name="check" size={14} /> {t('dashboard.completed7d')}
               </div>
               <div className="val">
-                {d7 + f7 ? ((d7 / (d7 + f7)) * 100).toFixed(1).replace('.', ',') : '–'}
+                {d7 + f7
+                  ? formatNumber((d7 / (d7 + f7)) * 100, {
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
+                    })
+                  : '–'}
                 <small>%</small>
               </div>
-              <div className="delta">
-                {d7} xong · {f7} lỗi
-              </div>
+              <div className="delta">{t('dashboard.doneFailed', { done: d7, failed: f7 })}</div>
             </div>
             <div className="kpi">
               <div className="lbl">
-                <Icon name="clock" size={14} /> Agent làm hôm nay
+                <Icon name="clock" size={14} /> {t('dashboard.agentsWorkedToday')}
               </div>
               <div className="val">
                 {summary?.minutesToday ?? 0}
-                <small> phút</small>
+                <small> {t('dashboard.minutesUnit')}</small>
               </div>
               <div className="delta">
-                trung bình{' '}
-                {today ? ((summary?.minutesToday ?? 0) / today).toFixed(1).replace('.', ',') : 0}{' '}
-                phút mỗi việc
+                {t('dashboard.avgPerTask', {
+                  avg: today
+                    ? formatNumber((summary?.minutesToday ?? 0) / today, {
+                        minimumFractionDigits: 1,
+                        maximumFractionDigits: 1,
+                      })
+                    : 0,
+                })}
               </div>
             </div>
             <div className="kpi">
               <div className="lbl">
-                <Icon name="monitor" size={14} /> Máy online
+                <Icon name="monitor" size={14} /> {t('dashboard.machinesOnline')}
               </div>
               <div className="val">
                 {online.length}
                 <small>/{people.computers.length}</small>
               </div>
               <div className="delta">
-                heartbeat {online[0] ? ago(online[0].lastHeartbeatAt, now) : '–'}
+                {t('dashboard.heartbeat', {
+                  ago: online[0] ? ago(online[0].lastHeartbeatAt, now) : '–',
+                })}
               </div>
             </div>
           </div>
@@ -231,21 +245,21 @@ export function DashboardPage() {
             <div className="dcard">
               <div className="dcard-h">
                 <div>
-                  <h3>Assignments 14 ngày</h3>
-                  <div className="sub">Mọi room và DM, theo ngày</div>
+                  <h3>{t('dashboard.assignments14d')}</h3>
+                  <div className="sub">{t('dashboard.allRoomsDms')}</div>
                 </div>
                 <div className="legend">
                   <span>
                     <i style={{ background: C_DONE }} />
-                    Hoàn thành
+                    {t('dashboard.completedLegend')}
                   </span>
                   <span>
                     <i style={{ background: C_FAIL }} />
-                    Lỗi
+                    {t('dashboard.failedLegend')}
                   </span>
                   <button
                     className="icon-btn"
-                    title={table ? 'Xem biểu đồ' : 'Xem bảng'}
+                    title={table ? t('dashboard.showChart') : t('dashboard.showTable')}
                     onClick={() => setTable((v) => !v)}
                   >
                     <Icon name={table ? 'chart' : 'table'} size={16} />
@@ -256,9 +270,11 @@ export function DashboardPage() {
             </div>
             <div className="dcard">
               <div className="dcard-h">
-                <h3>Cần chú ý</h3>
+                <h3>{t('dashboard.attention')}</h3>
                 <span className="sub">
-                  {summary?.attention.filter((x) => !x.resolved).length ?? 0} việc
+                  {t('dashboard.attentionCount', {
+                    n: summary?.attention.filter((x) => !x.resolved).length ?? 0,
+                  })}
                 </span>
               </div>
               {summary?.attention.map((x) => {
@@ -274,7 +290,8 @@ export function DashboardPage() {
                     </div>
                     {x.resolved ? (
                       <span className="done-note">
-                        <Icon name="check" size={13} /> Đã {x.action.toLowerCase()}
+                        <Icon name="check" size={13} />{' '}
+                        {t('dashboard.doneAction', { action: x.action.toLowerCase() })}
                       </span>
                     ) : (
                       <button
@@ -296,8 +313,8 @@ export function DashboardPage() {
             <div className="dcard">
               <div className="dcard-h">
                 <div>
-                  <h3>Agents</h3>
-                  <div className="sub">Assignments 7 ngày</div>
+                  <h3>{t('dashboard.agentsTitle')}</h3>
+                  <div className="sub">{t('dashboard.assignments7d')}</div>
                 </div>
                 <span
                   className="link"
@@ -305,7 +322,7 @@ export function DashboardPage() {
                   tabIndex={0}
                   onClick={() => void navigate({ to: '/people' })}
                 >
-                  Tất cả
+                  {t('dashboard.all')}
                 </span>
               </div>
               {summary?.byAgent.map(({ agentId, count }) => {
@@ -331,7 +348,7 @@ export function DashboardPage() {
             </div>
             <div className="dcard">
               <div className="dcard-h">
-                <h3>Hoạt động gần đây</h3>
+                <h3>{t('dashboard.recentActivity')}</h3>
               </div>
               <ul className="feed">
                 {summary?.feed.map((f) => (
@@ -349,10 +366,12 @@ export function DashboardPage() {
             <div className="dcard">
               <div className="dcard-h">
                 <div>
-                  <h3>Kênh kết nối</h3>
+                  <h3>{t('dashboard.channels')}</h3>
                   <div className="sub">
-                    {connections.filter((c) => c.status === 'on').length}/{connections.length} đang
-                    hoạt động
+                    {t('dashboard.activeCount', {
+                      on: connections.filter((c) => c.status === 'on').length,
+                      total: connections.length,
+                    })}
                   </div>
                 </div>
                 <span
@@ -361,7 +380,7 @@ export function DashboardPage() {
                   tabIndex={0}
                   onClick={() => void navigate({ to: '/connections' })}
                 >
-                  Quản lý
+                  {t('dashboard.manage')}
                 </span>
               </div>
               {connections.map((c) => (
@@ -369,13 +388,15 @@ export function DashboardPage() {
                   <ChannelLogo id={c.id} size={28} />
                   <div className="nm">
                     {c.name}
-                    <div>{c.status === 'on' ? `→ #${c.roomName}` : 'Chưa kết nối'}</div>
+                    <div>
+                      {c.status === 'on' ? `→ #${c.roomName}` : t('dashboard.notConnected')}
+                    </div>
                   </div>
                   {c.status === 'on' ? (
                     <Dot state="on" />
                   ) : (
                     <button className="btn sm" onClick={() => setWizard(c.id)}>
-                      Kết nối
+                      {t('dashboard.connect')}
                     </button>
                   )}
                 </div>

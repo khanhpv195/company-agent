@@ -23,6 +23,7 @@ apps/be/storage/**
 # tauri / rust
 apps/fe/src-tauri/target/
 apps/fe/src-tauri/gen/schemas/
+apps/fe/src-tauri/tauri.prod.conf.json
 
 # logs & os
 *.log

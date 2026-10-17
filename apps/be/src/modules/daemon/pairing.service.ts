@@ -7,6 +7,8 @@ import { returnedRows } from '../../common/utils';
 import type { AuthContext } from '../../common/types';
 import { hashApiKey, newApiKey } from '../computers/computers.service';
 import { Computer } from '../computers/entities/computer.entity';
+import { AuditService } from '../audit/audit.service';
+import { PlanLimitsService } from '../billing/plan-limits.service';
 import { EventsService } from '../events';
 import { PairingCode } from '../gateway/entities/pairing-code.entity';
 import { Workspace } from '../workspace/entities/workspace.entity';
@@ -38,10 +40,17 @@ export class PairingService {
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly clock: ClockService,
     private readonly events: EventsService,
+    private readonly audit: AuditService,
+    private readonly limits: PlanLimitsService,
   ) {}
 
   /** A fresh single-use code for the caller's workspace; only its hash is stored. */
   async createCode(auth: AuthContext): Promise<{ code: string; expiresAt: string }> {
+    // Fail early, before a code is handed out; `pair` re-checks under the same row lock.
+    await this.dataSource.transaction(async (manager) => {
+      const plan = await this.limits.lockPlan(manager, auth.workspaceId);
+      await this.limits.assertCanAdd(manager, auth.workspaceId, plan, 'computers');
+    });
     const now = this.clock.now();
     const expiresAt = new Date(now.getTime() + PAIRING_TTL_MS);
     const repo = this.dataSource.getRepository(PairingCode);
@@ -103,6 +112,10 @@ export class PairingService {
       if (!rows.length) {
         throw new UnauthorizedException({ message: 'gateway.INVALID_PAIRING_CODE' });
       }
+      // Row lock, then count: two daemons pairing at once cannot both take the last slot. A
+      // refusal rolls the transaction back, so the code stays usable after an upgrade.
+      const plan = await this.limits.lockPlan(manager, rows[0].workspace_id);
+      await this.limits.assertCanAdd(manager, rows[0].workspace_id, plan, 'computers');
       const workspace = await manager.findOneByOrFail(Workspace, { id: rows[0].workspace_id });
       const computer = await manager.save(
         manager.create(Computer, {
@@ -116,6 +129,16 @@ export class PairingService {
           simulated: false,
           apiKeyHash: hashApiKey(apiKey),
         }),
+      );
+      await this.audit.record(
+        {
+          workspaceId: workspace.id,
+          action: 'computer.paired',
+          targetType: 'computer',
+          targetId: computer.id,
+          meta: { name: computer.name },
+        },
+        manager,
       );
       return { computer, workspace };
     });
