@@ -276,6 +276,19 @@ export const en: Widen<ViMessages> = {
     revokeBody:
       'The computer will be disconnected from the workspace and runs in progress on it will be cancelled. Its agents stay, but cannot run until the computer connects again.',
     revoked: 'Removed **{name}**',
+    revokeTitleDemo: 'Remove demo computer {name}?',
+    revokeBodyDemo:
+      'The demo computer disappears from the workspace and runs in progress on it are cancelled. Choose what happens to its agents.',
+    removeDemo: 'Remove demo computer',
+    demoTag: 'demo',
+    revokeMove: 'Move {count} agent(s) to computer:',
+    revokeDelete: 'Delete these agents',
+    moveAgents: 'Move agents',
+    moveAgentsTitle: 'Move agents off {name}',
+    moveAgentsBody:
+      'This computer was already removed, but some agents are still attached to it. Choose a computer to move them to.',
+    revokeKeep: 'Keep agents (they cannot run until moved to another computer)',
+    revokeTarget: 'Target computer',
     paired: 'Connected {name}',
     pair: {
       create: 'Create pairing code',

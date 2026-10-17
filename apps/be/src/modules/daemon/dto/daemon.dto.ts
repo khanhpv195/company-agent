@@ -179,3 +179,11 @@ export class ResultDto extends AttemptDto {
   @Min(0, min)
   costUsd?: number;
 }
+
+export class RevokeComputerQueryDto {
+  @ApiPropertyOptional({ description: 'A live computer of the workspace to move the agents to' })
+  @IsOptional()
+  @IsString(isString)
+  @IsNotEmpty(notEmpty)
+  moveAgentsTo?: string;
+}

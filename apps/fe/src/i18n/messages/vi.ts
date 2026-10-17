@@ -274,6 +274,18 @@ export const vi = {
     revokeBody:
       'Máy sẽ bị ngắt khỏi workspace và các run đang chạy trên máy này bị huỷ. Agent trên máy vẫn còn nhưng không chạy được cho đến khi máy được kết nối lại.',
     revoked: 'Đã gỡ **{name}**',
+    revokeTitleDemo: 'Gỡ máy demo {name}?',
+    revokeBodyDemo:
+      'Máy demo sẽ biến mất khỏi workspace và các run đang chạy trên máy này bị huỷ. Chọn cách xử lý các agent trên máy.',
+    removeDemo: 'Gỡ máy demo',
+    demoTag: 'demo',
+    revokeMove: 'Chuyển {count} agent sang máy:',
+    revokeDelete: 'Xoá các agent này',
+    moveAgents: 'Chuyển agent',
+    moveAgentsTitle: 'Chuyển agent khỏi {name}',
+    moveAgentsBody: 'Máy này đã được gỡ nhưng vẫn còn agent. Chọn máy để chuyển các agent sang.',
+    revokeKeep: 'Giữ agent (không chạy được đến khi chuyển máy)',
+    revokeTarget: 'Máy đích',
     paired: 'Đã kết nối {name}',
     pair: {
       create: 'Tạo mã kết nối',

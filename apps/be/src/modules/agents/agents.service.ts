@@ -152,6 +152,10 @@ export class AgentsService {
           where: { agentId: row.id, status: Not(In([...TERMINAL_STATUSES])) },
         });
         if (open) throw new ConflictException({ message: 'agents.BUSY' });
+        if (row.computer?.simulated && !computer.simulated) {
+          const plan = await this.limits.lockPlan(manager, workspaceId);
+          await this.limits.assertCanAdd(manager, workspaceId, plan, 'agents');
+        }
         row.computerId = computer.id;
         row.computer = computer;
       }

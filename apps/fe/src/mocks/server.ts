@@ -393,15 +393,32 @@ on('POST', '/computers/pairing-codes', () => {
     expiresAt: new Date(backend.now() + 10 * 60_000).toISOString(),
   };
 });
-on('DELETE', '/computers/:id', ({ params }) => {
+on('DELETE', '/computers/:id', ({ params, query }) => {
   requireManager();
   const index = db.computers.findIndex((c) => c.id === params.id);
   if (index < 0) throw new HttpError(404, 'Computer not found');
-  // The mock keeps agents pointing at real computers; the API revokes instead (see B1).
-  if (db.agents.some((a) => a.computerId === params.id))
+  const computer = db.computers[index]!;
+  const attached = db.agents.filter((a) => a.computerId === params.id);
+  const targetId = query.get('moveAgentsTo');
+  if (targetId) {
+    const target = db.computers.find(
+      (c) => c.id === targetId && c.id !== params.id && !c.revokedAt,
+    );
+    if (!target) throw new HttpError(400, 'Máy đích không hợp lệ để chuyển agent');
+    for (const a of attached) {
+      a.computerId = target.id;
+      a.simulated = target.simulated;
+    }
+  } else if (attached.length && computer.simulated) {
+    for (const a of attached) backend.deleteAgent(a.id);
+  } else if (attached.length) {
+    // The mock keeps agents pointing at real computers; the API revokes instead (see B1).
     throw new HttpError(409, 'Máy còn agent. Chuyển hoặc xoá agent trước khi gỡ máy.');
+  }
   db.computers.splice(index, 1);
   backend.emit({ type: 'computers.changed' });
+  backend.emit({ type: 'agents.changed' });
+  backend.emit({ type: 'rooms.changed' });
   return null;
 });
 on('GET', '/agents', () => db.agents);

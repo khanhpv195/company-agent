@@ -13,16 +13,21 @@ export const useCreatePairingCode = () =>
     meta: { silentError: true },
   });
 
-/** Revokes a real computer (owner/admin). The API answers 409 for simulated ones. */
+/** Revokes a computer (owner/admin), demo ones too; `moveAgentsTo` re-homes its agents. */
 export const useRevokeComputer = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (computerId: string) => api.delete<null>(`/computers/${computerId}`),
+    mutationFn: ({ computerId, moveAgentsTo }: { computerId: string; moveAgentsTo?: string }) =>
+      api.delete<null>(
+        `/computers/${computerId}${moveAgentsTo ? `?moveAgentsTo=${encodeURIComponent(moveAgentsTo)}` : ''}`,
+      ),
     meta: { silentError: true },
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: qk.computers }),
         qc.invalidateQueries({ queryKey: qk.agents }),
+        qc.invalidateQueries({ queryKey: qk.rooms }),
+        qc.invalidateQueries({ queryKey: qk.tasks }),
         qc.invalidateQueries({ queryKey: qk.billing }),
       ]),
   });

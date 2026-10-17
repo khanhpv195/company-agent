@@ -142,7 +142,16 @@ export function ComputersPage() {
                           <Icon name="plus" size={14} /> {t('people.addAgent')}
                         </button>
                       )}
-                      {!isSimulated(c) && !c.revokedAt && (
+                      {c.revokedAt && people.agents.some((a) => a.computerId === c.id) && (
+                        <button
+                          className="btn sm"
+                          title={t('computers.moveAgentsTitle', { name: c.name })}
+                          onClick={() => setRevoking(c)}
+                        >
+                          {t('computers.moveAgents')}
+                        </button>
+                      )}
+                      {!c.revokedAt && (
                         <button
                           className="btn sm"
                           style={{ marginLeft: 6 }}

@@ -48,7 +48,7 @@ export class SimulatorService implements OnModuleInit, OnModuleDestroy {
       }>(
         await this.computers.query(
           `WITH prev AS (
-             SELECT id, status FROM computers WHERE simulated = true FOR UPDATE
+             SELECT id, status FROM computers WHERE simulated = true AND revoked_at IS NULL FOR UPDATE
            ), upd AS (
              UPDATE computers c
              SET status = 'online', last_heartbeat_at = $1, updated_at = $1

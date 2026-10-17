@@ -1,9 +1,9 @@
-import { Controller, Delete, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
+import { Controller, Delete, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApiWrappedResponse, CurrentAuth, ResponseMessage, Roles } from '../../common/decorators';
 import { AuthContext } from '../../common/types';
 import { ComputerAdminService } from './computer-admin.service';
-import { PairingCodeDto } from './dto/daemon.dto';
+import { PairingCodeDto, RevokeComputerQueryDto } from './dto/daemon.dto';
 import { PairingService } from './pairing.service';
 
 /** Owner/admin actions on the workspace's computers (the read side lives in ComputersModule). */
@@ -31,10 +31,15 @@ export class ComputersAdminController {
   @HttpCode(HttpStatus.OK)
   @ResponseMessage('computers.REVOKED')
   @ApiOperation({
-    summary: 'Revoke a computer: its API key stops working and its open work is cancelled',
+    summary:
+      'Revoke a computer (demo ones too): its API key stops working and its open work is cancelled; `moveAgentsTo` re-homes its agents',
   })
   @ApiWrappedResponse(null)
-  revoke(@CurrentAuth() auth: AuthContext, @Param('id') id: string) {
-    return this.admin.revoke(auth, id);
+  revoke(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id') id: string,
+    @Query() query: RevokeComputerQueryDto,
+  ) {
+    return this.admin.revoke(auth, id, query.moveAgentsTo);
   }
 }

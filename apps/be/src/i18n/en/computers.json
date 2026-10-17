@@ -3,5 +3,5 @@
   "NOT_FOUND": "Computer not found",
   "PAIRING_CODE_CREATED": "Pairing code created",
   "REVOKED": "Computer revoked",
-  "SIMULATED": "A simulated computer cannot be revoked"
+  "INVALID_MOVE_TARGET": "The target computer is not available for moving agents"
 }

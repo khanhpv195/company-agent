@@ -1009,7 +1009,7 @@ describe('Gateway over HTTP (e2e)', () => {
       });
     });
 
-    it('answers 404 for unknown or foreign computers and 409 for simulated ones', async () => {
+    it('answers 404 for unknown or foreign computers and removes a simulated one', async () => {
       await call(
         'delete',
         `/computers/${'0'.repeat(8)}-0000-4000-8000-000000000000`,
@@ -1021,7 +1021,7 @@ describe('Gateway over HTTP (e2e)', () => {
       const stranger = await registerAndLogin(app);
       await call('delete', `/computers/${paired.computerId}`, undefined, stranger, 404);
       const sim = await createComputer(dataSource, me.workspaceId, { simulated: true });
-      await call('delete', `/computers/${sim.id}`, undefined, me, 409);
+      await call('delete', `/computers/${sim.id}`, undefined, me, 200);
     });
   });
 

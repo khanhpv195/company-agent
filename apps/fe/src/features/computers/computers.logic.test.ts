@@ -3,6 +3,7 @@ import {
   arrivals,
   formatCountdown,
   isSimulated,
+  revokeOptions,
   pairingCommand,
   secondsLeft,
   selectableComputers,
@@ -66,5 +67,41 @@ describe('selectableComputers', () => {
 
   it('returns an empty list when every computer is revoked', () => {
     expect(selectableComputers([pc('a', { revokedAt: '2026-10-16T00:00:00.000Z' })])).toEqual([]);
+  });
+
+  describe('revokeOptions', () => {
+    const real = pc('real');
+    const demo = pc('demo', { simulated: true });
+    const other = pc('other');
+    const gone = pc('gone', { revokedAt: '2026-10-17T00:00:00.000Z' });
+
+    it('offers nothing without agents', () => {
+      expect(revokeOptions(real, 0, [real, other]).choices).toEqual([]);
+    });
+
+    it('defaults to moving to a real computer, real ones first, revoked never', () => {
+      const o = revokeOptions(demo, 2, [demo, pc('d2', { simulated: true }), gone, other]);
+      expect(o.targets.map((c) => c.id)).toEqual(['other', 'd2']);
+      expect(o.choices).toEqual(['move', 'delete']);
+      expect(o.defaultChoice).toBe('move');
+      expect(o.defaultTarget).toBe('other');
+    });
+
+    it('a real computer keeps its agents as the alternative to moving', () => {
+      const o = revokeOptions(real, 1, [real, other]);
+      expect(o.choices).toEqual(['move', 'keep']);
+    });
+
+    it('with no other computer only delete (demo) or keep (real) remains', () => {
+      expect(revokeOptions(demo, 1, [demo]).choices).toEqual(['delete']);
+      expect(revokeOptions(demo, 1, [demo]).defaultChoice).toBe('delete');
+      expect(revokeOptions(real, 1, [real, gone]).choices).toEqual(['keep']);
+    });
+
+    it('does not preselect move when only demo computers could receive the agents', () => {
+      const o = revokeOptions(real, 1, [real, demo]);
+      expect(o.choices).toEqual(['move', 'keep']);
+      expect(o.defaultChoice).toBe('keep');
+    });
   });
 });

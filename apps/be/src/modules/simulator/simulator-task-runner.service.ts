@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ConfigType } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { agentConfig } from '../../config';
 import { SIMULATOR_TASK_TICK_MS } from '../../contacts';
 import { Computer } from '../computers/entities/computer.entity';
@@ -54,7 +54,9 @@ export class SimulatorTaskRunner implements AgentRunner, OnModuleInit, OnModuleD
     if (this.busy) return;
     this.busy = true;
     try {
-      const simulated = await this.computers.find({ where: { simulated: true } });
+      const simulated = await this.computers.find({
+        where: { simulated: true, revokedAt: IsNull() },
+      });
       const byWorkspace = new Map<string, Set<string>>();
       for (const computer of simulated) {
         const ids = byWorkspace.get(computer.workspaceId) ?? new Set<string>();

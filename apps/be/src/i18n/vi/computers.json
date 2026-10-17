@@ -3,5 +3,5 @@
   "NOT_FOUND": "Không tìm thấy máy",
   "PAIRING_CODE_CREATED": "Đã tạo mã ghép nối",
   "REVOKED": "Đã gỡ máy",
-  "SIMULATED": "Không thể gỡ máy mô phỏng"
+  "INVALID_MOVE_TARGET": "Máy đích không hợp lệ để chuyển agent"
 }
