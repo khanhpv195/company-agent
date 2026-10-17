@@ -1,7 +1,12 @@
 /** Longest message a member can send. */
 export const MAX_MESSAGE_LENGTH = 20_000;
-/** `GET /chats/:id/messages` returns at most this many (the latest ones). */
+/** `GET /chats/:id/messages` (legacy) returns at most this many (the latest ones). */
 export const MESSAGES_PAGE_LIMIT = 200;
+/** `GET /rooms/:id/messages` and the thread route: default and maximum page size. */
+export const TIMELINE_PAGE_DEFAULT = 50;
+export const TIMELINE_PAGE_MAX = 100;
+/** One message wakes at most this many agents (explicit agent first, then @mentions in order). */
+export const MAX_WAKE_PER_MESSAGE = 3;
 
 /** Domain event: an agent reply was created and waits for a runner (simulator or daemon). */
 export const CHAT_REPLY_REQUESTED_EVENT = 'chat.reply.requested';

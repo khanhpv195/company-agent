@@ -2,7 +2,7 @@ import { ConflictException, Inject, Injectable, Logger, NotFoundException } from
 import { ConfigType } from '@nestjs/config';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, IsNull } from 'typeorm';
 import { ClockService } from '../../common/clock';
 import { transactionWithEffects } from '../../common/utils';
 import { agentConfig, i18nConfig } from '../../config';
@@ -152,7 +152,11 @@ export class SimulatorChatRunner {
       const tx = { manager, effects };
       await this.gateway.progress(id, attempt, [{ kind: 'step', payload: { turns: 1 } }], tx);
       await this.gateway.result(id, attempt, { status: 'completed' }, tx);
-      await manager.update(ChatMessage, { id: messageId }, { markdown: full, status: 'complete' });
+      await manager.update(
+        ChatMessage,
+        { id: messageId, deletedAt: IsNull() },
+        { markdown: full, status: 'complete' },
+      );
       const message = await this.chat.loadMessage(messageId, manager);
       effects.push(() => this.chat.publishMessage(workspaceId, message, memberIds));
       await this.recordRun(manager, effects, ctx, text, true);
@@ -164,7 +168,11 @@ export class SimulatorChatRunner {
     const id = ctx.assignment.id;
     await transactionWithEffects(this.dataSource, async (manager, effects) => {
       await this.gateway.expire(id, error, { manager, effects });
-      await manager.update(ChatMessage, { id: ctx.message.id }, { status: 'failed' });
+      await manager.update(
+        ChatMessage,
+        { id: ctx.message.id, deletedAt: IsNull() },
+        { status: 'failed' },
+      );
       const message = await this.chat.loadMessage(ctx.message.id, manager);
       effects.push(() =>
         this.chat.publishMessage(ctx.assignment.workspaceId, message, ctx.memberIds),

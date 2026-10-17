@@ -34,5 +34,15 @@
   "TOO_MANY_MEMBERS": "Quá nhiều thành viên hoặc agent cùng lúc",
   "INVALID_MEMBER_KIND": "Loại phải là member hoặc agent",
   "AGENT_NOT_IN_ROOM": "Agent này không có trong phòng",
-  "ROOM_IS_DEFAULT": "Đây là kênh mặc định: không thể xóa hoặc chuyển thành riêng tư"
+  "ROOM_IS_DEFAULT": "Đây là kênh mặc định: không thể xóa hoặc chuyển thành riêng tư",
+  "THREAD_LOADED": "Đã tải chủ đề",
+  "THREAD_RENAMED": "Đã đổi tên chủ đề",
+  "MESSAGE_EDITED": "Đã sửa tin nhắn",
+  "MESSAGE_DELETED": "Đã xóa tin nhắn",
+  "MESSAGE_NOT_FOUND": "Không tìm thấy tin nhắn",
+  "NOT_YOUR_MESSAGE": "Bạn chỉ có thể sửa tin nhắn của chính mình",
+  "THREAD_TITLE_WITH_PARENT": "Chỉ tin nhắn gốc mới có tên chủ đề",
+  "THREAD_TITLE_INVALID": "Tên chủ đề phải dài 1 đến 120 ký tự",
+  "QUOTE_NOT_FOUND": "Tin nhắn được trích dẫn không nằm trong phòng này",
+  "AGENT_OFFLINE": "Máy của agent này đang offline nên chưa thể trả lời"
 }

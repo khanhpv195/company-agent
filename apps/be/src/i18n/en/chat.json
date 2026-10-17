@@ -34,5 +34,15 @@
   "TOO_MANY_MEMBERS": "Too many members or agents at once",
   "INVALID_MEMBER_KIND": "The kind must be member or agent",
   "AGENT_NOT_IN_ROOM": "This agent is not in the room",
-  "ROOM_IS_DEFAULT": "This is the default channel: it cannot be deleted or made private"
+  "ROOM_IS_DEFAULT": "This is the default channel: it cannot be deleted or made private",
+  "THREAD_LOADED": "Thread loaded",
+  "THREAD_RENAMED": "Thread renamed",
+  "MESSAGE_EDITED": "Message edited",
+  "MESSAGE_DELETED": "Message deleted",
+  "MESSAGE_NOT_FOUND": "Message not found",
+  "NOT_YOUR_MESSAGE": "You can only edit your own messages",
+  "THREAD_TITLE_WITH_PARENT": "A thread title is only allowed on a new root message",
+  "THREAD_TITLE_INVALID": "A thread title must be 1 to 120 characters",
+  "QUOTE_NOT_FOUND": "The quoted message is not in this room",
+  "AGENT_OFFLINE": "This agent's computer is offline, so it cannot answer right now"
 }

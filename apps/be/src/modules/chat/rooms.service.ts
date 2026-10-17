@@ -8,12 +8,12 @@ import {
 import { InjectDataSource } from '@nestjs/typeorm';
 import type {
   BrowseRoom,
+  Message,
   Room as RoomContract,
   RoomAgent,
   RoomMember,
   RoomMemberRole,
   RoomMembers,
-  Thread as ThreadContract,
 } from '@repo/shared';
 import { isUUID } from 'class-validator';
 import { DataSource, EntityManager } from 'typeorm';
@@ -26,6 +26,7 @@ import { EventsService } from '../events';
 import { AgentGatewayService } from '../gateway/agent-gateway.service';
 import { MAX_MESSAGE_LENGTH, MAX_ROOM_ADDS } from './chat.constants';
 import { ChatService } from './chat.service';
+import { MessageStore } from './message-store.service';
 import type {
   AddRoomMembersDto,
   CreateRoomDto,
@@ -33,7 +34,6 @@ import type {
   UpdateRoomDto,
 } from './dto/rooms.dto';
 import { Room } from './entities/room.entity';
-import { Thread } from './entities/thread.entity';
 import {
   assertRoomNameFree,
   lockRooms,
@@ -63,6 +63,7 @@ export class RoomsService {
     private readonly events: EventsService,
     private readonly audit: AuditService,
     private readonly chat: ChatService,
+    private readonly store: MessageStore,
     private readonly gateway: AgentGatewayService,
   ) {}
 
@@ -220,7 +221,7 @@ export class RoomsService {
     return this.require(auth, roomId);
   }
 
-  /** Threads, their messages and read cursors go with the room; open chat runs are cancelled. */
+  /** Its messages (threads included) and read cursors go with the room; open chat runs are cancelled. */
   async remove(auth: AuthContext, roomId: string): Promise<null> {
     // A runner reporting a result locks its assignment row, then its message: this transaction
     // locks (and cancels) the assignments first, then deletes the messages, in the same order.
@@ -234,20 +235,18 @@ export class RoomsService {
         const { room } = access;
         if (room.isDefault) throw new BadRequestException({ message: 'chat.ROOM_IS_DEFAULT' });
         const audience = await roomMemberIds(manager, room.id);
-        const threadIds = (
-          await manager.find(Thread, { where: { roomId: room.id }, select: { id: true } })
-        ).map((thread) => thread.id);
-        if (threadIds.length) {
-          await this.cancelOpenReplies(manager, effects, threadIds, null);
-          await manager.query(`DELETE FROM messages WHERE chat_id = ANY($1::uuid[])`, [threadIds]);
-          await manager.query(`DELETE FROM thread_reads WHERE chat_id = ANY($1::uuid[])`, [
-            threadIds,
-          ]);
-          await manager.query(
-            `UPDATE tasks SET chat_id = NULL WHERE workspace_id = $1 AND chat_id = ANY($2::text[])`,
-            [auth.workspaceId, threadIds],
-          );
-        }
+        // Open runs end first; the messages go with the room (foreign key), their read marks
+        // and the tasks linked to a thread of the room are cleaned up here.
+        await this.cancelOpenReplies(manager, effects, room.id, null);
+        await manager.query(
+          `DELETE FROM thread_reads WHERE chat_id IN (SELECT id FROM messages WHERE room_id = $1)`,
+          [room.id],
+        );
+        await manager.query(
+          `UPDATE tasks SET chat_id = NULL
+           WHERE workspace_id = $1 AND chat_id IN (SELECT id::text FROM messages WHERE room_id = $2)`,
+          [auth.workspaceId, room.id],
+        );
         await manager.delete(Room, { id: room.id });
         await this.audit.record(
           {
@@ -388,43 +387,30 @@ export class RoomsService {
     return access ? this.roster(manager, roomId) : { members: [], agents: [] };
   }
 
-  async createThread(
-    auth: AuthContext,
-    roomId: string,
-    dto: CreateThreadDto,
-  ): Promise<ThreadContract> {
-    // The first message is checked before anything is written, and is sent in the same
-    // transaction as the thread: a failing send leaves no empty thread behind.
+  /**
+   * Compatibility wrapper over the send path: posts a root message of the channel with
+   * `threadTitle` = the name (its text is `message`, or the name when none is given) and
+   * returns that root message. Agents mentioned in `message` answer under it.
+   */
+  async createThread(auth: AuthContext, roomId: string, dto: CreateThreadDto): Promise<Message> {
     const text = dto.message?.trim();
     if (text && text.length > MAX_MESSAGE_LENGTH) {
       throw new BadRequestException({ message: 'chat.MESSAGE_TOO_LONG' });
     }
-    const threadId = await transactionWithEffects(this.dataSource, async (manager, effects) => {
+    return transactionWithEffects(this.dataSource, async (manager, effects) => {
       // The rooms lock: a concurrent room delete is seen as "not found", never a raw FK error.
       await this.lock(manager, auth.workspaceId);
       const access = await this.access(manager, auth, roomId);
       this.assertEditable(access.room);
       if (!access.role) throw new ForbiddenException({ message: 'chat.FORBIDDEN' });
-      const thread = await manager.save(
-        manager.create(Thread, {
-          workspaceId: auth.workspaceId,
-          roomId: access.room.id,
-          name: dto.name,
-          connectionId: null,
-          createdAt: this.clock.now(),
-        }),
+      return this.store.send(
+        auth,
+        access.room.id,
+        // The name stands in for a missing text and is never searched for @mentions.
+        { markdown: text || dto.name, threadTitle: dto.name, mentionsFrom: text ?? '' },
+        { manager, effects },
       );
-      // Through the normal send path (mentions wake the channel's agents).
-      if (text)
-        await this.chat.sendMessage(auth, thread.id, { markdown: text }, { manager, effects });
-      // Threads are only visible to the room's members, even in a public room.
-      this.changed(effects, auth, true, await roomMemberIds(manager, access.room.id));
-      return thread.id;
     });
-    const room = await this.chat.roomOf(auth, roomId);
-    const thread = room?.threads.find((item) => item.id === threadId);
-    if (!thread) throw this.notFound(roomId);
-    return thread;
   }
 
   // ---------- internals ----------
@@ -469,23 +455,22 @@ export class RoomsService {
   }
 
   /**
-   * Cancels the open chat runs of the given threads (optionally of one agent only). The
+   * Cancels the open chat runs of a room (optionally of one agent only). The
    * assignments are locked first, in id order, like a runner reporting its result does.
    */
   private async cancelOpenReplies(
     manager: EntityManager,
     effects: AfterCommit[],
-    threadIds: string[],
+    roomId: string,
     agentId: string | null,
   ): Promise<void> {
-    if (!threadIds.length) return;
     const open = returnedRows<{ id: string }>(
       await manager.query(
         `SELECT a.id FROM assignments a
          WHERE a.status = ANY($2::text[]) AND ($3::uuid IS NULL OR a.agent_id = $3)
-           AND a.id IN (SELECT m.assignment_id FROM messages m WHERE m.chat_id = ANY($1::uuid[]))
+           AND a.id IN (SELECT m.assignment_id FROM messages m WHERE m.room_id = $1)
          ORDER BY a.id FOR UPDATE`,
-        [threadIds, OPEN_STATUSES, agentId],
+        [roomId, OPEN_STATUSES, agentId],
       ),
     );
     for (const { id } of open) {
@@ -650,11 +635,8 @@ export class RoomsService {
       await promoteRoomOwner(manager, room.id);
     }
     if (kind === 'agent') {
-      // An agent that left the room stops answering in it: its open replies in the room's threads end.
-      const threadIds = (
-        await manager.find(Thread, { where: { roomId: room.id }, select: { id: true } })
-      ).map((thread) => thread.id);
-      await this.cancelOpenReplies(manager, effects, threadIds, targetId);
+      // An agent that left the room stops answering in it: its open replies in the room end.
+      await this.cancelOpenReplies(manager, effects, room.id, targetId);
     }
     await this.audit.record(
       {

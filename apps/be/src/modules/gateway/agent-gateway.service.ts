@@ -182,7 +182,7 @@ export class AgentGatewayService {
              JOIN messages m ON m.assignment_id = a.id
              WHERE o.agent_id = a.agent_id AND o.id <> a.id
                AND o.source_kind = 'chat' AND o.status IN ('claimed', 'running')
-               AND om.chat_id = m.chat_id))`,
+               AND coalesce(om.parent_id, om.room_id) = coalesce(m.parent_id, m.room_id)))`,
         );
         if (agentId) query.andWhere('a.agent_id = :agentId', { agentId });
         if (sourceKind) query.andWhere('a.source_kind = :sourceKind', { sourceKind });

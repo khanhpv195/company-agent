@@ -1,5 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { i18nValidationMessage } from 'nestjs-i18n';
 import type {
   Assignment,
@@ -8,15 +18,27 @@ import type {
   Message,
   MessageAuthor,
   MessageDraft,
+  MessageQuote,
+  SkippedAgent,
+  MessageThread,
+  PostRoomMessageInput,
   Room,
   RoomIcon,
   RoomKind,
   RoomMemberRole,
+  RoomTimelinePage,
   SendMessageInput,
+  ThreadPage,
   Thread,
   ToolCall,
 } from '@repo/shared';
-import { MAX_MESSAGE_LENGTH } from '../chat.constants';
+import { cleanName } from '../../../common/utils';
+import {
+  MAX_MESSAGE_LENGTH,
+  THREAD_NAME_MAX,
+  TIMELINE_PAGE_DEFAULT,
+  TIMELINE_PAGE_MAX,
+} from '../chat.constants';
 
 const ASSIGNMENT_STATUSES: AssignmentStatus[] = [
   'pending',
@@ -163,12 +185,66 @@ class MessageDraftDto implements MessageDraft {
   state: MessageDraft['state'];
 }
 
+class MessageThreadDto implements MessageThread {
+  @ApiProperty({ type: String, nullable: true })
+  title: string | null;
+
+  @ApiProperty()
+  replyCount: number;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  lastReplyAt: string | null;
+
+  @ApiProperty({ type: [String], description: 'Member and agent ids, at most 5' })
+  participantIds: string[];
+}
+
+class MessageQuoteDto implements MessageQuote {
+  @ApiProperty({ format: 'uuid' })
+  id: string;
+
+  @ApiProperty()
+  authorName: string;
+
+  @ApiProperty()
+  excerpt: string;
+}
+
+export class SkippedAgentDto implements SkippedAgent {
+  @ApiProperty({ format: 'uuid' })
+  agentId: string;
+
+  @ApiProperty()
+  name: string;
+
+  @ApiProperty({ enum: ['offline', 'not_in_room', 'limit'] })
+  reason: 'offline' | 'not_in_room' | 'limit';
+}
+
 export class MessageDto implements Message {
   @ApiProperty({ format: 'uuid' })
   id: string;
 
-  @ApiProperty({ format: 'uuid' })
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'Legacy chat id: the DM room id for a DM main-timeline message, otherwise the thread root id',
+  })
   chatId: string;
+
+  @ApiProperty({ format: 'uuid' })
+  roomId: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description: 'Thread root; null on the main timeline',
+  })
+  parentId: string | null;
+
+  @ApiProperty({ description: 'Arrival order inside the room (paging cursor)' })
+  seq: number;
 
   @ApiProperty({
     description: '{ kind: "human" | "agent", id } or { kind: "external", connectionId, name }',
@@ -191,6 +267,49 @@ export class MessageDto implements Message {
 
   @ApiProperty({ type: MessageDraftDto, nullable: true })
   draft: MessageDraftDto | null;
+
+  @ApiProperty({ type: String, nullable: true, description: 'Roots only: the thread title' })
+  threadTitle: string | null;
+
+  @ApiPropertyOptional({ type: MessageThreadDto, description: 'Roots with a title or replies' })
+  thread?: MessageThreadDto;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  editedAt: string | null;
+
+  @ApiProperty({ description: 'Soft-deleted: markdown is empty' })
+  deleted: boolean;
+
+  @ApiProperty({ type: MessageQuoteDto, nullable: true })
+  quote: MessageQuoteDto | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  clientMessageId: string | null;
+
+  @ApiPropertyOptional({
+    type: [SkippedAgentDto],
+    description: 'Only in the answer to a send: mentioned agents that were not woken',
+  })
+  skippedAgents?: SkippedAgentDto[];
+}
+
+export class RoomTimelinePageDto implements RoomTimelinePage {
+  @ApiProperty({ type: [MessageDto], description: 'Oldest first within the page' })
+  messages: MessageDto[];
+
+  @ApiProperty({ description: 'Older messages exist before the first one of this page' })
+  hasMore: boolean;
+}
+
+export class ThreadPageDto implements ThreadPage {
+  @ApiProperty({ type: MessageDto })
+  root: MessageDto;
+
+  @ApiProperty({ type: [MessageDto] })
+  replies: MessageDto[];
+
+  @ApiProperty({ description: 'More replies exist after the last one of this page' })
+  hasMore: boolean;
 }
 
 export class DmChatDto {
@@ -209,4 +328,89 @@ export class SendMessageDto implements SendMessageInput {
   @IsOptional()
   @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
   agentId?: string;
+}
+
+export class PostRoomMessageDto extends SendMessageDto implements PostRoomMessageInput {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Reply in the thread of this message (a reply id attaches to its root)',
+  })
+  @IsOptional()
+  @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
+  parentId?: string;
+
+  @ApiPropertyOptional({
+    minLength: 1,
+    maxLength: THREAD_NAME_MAX,
+    description: 'Only without parentId: starts a titled thread',
+  })
+  @IsOptional()
+  @Transform(cleanName)
+  @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
+  @IsNotEmpty({ message: i18nValidationMessage('validation.IS_NOT_EMPTY') })
+  @MaxLength(THREAD_NAME_MAX, { message: i18nValidationMessage('validation.MAX_LENGTH') })
+  threadTitle?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
+  quoteMessageId?: string;
+
+  @ApiPropertyOptional({ maxLength: 100, description: 'Idempotency key per (room, author)' })
+  @IsOptional()
+  @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
+  @MaxLength(100, { message: i18nValidationMessage('validation.MAX_LENGTH') })
+  clientMessageId?: string;
+}
+
+export class EditMessageDto {
+  @ApiProperty({ maxLength: MAX_MESSAGE_LENGTH })
+  @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
+  @MaxLength(MAX_MESSAGE_LENGTH, { message: i18nValidationMessage('validation.MAX_LENGTH') })
+  markdown: string;
+}
+
+export class RenameThreadDto {
+  @ApiProperty({ minLength: 1, maxLength: THREAD_NAME_MAX })
+  @Transform(cleanName)
+  @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
+  @IsNotEmpty({ message: i18nValidationMessage('validation.IS_NOT_EMPTY') })
+  @MaxLength(THREAD_NAME_MAX, { message: i18nValidationMessage('validation.MAX_LENGTH') })
+  title: string;
+}
+
+const SEQ_PATTERN = /^\d{1,18}$/;
+
+export class TimelineQueryDto {
+  @ApiPropertyOptional({
+    description: 'Only messages with a smaller seq (the `seq` of the oldest one loaded)',
+  })
+  @IsOptional()
+  @Matches(SEQ_PATTERN, { message: i18nValidationMessage('validation.IS_INT') })
+  beforeSeq?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: TIMELINE_PAGE_MAX, default: TIMELINE_PAGE_DEFAULT })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: i18nValidationMessage('validation.IS_INT') })
+  @Min(1, { message: i18nValidationMessage('validation.MIN') })
+  @Max(TIMELINE_PAGE_MAX, { message: i18nValidationMessage('validation.MAX') })
+  limit: number = TIMELINE_PAGE_DEFAULT;
+}
+
+export class ThreadQueryDto {
+  @ApiPropertyOptional({
+    description: 'Only replies with a greater seq (the `seq` of the last one loaded)',
+  })
+  @IsOptional()
+  @Matches(SEQ_PATTERN, { message: i18nValidationMessage('validation.IS_INT') })
+  afterSeq?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: TIMELINE_PAGE_MAX, default: TIMELINE_PAGE_DEFAULT })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: i18nValidationMessage('validation.IS_INT') })
+  @Min(1, { message: i18nValidationMessage('validation.MIN') })
+  @Max(TIMELINE_PAGE_MAX, { message: i18nValidationMessage('validation.MAX') })
+  limit: number = TIMELINE_PAGE_DEFAULT;
 }

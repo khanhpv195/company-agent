@@ -12,7 +12,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApiWrappedResponse, CurrentAuth, ResponseMessage } from '../../common/decorators';
 import { AuthContext } from '../../common/types';
-import { ThreadDto, RoomDto } from './dto/chat.dto';
+import { MessageDto, RoomDto } from './dto/chat.dto';
 import {
   AddRoomMembersDto,
   BrowseRoomDto,
@@ -122,8 +122,11 @@ export class RoomsController {
   @Post(':id/threads')
   @HttpCode(HttpStatus.OK)
   @ResponseMessage('chat.THREAD_CREATED')
-  @ApiOperation({ summary: 'Start a thread in a channel, optionally with a first message' })
-  @ApiWrappedResponse(ThreadDto)
+  @ApiOperation({
+    summary:
+      'Compatibility wrapper: post a titled root message (a new thread) in a channel; answers with that root Message (not a thread object); only the message text is searched for @mentions',
+  })
+  @ApiWrappedResponse(MessageDto)
   createThread(
     @CurrentAuth() auth: AuthContext,
     @Param('id') id: string,

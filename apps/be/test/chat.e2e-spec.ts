@@ -14,7 +14,6 @@ import { DashboardService } from '../src/modules/dashboard/dashboard.service';
 import { ChatService } from '../src/modules/chat/chat.service';
 import { ChatMessage } from '../src/modules/chat/entities/chat-message.entity';
 import { Room as RoomRow } from '../src/modules/chat/entities/room.entity';
-import { Thread } from '../src/modules/chat/entities/thread.entity';
 import { EventsService, REALTIME_EVENT, type RealtimeEnvelope } from '../src/modules/events';
 import { Agent } from '../src/modules/agents/entities/agent.entity';
 import { AgentActivity } from '../src/modules/agents/entities/agent-activity.entity';
@@ -156,17 +155,30 @@ describe('Chat (e2e)', () => {
     );
     channelId = channel.id;
     await joinAll(dataSource, channel.id, [me.memberId, member.id], [a1.id, a2.id, a3.id]);
+    // The thread "Hello": a root message of the channel (its id is the legacy thread id).
     threadId = (
-      await dataSource.getRepository(Thread).save(
-        dataSource.getRepository(Thread).create({
+      await dataSource.getRepository(ChatMessage).save(
+        dataSource.getRepository(ChatMessage).create({
           workspaceId,
           roomId: channel.id,
-          name: 'Hello',
-          connectionId: null,
-          createdAt: clock.now(),
+          parentId: null,
+          threadTitle: 'Hello',
+          authorKind: 'human',
+          authorMemberId: me.memberId,
+          status: 'complete',
+          markdown: 'Hello',
+          draft: null,
+          createdAt: new Date(clock.now().getTime() - 120_000),
         }),
       )
     ).id;
+    // Both members have read the thread already (unread starts at 0).
+    for (const memberId of [me.memberId, member.id]) {
+      await dataSource.query(
+        `INSERT INTO thread_reads (member_id, chat_id, last_read_at) VALUES ($1, $2, $3)`,
+        [memberId, threadId, new Date(clock.now().getTime() - 60_000)],
+      );
+    }
     realtime = [];
     ended = [];
     emitter.removeAllListeners(REALTIME_EVENT);
@@ -322,7 +334,7 @@ describe('Chat (e2e)', () => {
     const mine = await dmOf(a1);
     const before = await rooms();
     expect(before[1]).toMatchObject({ id: channelId, preview: '' });
-    expect(before[1].threads[0]).toMatchObject({ preview: '', unread: 0 });
+    expect(before[1].threads[0]).toMatchObject({ preview: 'Hello', unread: 0 });
 
     clock.advance(1000);
     const first = await send(threadId, '**Bold** and `code` here\nsecond line');
@@ -397,18 +409,23 @@ describe('Chat (e2e)', () => {
     await send(threadId, 'please help', { agentId: a3.id });
     expect(await agentOfLastReply(threadId)).toEqual({ kind: 'agent', id: a3.id });
 
-    // @mention in a thread (first agent of the chat whose name appears)
+    // every @mentioned agent of the chat answers, in mention order
+    const before = (await replies(threadId)).length;
     await send(threadId, "Hello @Research Bot and @khanhpv's Claude");
-    expect(await agentOfLastReply(threadId)).toEqual({ kind: 'agent', id: a1.id });
+    expect((await replies(threadId)).slice(before).map((m) => m.author)).toEqual([
+      { kind: 'agent', id: a2.id },
+      { kind: 'agent', id: a1.id },
+    ]);
     await send(threadId, 'Hello @Research Bot');
     expect(await agentOfLastReply(threadId)).toEqual({ kind: 'agent', id: a2.id });
 
-    // mentions are case-sensitive and must name an agent of the chat
+    // mentions are case-insensitive, and must name an agent of the chat that is not offline
     const count = (await replies(threadId)).length;
     await send(threadId, 'hello @research bot');
+    expect((await replies(threadId)).length).toBe(count + 1);
     await send(threadId, 'hello @Deployer (offline, so not in this thread)');
     await send(threadId, 'no mention at all');
-    expect((await replies(threadId)).length).toBe(count);
+    expect((await replies(threadId)).length).toBe(count + 1);
 
     // a DM answers with its partner, mention or not
     await send(mine, 'anything');
@@ -471,7 +488,7 @@ describe('Chat (e2e)', () => {
       toolCalls: 0,
       turns: 1,
     });
-    expect(await dataSource.getRepository(ChatMessage).count({ where: { chatId: mine } })).toBe(2);
+    expect(await dataSource.getRepository(ChatMessage).count({ where: { roomId: mine } })).toBe(2);
 
     // the run is over: activity, domain event, derived agent status
     expect(ended).toEqual([
@@ -547,11 +564,22 @@ describe('Chat (e2e)', () => {
     });
   });
 
-  it('expires the reply of an agent whose computer is offline', async () => {
+  it('refuses a DM to an agent whose computer is offline instead of hanging', async () => {
     const mine = await dmOf(a3);
+    expect(
+      await errorOf('post', `/chats/${mine}/messages`, { markdown: 'deploy please' }, 409),
+    ).toBe("This agent's computer is offline, so it cannot answer right now");
+    // nothing was stored and nobody was woken
+    expect(await messages(mine)).toEqual([]);
+    expect(await dataSource.getRepository(Assignment).count()).toBe(0);
+    await dataSource.query(`UPDATE computers SET status = 'online'`);
     await send(mine, 'deploy please');
-    await drainUntil(replyDone(mine));
-    const [reply] = await replies(mine);
+  });
+
+  it('expires the reply of an agent whose computer is offline (explicit agent in a thread)', async () => {
+    await send(threadId, 'deploy please', { agentId: a3.id });
+    await drainUntil(replyDone(threadId));
+    const [reply] = await replies(threadId);
     expect(reply).toMatchObject({ status: 'failed', markdown: '' });
     expect(reply.assignment).toMatchObject({
       status: 'expired',
@@ -717,8 +745,8 @@ describe('Chat (e2e)', () => {
     for (let i = 0; i < 205; i++) {
       await repo.insert({
         workspaceId: me.workspaceId,
-        chatId: threadId,
-        chatKind: 'thread',
+        roomId: channelId,
+        parentId: threadId,
         authorKind: 'human',
         authorMemberId: me.memberId,
         status: 'complete',
@@ -746,8 +774,8 @@ describe('Chat (e2e)', () => {
     const draft = await repo.save(
       repo.create({
         workspaceId: me.workspaceId,
-        chatId: threadId,
-        chatKind: 'thread',
+        roomId: channelId,
+        parentId: threadId,
         authorKind: 'agent',
         authorAgentId: a1.id,
         status: 'complete',
@@ -778,8 +806,7 @@ describe('Chat (e2e)', () => {
     const hidden = await repo.save(
       repo.create({
         workspaceId: me.workspaceId,
-        chatId: mine,
-        chatKind: 'dm',
+        roomId: mine,
         authorKind: 'agent',
         authorAgentId: a1.id,
         status: 'complete',

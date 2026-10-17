@@ -12,22 +12,27 @@ import { Agent } from '../../agents/entities/agent.entity';
 import { Assignment } from '../../gateway/entities/assignment.entity';
 import { Member } from '../../workspace/entities/member.entity';
 import { Workspace } from '../../workspace/entities/workspace.entity';
+import { Room } from './room.entity';
 
-export type ChatKind = 'dm' | 'thread';
 export type AuthorKind = 'human' | 'agent' | 'external';
 export type MessageStatus = 'streaming' | 'complete' | 'failed';
 
 /**
- * A message of a DM room or a channel thread. `chatId` is polymorphic (a DM room id or a
- * thread id, told apart by `chatKind`), so it carries no foreign key.
+ * A message of a room (channel, DM or connection inbox). Every room has one main timeline
+ * (messages without `parentId`); a thread is the set of replies to one root message of that
+ * timeline (`parentId` = the root, never a reply). A root may carry a `threadTitle`.
  */
 @Entity('messages')
-@Index('IDX_messages_chat_created', ['chatId', 'createdAt'])
-// (chat_id, seq) serves `ORDER BY seq DESC LIMIT n` and DISTINCT ON via a backward scan;
+// (room_id, seq) serves `ORDER BY seq DESC LIMIT n` on a room timeline via a backward scan;
 // TypeORM cannot declare DESC columns without schema drift.
-@Index('IDX_messages_chat_seq', ['chatId', 'seq'])
+@Index('IDX_messages_room_seq', ['roomId', 'seq'])
+@Index('IDX_messages_parent_seq', ['parentId', 'seq'])
 @Index('IDX_messages_assignment', ['assignmentId'])
-@Check('CHK_messages_chat_kind', `"chat_kind" IN ('dm', 'thread')`)
+// Idempotent send: one message per (room, author, client id).
+@Index('UQ_messages_client_id', ['roomId', 'authorMemberId', 'clientMessageId'], {
+  unique: true,
+  where: `"client_message_id" IS NOT NULL`,
+})
 @Check('CHK_messages_author_kind', `"author_kind" IN ('human', 'agent', 'external')`)
 @Check('CHK_messages_status', `"status" IN ('streaming', 'complete', 'failed')`)
 export class ChatMessage {
@@ -42,10 +47,22 @@ export class ChatMessage {
   @JoinColumn({ name: 'workspace_id' })
   workspace: Workspace;
 
-  @Column({ name: 'chat_id', type: 'uuid' })
-  chatId: string;
+  @Column({ name: 'room_id', type: 'uuid' })
+  roomId: string;
 
-  /** Strict arrival order inside a chat (equal timestamps cannot reorder it). */
+  @ManyToOne(() => Room, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'room_id' })
+  room: Room;
+
+  /** The root message of the thread this message replies to; null on the main timeline. */
+  @Column({ name: 'parent_id', type: 'uuid', nullable: true })
+  parentId: string | null;
+
+  @ManyToOne(() => ChatMessage, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'parent_id' })
+  parent: ChatMessage | null;
+
+  /** Strict arrival order inside a room (equal timestamps cannot reorder it). */
   @Column({
     type: 'bigint',
     generated: 'identity',
@@ -55,8 +72,16 @@ export class ChatMessage {
   })
   seq: string;
 
-  @Column({ name: 'chat_kind', type: 'varchar' })
-  chatKind: ChatKind;
+  /** Title of the thread this root message starts (roots only). */
+  @Column({ name: 'thread_title', type: 'varchar', nullable: true })
+  threadTitle: string | null;
+
+  /** Live (not deleted) replies of a root message. */
+  @Column({ name: 'reply_count', type: 'int', default: 0 })
+  replyCount: number;
+
+  @Column({ name: 'last_reply_at', type: 'timestamptz', nullable: true })
+  lastReplyAt: Date | null;
 
   @Column({ name: 'author_kind', type: 'varchar' })
   authorKind: AuthorKind;
@@ -100,4 +125,29 @@ export class ChatMessage {
 
   @Column({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
+
+  @Column({ name: 'edited_at', type: 'timestamptz', nullable: true })
+  editedAt: Date | null;
+
+  /** Soft delete: the text is cleared and clients show a placeholder. */
+  @Column({ name: 'deleted_at', type: 'timestamptz', nullable: true })
+  deletedAt: Date | null;
+
+  /** Chosen by the sending client so a retried send is idempotent. */
+  @Column({ name: 'client_message_id', type: 'varchar', nullable: true })
+  clientMessageId: string | null;
+
+  /**
+   * A placeholder root made by the RoomTimelines migration for a converted thread that had no
+   * human or external first message. Not a real message: unread counts and previews skip it.
+   */
+  @Column({ name: 'system_root', type: 'boolean', default: false })
+  systemRoot: boolean;
+
+  @Column({ name: 'quote_message_id', type: 'uuid', nullable: true })
+  quoteMessageId: string | null;
+
+  @ManyToOne(() => ChatMessage, { onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'quote_message_id' })
+  quote: ChatMessage | null;
 }

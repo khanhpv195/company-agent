@@ -44,9 +44,12 @@ interface Claimed {
   context: string;
   requestedBy: { id: string; name: string; role: string } | null;
   leaseMs: number;
+  roomId?: string;
+  parentId?: string | null;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const NIL_ROOM = '00000000-0000-0000-0000-000000000000';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 describe('Gateway over HTTP (e2e)', () => {
@@ -503,6 +506,36 @@ describe('Gateway over HTTP (e2e)', () => {
       // a different report of the same attempt conflicts
       await gw(`/assignments/${second.id}/result`, { attempt: 1, status: 'completed' }, 409);
       await gw(`/assignments/${second.id}/result`, { attempt: 1, status: 'failed', error: 'x' });
+    });
+
+    it('never writes text or status into a reply that was deleted meanwhile', async () => {
+      const { claimed } = await runningChat('first');
+      await gw(`/assignments/${claimed.id}/progress`, {
+        attempt: 1,
+        events: [{ kind: 'text', delta: 'streamed' }],
+      });
+      const reply = await dataSource
+        .getRepository(ChatMessage)
+        .findOneByOrFail({ assignmentId: claimed.id });
+      // deleted behind the run's back (no cancel): the result must leave the placeholder alone
+      await dataSource.query(
+        `UPDATE messages SET markdown = '', deleted_at = now() WHERE id = $1`,
+        [reply.id],
+      );
+      await gw(`/assignments/${claimed.id}/result`, {
+        attempt: 1,
+        status: 'completed',
+        text: 'too late',
+      });
+      expect(
+        await dataSource.getRepository(ChatMessage).findOneByOrFail({ id: reply.id }),
+      ).toMatchObject({ markdown: '', status: 'streaming' });
+      const frames = realtime.filter(
+        (e) => e.event.type === 'message.upserted' && e.event.message.id === reply.id,
+      );
+      for (const frame of frames.slice(-1)) {
+        expect(frame.event).toMatchObject({ message: { markdown: '', deleted: true } });
+      }
     });
 
     it('rejects stale attempts and progress before accept', async () => {
@@ -1246,9 +1279,11 @@ describe('Gateway over HTTP (e2e)', () => {
       });
       const row = await dataSource.getRepository(Assignment).findOneByOrFail({ id: claimed.id });
       expect(row).toMatchObject({ status: 'completed', costUsd: 0.0123, numTurns: 3 });
-      const reply = await lastReply(
-        (await dataSource.getRepository(ChatMessage).findOneByOrFail({ id: row.sourceId })).chatId,
-      );
+      const placeholder = await dataSource
+        .getRepository(ChatMessage)
+        .findOneByOrFail({ id: row.sourceId });
+      // A DM reply stays on the DM main timeline: its chat id is the room id.
+      const reply = await lastReply(placeholder.parentId ?? placeholder.roomId);
       expect(reply.markdown.length).toBeLessThan(100_200);
       expect(reply.markdown).toContain('đã cắt bớt');
       expect(reply.assignment).toMatchObject({ costUsd: 0.0123 });
@@ -1290,6 +1325,98 @@ describe('Gateway over HTTP (e2e)', () => {
         .post(api('/gateway/pair'))
         .send({ ...body, code: codes[6] })
         .expect(200);
+    });
+  });
+  // ---------- room timelines and threads ----------
+  describe('chat runs on room timelines', () => {
+    const channel = (name: string) =>
+      call<{ id: string }>('post', '/rooms', { name, agentIds: [agent.id] }, member);
+    const roomPost = (roomId: string, body: object, client = member) =>
+      call<Message>('post', `/rooms/${roomId}/messages`, body, client);
+    const claimAccept = async () => {
+      const claimed = (await gw<Claimed | null>('/claim', { maxChats: 3 }))!;
+      await gw(`/assignments/${claimed.id}/accept`, { attempt: claimed.attempt });
+      return claimed;
+    };
+
+    it('hands a channel mention over as a thread reply: wire fields, brief and session key', async () => {
+      const room = await channel('ops');
+      await roomPost(room.id, { markdown: 'main timeline noise' });
+      const root = await roomPost(room.id, { markdown: 'Deploy plan', threadTitle: 'Deploy' });
+      const trigger = await roomPost(room.id, { markdown: '@Claude go ahead', parentId: root.id });
+      const claimed = await claimAccept();
+      // installed daemons ignore the additive fields
+      expect(claimed).toMatchObject({ kind: 'chat', roomId: room.id, parentId: root.id });
+      expect(claimed.prompt).toBe('@Claude go ahead');
+      expect(claimed.context).toContain(`Conversation: # ops › Deploy (chat ${root.id})`);
+      expect(claimed.context).toContain(`Room id: ${room.id}; thread root message id: ${root.id}`);
+      // the thread's messages are the history (the root too), not the room's main timeline
+      expect(claimed.context).toContain('**Extra member**: Deploy plan');
+      expect(claimed.context).not.toContain('main timeline noise');
+      const row = await dataSource.getRepository(Assignment).findOneByOrFail({ id: claimed.id });
+      expect(row.sessionKey).toBe(root.id); // the old thread id keeps its Claude session
+      expect(trigger.parentId).toBe(root.id);
+    });
+
+    it('post_message defaults to the thread of the run, or goes to an explicit roomId/parentId', async () => {
+      const room = await channel('ops2');
+      const trigger = await roomPost(room.id, { markdown: '@Claude hi' });
+      const claimed = await claimAccept();
+      // a main-timeline trigger became the root of the thread the agent answers in
+      expect(claimed).toMatchObject({ roomId: room.id, parentId: trigger.id });
+      const id = claimed.id;
+      const first = (await tool('post_message', id, { markdown: 'default place' }))
+        .result as Record<string, unknown>;
+      expect(first).toMatchObject({ chatId: trigger.id, roomId: room.id, parentId: trigger.id });
+      // legacy address: the thread root id as chatId
+      const legacy = (await tool('post_message', id, { chatId: trigger.id, markdown: 'legacy' }))
+        .result as Record<string, unknown>;
+      expect(legacy).toMatchObject({ parentId: trigger.id });
+      // new address: the room alone is its main timeline
+      const main = (await tool('post_message', id, { roomId: room.id, markdown: 'main' }))
+        .result as { id: string; parentId: string | null; chatId: string };
+      expect(main.parentId).toBeNull();
+      expect(main.chatId).toBe(main.id);
+      // a reply id attaches to its root
+      const nested = (
+        await tool('post_message', id, {
+          roomId: room.id,
+          parentId: first.id as string,
+          markdown: 'nested',
+        })
+      ).result as { parentId: string };
+      expect(nested.parentId).toBe(trigger.id);
+      const thread = await call<{ replies: Message[] }>(
+        'get',
+        `/rooms/${room.id}/messages/${trigger.id}/thread`,
+        undefined,
+        member,
+      );
+      expect(thread.replies.map((m) => m.markdown)).toEqual([
+        '', // the run's own (still streaming) reply
+        'default place',
+        'legacy',
+        'nested',
+      ]);
+      expect(thread.replies.filter((m) => m.author.kind === 'agent')).toHaveLength(4);
+      await toolError('post_message', id, { parentId: trigger.id, markdown: 'x' }, 400);
+      await toolError('post_message', id, { roomId: NIL_ROOM, markdown: 'x' }, 400);
+      const unknownParent = { roomId: room.id, parentId: NIL_ROOM, markdown: 'x' };
+      await toolError('post_message', id, unknownParent, 400);
+    });
+
+    it('answers a DM main-timeline message in the DM, with the DM room as chat id', async () => {
+      const { chatId, claimed } = await runningChat('xin chào');
+      expect(claimed).toMatchObject({ roomId: chatId, parentId: null });
+      expect(claimed.context).toContain(`Room id: ${chatId}`);
+      expect(claimed.context).not.toContain('thread root message id');
+      const posted = (await tool('post_message', claimed.id, { markdown: 'trong DM' })).result as {
+        chatId: string;
+        parentId: string | null;
+      };
+      expect(posted).toMatchObject({ chatId, parentId: null });
+      const row = await dataSource.getRepository(Assignment).findOneByOrFail({ id: claimed.id });
+      expect(row.sessionKey).toBe(chatId);
     });
   });
 });

@@ -1,23 +1,17 @@
 import type { EntityManager } from 'typeorm';
 import { Room } from '../chat/entities/room.entity';
-import { Thread } from '../chat/entities/thread.entity';
 import type { WorkspaceConnection } from './entities/workspace-connection.entity';
 
-/** Threads cascade with the room; their messages and read marks have no foreign key. */
+/** The room's messages cascade with it (foreign key); its read marks have none, so they go first. */
 export async function deleteConnectionRoom(
   manager: EntityManager,
   workspaceId: string,
   roomId: string,
 ): Promise<void> {
-  const threads = await manager.findBy(Thread, { workspaceId, roomId });
-  const chatIds = threads.map((thread) => thread.id);
-  if (chatIds.length) {
-    await manager.query(
-      `DELETE FROM messages WHERE workspace_id = $1 AND chat_id = ANY($2::uuid[])`,
-      [workspaceId, chatIds],
-    );
-    await manager.query(`DELETE FROM thread_reads WHERE chat_id = ANY($1::uuid[])`, [chatIds]);
-  }
+  await manager.query(
+    `DELETE FROM thread_reads WHERE chat_id IN (SELECT id FROM messages WHERE room_id = $1)`,
+    [roomId],
+  );
   await manager.delete(Room, { id: roomId, workspaceId });
 }
 

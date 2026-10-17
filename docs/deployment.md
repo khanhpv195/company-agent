@@ -212,6 +212,12 @@ running it more than once is harmless.
 Migrations are forward-only in production. Roll back by restoring the backup and the previous
 image.
 
+The `RoomTimelines` migration (room timelines and reply threads) rewrites the `messages` table
+(new columns, backfill, dropped columns and indexes) in one transaction under an exclusive lock, so
+chat is unavailable while it runs. On a large data set (hundreds of thousands of messages or more)
+plan a maintenance window: stop the API, take the backup, start the new image and wait for the
+migration to finish before sending traffic.
+
 ## Desktop app
 
 The installer is built for one API URL, and its CSP only allows that origin:

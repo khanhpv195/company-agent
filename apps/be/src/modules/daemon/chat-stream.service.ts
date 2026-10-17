@@ -98,6 +98,8 @@ export class ChatStreamService {
       if (!context) return;
       const message = await this.chat.loadMessage(context.message.id);
       if (message.status === 'streaming' && this.ended.has(assignmentId)) return;
+      // A deleted message keeps no text, not even the streamed one.
+      if (message.deleted) this.discard(assignmentId);
       const state = this.streams.get(assignmentId);
       if (state) {
         state.base = message;
@@ -106,7 +108,9 @@ export class ChatStreamService {
       }
       this.chat.publishMessage(
         context.assignment.workspaceId,
-        state && message.status === 'streaming' ? { ...message, markdown: state.text } : message,
+        state && message.status === 'streaming' && !message.deleted
+          ? { ...message, markdown: state.text }
+          : message,
         context.memberIds,
       );
     } catch (error) {
@@ -131,8 +135,8 @@ export class ChatStreamService {
     // The audience is re-read on every flush: a member removed from a private room mid-reply
     // must stop receiving chunks (a cheap two-query lookup, at most 10 per second and stream).
     try {
-      const current = await this.chat.currentAudience(state.base.chatId);
-      if (!current || !this.streams.has(assignmentId)) return;
+      const current = await this.chat.currentAudience(state.base.roomId ?? '');
+      if (!current || !this.streams.has(assignmentId) || state.base.deleted) return;
       state.memberIds = current.audience;
       this.chat.publishMessage(
         state.workspaceId,

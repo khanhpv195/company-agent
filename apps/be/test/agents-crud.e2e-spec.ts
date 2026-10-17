@@ -392,7 +392,10 @@ describe('Agent management (e2e)', () => {
       expect((await call<Room[]>('get', '/rooms')).some((r) => r.id === roomId)).toBe(false);
       expect(await dataSource.query(`SELECT 1 FROM rooms WHERE id = $1`, [roomId])).toHaveLength(0);
       expect(
-        await dataSource.query(`SELECT 1 FROM messages WHERE chat_id = $1`, [thread.id]),
+        await dataSource.query(`SELECT 1 FROM messages WHERE room_id = $1 OR id = $2`, [
+          roomId,
+          thread.id,
+        ]),
       ).toHaveLength(0);
       // the thread is gone, so no later message can trigger a reply
       await call('post', `/chats/${thread.id}/messages`, { markdown: 'hello?' }, 404);

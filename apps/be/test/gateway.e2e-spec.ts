@@ -505,9 +505,10 @@ describe('Agent gateway (e2e)', () => {
     });
 
     it('expires them with a readable error and fails the message (simulator off)', async () => {
+      // Online while the message is sent (a DM to an offline agent is refused), offline after.
       const off = await createComputer(dataSource, me.workspaceId, {
         name: 'build-box',
-        status: 'offline',
+        status: 'online',
         simulated: true,
       });
       const deployer = await createAgent(dataSource, me.workspaceId, off.id, { name: 'Deployer' });
@@ -519,6 +520,7 @@ describe('Agent gateway (e2e)', () => {
       );
       const { chatId } = await chat.ensureDm(auth(), deployer.id);
       await chat.sendMessage(auth(), chatId, { markdown: 'deploy please' });
+      await dataSource.query(`UPDATE computers SET status = 'offline' WHERE id = $1`, [off.id]);
 
       const [pending] = await chat.listMessages(auth(), chatId).then((m) => m.slice(-1));
       expect(pending).toMatchObject({ status: 'streaming' });

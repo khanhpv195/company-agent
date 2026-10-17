@@ -396,16 +396,33 @@ export class GatewayToolsService {
 
   private async postMessage(ctx: ToolContext, input: Input) {
     const markdown = reqString(input, 'markdown', MAX_TEXT_LENGTH);
+    const roomId = optString(input, 'roomId', 100);
+    const parentId = optString(input, 'parentId', 100);
     const explicit = optString(input, 'chatId', 100);
-    const chatId = explicit ?? (await this.ownChatId(ctx));
-    if (!chatId) throw badInput('"chatId" is required: this run has no chat of its own');
     const auth: AuthContext = {
       memberId: ctx.member!.id,
       workspaceId: ctx.workspaceId,
       role: ctx.member!.role,
     };
-    const message = await this.chat.postAgentMessage(auth, ctx.agent.id, chatId, markdown);
-    return { id: message.id, chatId: message.chatId };
+    // `roomId` (+ optional `parentId`, a message of that room) is the new address; `chatId`
+    // (a DM room or a thread root id) is what installed daemons send; neither = the run's own chat.
+    let target: string | { roomId: string; parentId?: string | null };
+    if (roomId) {
+      target = { roomId, parentId: parentId ?? null };
+    } else if (parentId) {
+      throw badInput('"parentId" needs a "roomId"');
+    } else {
+      const chatId = explicit ?? (await this.ownChatId(ctx));
+      if (!chatId) throw badInput('"chatId" is required: this run has no chat of its own');
+      target = chatId;
+    }
+    const message = await this.chat.postAgentMessage(auth, ctx.agent.id, target, markdown);
+    return {
+      id: message.id,
+      chatId: message.chatId,
+      roomId: message.roomId,
+      parentId: message.parentId ?? null,
+    };
   }
 
   /** The chat the run belongs to: a reply's own chat, or the DM a task was assigned in. */

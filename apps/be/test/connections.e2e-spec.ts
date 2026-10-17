@@ -395,7 +395,6 @@ describe('Connections (e2e)', () => {
           ((await dataSource.query(`SELECT count(*) FROM ${table}`)) as { count: string }[])[0]
             .count,
         );
-      expect(await count('threads')).toBe(0);
       expect(await count('messages')).toBe(0);
       expect(await count('thread_reads')).toBe(0);
       expect(types()).toEqual(expect.arrayContaining(['connections.changed', 'rooms.changed']));

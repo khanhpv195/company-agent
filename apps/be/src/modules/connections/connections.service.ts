@@ -9,17 +9,16 @@ import { ConfigType } from '@nestjs/config';
 import { InjectDataSource } from '@nestjs/typeorm';
 import type { Connection, ConnectionProvider } from '@repo/shared';
 import { isUUID } from 'class-validator';
-import { DataSource } from 'typeorm';
+import { DataSource, IsNull } from 'typeorm';
 import { ClockService } from '../../common/clock';
 import { opsConfig } from '../../config';
 import type { AuthContext } from '../../common/types';
 import { AUTHORIZE_DELAY_MS } from '../../contacts';
 import { Agent } from '../agents/entities/agent.entity';
-import { toMessage } from '../chat/chat.mapper';
+import { MessageStore } from '../chat/message-store.service';
 import { ChatMessage } from '../chat/entities/chat-message.entity';
 import { Room } from '../chat/entities/room.entity';
 import { assertRoomNameFree, mapRoomNameConflict } from '../chat/room-access';
-import { Thread } from '../chat/entities/thread.entity';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { AuditService } from '../audit/audit.service';
 import { EventsService } from '../events';
@@ -66,6 +65,7 @@ export class ConnectionsService {
     private readonly events: EventsService,
     private readonly dashboard: DashboardService,
     private readonly audit: AuditService,
+    private readonly store: MessageStore,
     @Inject(opsConfig.KEY) private readonly ops: ConfigType<typeof opsConfig>,
   ) {}
 
@@ -162,30 +162,25 @@ export class ConnectionsService {
          VALUES ($1, $2, $3, 'member') ON CONFLICT DO NOTHING`,
           [workspaceId, room.id, agent.id],
         );
-        let thread = await manager.findOneBy(Thread, {
-          workspaceId,
-          roomId: room.id,
-          connectionId: definition.id,
+        // The sample conversation: an external message (the thread root, titled after its
+        // sender) and the agent's reply under it. Created once per inbox.
+        let root = await manager.findOne(ChatMessage, {
+          where: {
+            workspaceId,
+            roomId: room.id,
+            parentId: IsNull(),
+            externalConnectionId: definition.id,
+          },
+          order: { seq: 'ASC' },
         });
-        const fresh = !thread;
-        if (!thread) {
-          thread = await manager.save(
-            manager.create(Thread, {
-              workspaceId,
-              roomId: room.id,
-              name: sample.from,
-              connectionId: definition.id,
-              createdAt: now,
-            }),
-          );
-        }
-
-        if (fresh) {
-          const external = await manager.save(
+        const fresh = !root;
+        if (!root) {
+          root = await manager.save(
             manager.create(ChatMessage, {
               workspaceId,
-              chatId: thread.id,
-              chatKind: 'thread',
+              roomId: room.id,
+              parentId: null,
+              threadTitle: sample.from,
               authorKind: 'external',
               externalConnectionId: definition.id,
               externalName: sample.from,
@@ -198,8 +193,8 @@ export class ConnectionsService {
           const reply = await manager.save(
             manager.create(ChatMessage, {
               workspaceId,
-              chatId: thread.id,
-              chatKind: 'thread',
+              roomId: room.id,
+              parentId: root.id,
               authorKind: 'agent',
               authorAgentId: agent.id,
               status: 'complete',
@@ -213,12 +208,24 @@ export class ConnectionsService {
               createdAt: now,
             }),
           );
-          for (const row of [external, reply]) {
-            const message = toMessage(row);
+          await manager.update(ChatMessage, { id: root.id }, { replyCount: 1, lastReplyAt: now });
+          const messages = await this.store.hydrate(
+            manager,
+            await manager.find(ChatMessage, {
+              where: [{ id: root.id }, { id: reply.id }],
+              order: { seq: 'ASC' },
+              relations: { assignment: true },
+            }),
+          );
+          for (const message of messages) {
             effects.push(() =>
               this.events.publish(workspaceId, { type: 'message.upserted', message }),
             );
           }
+          await this.store.queueThreadUpdates(manager, effects, workspaceId, [root.id], undefined);
+        }
+
+        if (fresh) {
           await this.dashboard.recordFeed(
             manager,
             effects,

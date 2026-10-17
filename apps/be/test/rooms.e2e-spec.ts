@@ -11,7 +11,7 @@ import { Agent } from '../src/modules/agents/entities/agent.entity';
 import { ChatService } from '../src/modules/chat/chat.service';
 import { ChatMessage } from '../src/modules/chat/entities/chat-message.entity';
 import { Room as RoomRow } from '../src/modules/chat/entities/room.entity';
-import { Thread as ThreadRow } from '../src/modules/chat/entities/thread.entity';
+import { MessageStore } from '../src/modules/chat/message-store.service';
 import { joinDefaultRooms } from '../src/modules/chat/room-access';
 import { REALTIME_EVENT, type RealtimeEnvelope } from '../src/modules/events';
 import { Assignment } from '../src/modules/gateway/entities/assignment.entity';
@@ -102,8 +102,16 @@ describe('Rooms (e2e)', () => {
     (await rooms(client)).filter((room) => room.kind === 'channel').map((room) => room.name);
   const roster = (client: LoggedInClient, roomId: string) =>
     call<RoomMembers>('get', `/rooms/${roomId}/members`, client);
-  const threadIn = (client: LoggedInClient, roomId: string, body: object = { name: 'Plan' }) =>
-    call<Thread>('post', `/rooms/${roomId}/threads`, client, body);
+  /** The compatibility wrapper answers the root message; this returns its sidebar (legacy) view. */
+  const threadIn = async (
+    client: LoggedInClient,
+    roomId: string,
+    body: object = { name: 'Plan' },
+  ): Promise<Thread> => {
+    const root = await call<Message>('post', `/rooms/${roomId}/threads`, client, body);
+    const room = (await call<Room[]>('get', '/rooms', client)).find((r) => r.id === roomId);
+    return room!.threads.find((t) => t.id === root.id)!;
+  };
   const assignments = () => dataSource.getRepository(Assignment).find();
 
   // ---------- create ----------
@@ -326,7 +334,6 @@ describe('Rooms (e2e)', () => {
       realtime = [];
       await call<null>('delete', `/rooms/${room.id}`, admin);
       expect(await dataSource.getRepository(RoomRow).count({ where: { id: room.id } })).toBe(0);
-      expect(await dataSource.getRepository(ThreadRow).count()).toBe(0);
       expect(await dataSource.getRepository(ChatMessage).count()).toBe(0);
       expect(
         await dataSource.query(`SELECT 1 FROM room_members WHERE room_id = $1`, [room.id]),
@@ -461,7 +468,7 @@ describe('Rooms (e2e)', () => {
       expect(chatInfo).toMatchObject({ agentIds: [alpha.id], subtitle: '# Build' });
       // Without a message it is just an empty thread.
       const empty = await threadIn(alice, room.id, { name: 'Empty' });
-      expect(empty.preview).toBe('');
+      expect(empty.preview).toBe('Empty'); // its root message carries the name
       expect(
         (await call<Room[]>('get', '/rooms', alice)).find((r) => r.id === room.id)?.threads,
       ).toHaveLength(2);
@@ -812,15 +819,17 @@ describe('Rooms (e2e)', () => {
         name: 'T',
         message: 'x'.repeat(20_001),
       });
-      const spy = jest.spyOn(chat, 'sendMessage').mockRejectedValueOnce(new Error('boom'));
+      const spy = jest
+        .spyOn(app.get(MessageStore), 'send')
+        .mockRejectedValueOnce(new Error('boom'));
       await fail('post', `/rooms/${room.id}/threads`, alice, 500, { name: 'T', message: 'hi' });
       spy.mockRestore();
-      expect(await dataSource.getRepository(ThreadRow).count()).toBe(0);
+      expect(await dataSource.getRepository(ChatMessage).count()).toBe(0);
       expect(await assignments()).toHaveLength(0);
       realtime = [];
       const ok = await threadIn(alice, room.id, { name: 'T', message: 'hi' });
       expect(ok.name).toBe('T');
-      expect(await dataSource.getRepository(ThreadRow).count()).toBe(1);
+      expect(await dataSource.getRepository(ChatMessage).count()).toBe(1);
     });
 
     it('answers 404 for a room deleted meanwhile', async () => {

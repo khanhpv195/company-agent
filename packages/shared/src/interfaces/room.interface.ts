@@ -2,7 +2,10 @@ export type RoomKind = 'dm' | 'channel';
 export type RoomMemberRole = 'owner' | 'member';
 export type RoomIcon = 'users' | 'sparkles' | 'hourglass' | 'inbox';
 
-/** A conversation inside a channel. DMs have no threads; their messages live on the room itself. */
+/**
+ * Legacy view of a thread for the sidebar: a root message of a channel that has a title or
+ * replies (`id` = the root message id). The room's main timeline holds the messages.
+ */
 export interface Thread {
   id: string;
   roomId: string;
@@ -35,7 +38,7 @@ export interface Room {
   myRole?: RoomMemberRole | null;
 }
 
-/** A place messages are posted to: a DM room or a channel thread. */
+/** A place messages are posted to: a DM room (main timeline) or a thread (root message id). */
 export interface Chat {
   id: string;
   kind: 'dm' | 'thread';
@@ -98,6 +101,10 @@ export interface AddRoomMembersInput {
 export interface CreateThreadInput {
   /** 1..120 characters. */
   name: string;
-  /** Posted as the first message through the normal send path (mentions wake agents). */
+  /**
+   * Posted as the first message through the normal send path: @mentions in it wake agents (the
+   * name is only a fallback text and is never searched for mentions). The answer is that root
+   * `Message` (not a thread object).
+   */
   message?: string;
 }

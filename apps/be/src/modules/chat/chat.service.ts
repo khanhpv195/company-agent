@@ -11,60 +11,45 @@ import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { InjectDataSource } from '@nestjs/typeorm';
 import type { Chat, Message, Room as RoomContract, Thread as ThreadContract } from '@repo/shared';
 import { isUUID } from 'class-validator';
-import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager, In, IsNull, Not } from 'typeorm';
 import { ClockService } from '../../common/clock';
 import { agentConfig } from '../../config';
-import {
-  requestLanguage,
-  returnedRows,
-  transactionWithEffects,
-  type AfterCommit,
-} from '../../common/utils';
+import { returnedRows, transactionWithEffects, type AfterCommit } from '../../common/utils';
 import type { AuthContext } from '../../common/types';
-import { deriveAgentStatus } from '../agents/agent-status.util';
 import { Agent } from '../agents/entities/agent.entity';
 import { EventsService } from '../events';
 import { ASSIGNMENT_ENDED_EVENT, type AssignmentEndedPayload } from '../events/events.service';
-import { AgentGatewayService } from '../gateway/agent-gateway.service';
 import { Assignment } from '../gateway/entities/assignment.entity';
 import { AgentActivity } from '../agents/entities/agent-activity.entity';
 import {
-  CHAT_REPLY_REQUESTED_EVENT,
   CHAT_RUN_ENDED_EVENT,
   MAX_MESSAGE_LENGTH,
   MESSAGES_PAGE_LIMIT,
-  type ChatReplyRequestedPayload,
   type ChatRunEndedPayload,
 } from './chat.constants';
-import { toMessage, toRoom, toThread, type LastMessage } from './chat.mapper';
+import { threadNameOf, toRoom, toThread, type LastMessage } from './chat.mapper';
 import { previewOf } from './chat.util';
 import { ensureDmRoom } from './dm-room';
-import { roomAgentIds, roomMemberIds } from './room-access';
+import { roomMemberIds } from './room-access';
+import { MessageStore, type RoomScope } from './message-store.service';
 import type { SendMessageDto } from './dto/chat.dto';
-import { ChatMessage, type ChatKind } from './entities/chat-message.entity';
+import { ChatMessage } from './entities/chat-message.entity';
 import { Room } from './entities/room.entity';
-import { Thread } from './entities/thread.entity';
 
 /** Why a reply that was in flight when the server stopped ends as failed. */
 const RESTART_ERROR = 'Server restarted before the reply finished';
 const STALE_STATUSES = ['pending', 'offered', 'claimed', 'running'];
 
-/** A chat the caller may use: a DM of their own or any thread of their workspace. */
-export interface ResolvedChat {
+/**
+ * A chat of the legacy routes: a DM room (its main timeline; `id` = the room id) or a thread
+ * (`id` = the root message id, in any room). A DM of another member and anything of another
+ * workspace resolve to nothing.
+ */
+export interface ResolvedChat extends RoomScope {
   id: string;
-  kind: ChatKind;
-  room: Room;
-  thread: Thread | null;
-  /** The agent of the connection a connected inbox thread belongs to. */
-  connectionAgentId?: string | null;
-  /**
-   * The only members who may see this chat's events: a DM's member, a channel's live members.
-   * undefined = the whole workspace (connection inboxes are visible to everybody).
-   */
-  audience: string[] | undefined;
-  /** Agents that belong to the channel; null when membership does not restrict them (DMs, inboxes). */
-  roomAgentIds: string[] | null;
+  kind: 'dm' | 'thread';
+  /** The thread's root message; null for a DM main timeline. */
+  root: ChatMessage | null;
 }
 
 /** Everything a runner needs to work on one chat reply. */
@@ -82,15 +67,8 @@ export interface ReplyContext {
   where: string;
 }
 
-/** DMs go to their member only, channel threads to the channel's members (inboxes to all). */
-export const audienceOf = (chat: Pick<ResolvedChat, 'audience'>): string[] | undefined =>
-  chat.audience;
-
 /** Neutral `where` of an agent activity for a private channel (the real name stays private). */
 export const PRIVATE_CHANNEL_WHERE = 'Kênh riêng';
-
-const audienceOfDm = (room: Room): string[] | undefined =>
-  room.memberId ? [room.memberId] : undefined;
 
 @Injectable()
 export class ChatService implements OnApplicationBootstrap {
@@ -101,7 +79,7 @@ export class ChatService implements OnApplicationBootstrap {
     private readonly clock: ClockService,
     private readonly events: EventsService,
     private readonly emitter: EventEmitter2,
-    private readonly gateway: AgentGatewayService,
+    private readonly store: MessageStore,
     @Inject(agentConfig.KEY) private readonly config: ConfigType<typeof agentConfig>,
   ) {}
 
@@ -140,7 +118,7 @@ export class ChatService implements OnApplicationBootstrap {
            RETURNING id
          )
          UPDATE messages m SET status = 'failed'
-         FROM stale WHERE m.assignment_id = stale.id AND m.status = 'streaming'
+         FROM stale WHERE m.assignment_id = stale.id AND m.status = 'streaming' AND m.deleted_at IS NULL
          RETURNING m.id`,
         [RESTART_ERROR, this.clock.now(), STALE_STATUSES],
       ),
@@ -220,33 +198,55 @@ export class ChatService implements OnApplicationBootstrap {
         counts.set(row.room_id, { members: Number(row.members), agents: Number(row.agents) });
       }
     }
-    const channelIds = rooms.filter((room) => room.kind === 'channel').map((room) => room.id);
-    const threads = channelIds.length
+    const channelIds = countIds;
+    // The legacy sidebar's threads: roots of a channel with a title or replies (id = root id).
+    const roots = channelIds.length
       ? await manager
-          .createQueryBuilder(Thread, 't')
-          .where('t.workspace_id = :workspaceId AND t.room_id IN (:...channelIds)', {
+          .createQueryBuilder(ChatMessage, 'm')
+          .where('m.workspace_id = :workspaceId AND m.room_id IN (:...channelIds)', {
             workspaceId,
             channelIds,
           })
-          .orderBy('t.created_at', 'ASC')
-          .addOrderBy('t.id', 'ASC')
+          .andWhere('m.parent_id IS NULL AND m.deleted_at IS NULL')
+          .andWhere('(m.thread_title IS NOT NULL OR m.reply_count > 0)')
+          .orderBy('m.seq', 'ASC')
+          .addOrderBy('m.createdAt', 'ASC')
+          .addOrderBy('m.id', 'ASC')
           .getMany()
       : [];
+    const connectionByRoom = new Map(rooms.map((room) => [room.id, room.connectionId]));
 
-    const chatIds = [
-      ...rooms.filter((room) => room.kind === 'dm').map((room) => room.id),
-      ...threads.map((thread) => thread.id),
-    ];
+    const dmIds = rooms.filter((room) => room.kind === 'dm').map((room) => room.id);
+    const rootIds = roots.map((root) => root.id);
     const lastByChat = new Map<string, LastMessage>();
     const unreadByChat = new Map<string, number>();
-    if (chatIds.length) {
+    if (dmIds.length) {
+      const lasts = returnedRows<{ room_id: string; markdown: string; created_at: Date }>(
+        await manager.query(
+          `SELECT DISTINCT ON (room_id) room_id, markdown, created_at
+           FROM messages
+           WHERE workspace_id = $1 AND room_id = ANY($2::uuid[])
+             AND parent_id IS NULL AND deleted_at IS NULL AND NOT system_root
+           ORDER BY room_id, seq DESC`,
+          [workspaceId, dmIds],
+        ),
+      );
+      for (const row of lasts) {
+        lastByChat.set(row.room_id, { markdown: row.markdown, createdAt: row.created_at });
+      }
+    }
+    if (rootIds.length) {
       const lasts = returnedRows<{ chat_id: string; markdown: string; created_at: Date }>(
         await manager.query(
           `SELECT DISTINCT ON (chat_id) chat_id, markdown, created_at
-           FROM messages
-           WHERE workspace_id = $1 AND chat_id = ANY($2::uuid[])
-           ORDER BY chat_id, seq DESC`,
-          [workspaceId, chatIds],
+           FROM (
+             SELECT coalesce(parent_id, id) AS chat_id, markdown, created_at, seq, parent_id
+             FROM messages
+             WHERE workspace_id = $1 AND deleted_at IS NULL AND NOT system_root
+               AND (id = ANY($2::uuid[]) OR parent_id = ANY($2::uuid[]))
+           ) t
+           ORDER BY chat_id, seq DESC, (parent_id IS NOT NULL) DESC`,
+          [workspaceId, rootIds],
         ),
       );
       for (const row of lasts) {
@@ -254,26 +254,36 @@ export class ChatService implements OnApplicationBootstrap {
       }
       const unread = returnedRows<{ chat_id: string; unread: string }>(
         await manager.query(
-          `SELECT m.chat_id, count(*) AS unread
-           FROM messages m
-           LEFT JOIN thread_reads r ON r.chat_id = m.chat_id AND r.member_id = $3
-           WHERE m.workspace_id = $1 AND m.chat_id = ANY($2::uuid[]) AND m.chat_kind = 'thread'
-             AND m.created_at > coalesce(r.last_read_at, '-infinity'::timestamptz)
-             AND NOT (m.author_kind = 'human' AND m.author_member_id = $3)
-           GROUP BY m.chat_id`,
-          [workspaceId, chatIds, memberId],
+          `SELECT t.chat_id, count(*) AS unread
+           FROM (
+             SELECT coalesce(parent_id, id) AS chat_id, created_at, author_kind, author_member_id
+             FROM messages
+             WHERE workspace_id = $1 AND deleted_at IS NULL AND NOT system_root
+               AND (id = ANY($2::uuid[]) OR parent_id = ANY($2::uuid[]))
+           ) t
+           LEFT JOIN thread_reads r ON r.chat_id = t.chat_id AND r.member_id = $3
+           WHERE t.created_at > coalesce(r.last_read_at, '-infinity'::timestamptz)
+             AND NOT (t.author_kind = 'human' AND t.author_member_id = $3)
+           GROUP BY t.chat_id`,
+          [workspaceId, rootIds, memberId],
         ),
       );
       for (const row of unread) unreadByChat.set(row.chat_id, Number(row.unread));
     }
 
     const threadsByRoom = new Map<string, ThreadContract[]>();
-    for (const thread of threads) {
-      const list = threadsByRoom.get(thread.roomId) ?? [];
+    for (const root of roots) {
+      const list = threadsByRoom.get(root.roomId) ?? [];
       list.push(
-        toThread(thread, lastByChat.get(thread.id), unreadByChat.get(thread.id) ?? 0, previewOf),
+        toThread(
+          root,
+          lastByChat.get(root.id),
+          unreadByChat.get(root.id) ?? 0,
+          previewOf,
+          connectionByRoom.get(root.roomId) ?? null,
+        ),
       );
-      threadsByRoom.set(thread.roomId, list);
+      threadsByRoom.set(root.roomId, list);
     }
     return rooms.map((room) => ({
       ...toRoom(
@@ -299,29 +309,38 @@ export class ChatService implements OnApplicationBootstrap {
     return this.toChat(manager, chat);
   }
 
-  /** Oldest first, the latest 200. */
+  /**
+   * Legacy chat messages, oldest first, the latest 200 (deleted ones left out): a DM's main
+   * timeline, or a thread's root followed by its replies.
+   */
   async listMessages(auth: AuthContext, id: string): Promise<Message[]> {
     const manager = this.dataSource.manager;
     const chat = await this.requireChat(manager, auth, id);
-    const rows = await manager
+    const qb = manager
       .createQueryBuilder(ChatMessage, 'm')
       .leftJoinAndSelect('m.assignment', 'a')
-      .where('m.workspace_id = :workspaceId AND m.chat_id = :chatId', {
+      .where('m.workspace_id = :workspaceId AND m.deleted_at IS NULL', {
         workspaceId: auth.workspaceId,
-        chatId: chat.id,
-      })
+      });
+    if (chat.root) {
+      qb.andWhere('(m.id = :rootId OR m.parent_id = :rootId)', { rootId: chat.root.id });
+    } else {
+      qb.andWhere('m.room_id = :roomId AND m.parent_id IS NULL', { roomId: chat.room.id });
+    }
+    // A converted thread's synthetic root shares the seq of its first reply: the root comes first.
+    const rows = await qb
       .orderBy('m.seq', 'DESC')
+      .addOrderBy('(m.parent_id IS NOT NULL)', 'DESC')
       .limit(MESSAGES_PAGE_LIMIT)
       .getMany();
-    return rows.reverse().map(toMessage);
+    return this.store.hydrate(manager, rows.reverse());
   }
 
   // ---------- commands ----------
 
   /**
-   * Stores the human message and, when an agent is addressed, its placeholder reply with a
-   * pending chat assignment (all in one transaction). A runner (the simulator today, a daemon
-   * later) picks the reply up after the commit through `chat.reply.requested`.
+   * Legacy send: the chat id is a DM room (main timeline) or a thread root message (a reply).
+   * Everything else (agent wake-up, placement of the reply) is `MessageStore.send`.
    */
   async sendMessage(
     auth: AuthContext,
@@ -330,80 +349,14 @@ export class ChatService implements OnApplicationBootstrap {
     /** Join the caller's transaction (its effects fire after its commit) instead of opening one. */
     tx?: { manager: EntityManager; effects: AfterCommit[] },
   ): Promise<Message> {
-    const text = dto.markdown?.trim();
-    if (!text) throw new BadRequestException({ message: 'chat.MESSAGE_EMPTY' });
-
-    const run = async (manager: EntityManager, effects: AfterCommit[]): Promise<Message> => {
-      const chat = await this.requireChat(manager, auth, chatId);
-      const agents = await manager.find(Agent, {
-        where: { workspaceId: auth.workspaceId },
-        relations: { computer: true },
-        order: { createdAt: 'ASC', id: 'ASC' },
-      });
-      const target = this.pickTarget(chat, agents, text, dto.agentId);
-      const audience = audienceOf(chat);
-
-      const human = await manager.save(
-        manager.create(ChatMessage, {
-          workspaceId: auth.workspaceId,
-          chatId: chat.id,
-          chatKind: chat.kind,
-          authorKind: 'human',
-          authorMemberId: auth.memberId,
-          status: 'complete',
-          markdown: text,
-          draft: null,
-          createdAt: this.clock.now(),
-        }),
-      );
-      const humanMessage = toMessage(human);
-      effects.push(() => this.publishMessage(auth.workspaceId, humanMessage, audience));
-
-      if (target) {
-        const replyId = randomUUID();
-        const tx = { manager, effects };
-        let assignment = await this.gateway.create(
-          {
-            workspaceId: auth.workspaceId,
-            agentId: target.id,
-            sourceKind: 'chat',
-            sourceId: replyId,
-            activation: text,
-            lang: requestLanguage(),
-            requestedByMemberId: auth.memberId,
-          },
-          tx,
-        );
-        // A real daemon polls for offered work, so its reply is offered right away; only
-        // simulated computers stay `pending` for the in-process simulator to drive.
-        const simulated = target.computer.simulated;
-        if (!simulated) assignment = await this.gateway.offer(assignment.id, tx);
-        const reply = await manager.save(
-          manager.create(ChatMessage, {
-            id: replyId,
-            workspaceId: auth.workspaceId,
-            chatId: chat.id,
-            chatKind: chat.kind,
-            authorKind: 'agent',
-            authorAgentId: target.id,
-            status: 'streaming',
-            markdown: '',
-            assignmentId: assignment.id,
-            draft: null,
-            createdAt: this.clock.now(),
-          }),
-        );
-        reply.assignment = assignment;
-        const replyMessage = toMessage(reply);
-        effects.push(() => this.publishMessage(auth.workspaceId, replyMessage, audience));
-        if (simulated) {
-          effects.push(() => this.emitReplyRequested(auth.workspaceId, assignment.id));
-        }
-      }
-      effects.push(() => this.publishRoomsChanged(auth.workspaceId, audience));
-      return humanMessage;
-    };
-    return tx ? run(tx.manager, tx.effects) : transactionWithEffects(this.dataSource, run);
+    if (!dto.markdown?.trim()) throw new BadRequestException({ message: 'chat.MESSAGE_EMPTY' });
+    const chat = await this.requireChat(tx?.manager ?? this.dataSource.manager, auth, chatId);
+    return this.store.send(
+      auth,
+      chat.room.id,
+      { markdown: dto.markdown, agentId: dto.agentId, parentId: chat.root?.id ?? null },
+      tx,
+    );
   }
 
   /** Marks the chat read for the caller. Chats the caller cannot see are a silent no-op. */
@@ -453,15 +406,18 @@ export class ChatService implements OnApplicationBootstrap {
             relations: { assignment: true },
           })
         : null;
-      const chat = row ? await this.findChat(manager, auth, row.chatId) : null;
-      if (!row || !row.draft || !chat)
+      const room = row
+        ? await manager.findOne(Room, { where: { id: row.roomId }, relations: { agent: true } })
+        : null;
+      const scope = room ? await this.store.scopeOf(manager, room, auth.memberId) : null;
+      if (!row || !row.draft || row.deletedAt || !scope)
         throw new NotFoundException({ message: 'chat.DRAFT_NOT_FOUND' });
       if (row.draft.state !== 'sent') {
         row.draft = { ...row.draft, state: 'sent' };
         await manager.update(ChatMessage, { id: row.id }, { draft: row.draft });
       }
-      const message = toMessage(row);
-      effects.push(() => this.publishMessage(auth.workspaceId, message, audienceOf(chat)));
+      const message = (await this.store.hydrate(manager, [row]))[0];
+      effects.push(() => this.publishMessage(auth.workspaceId, message, scope.audience));
       return message;
     });
   }
@@ -469,12 +425,13 @@ export class ChatService implements OnApplicationBootstrap {
   /**
    * A message an agent posts on its own (the `post_message` tool), visible exactly like the
    * requester sees the chat: a DM of another member or a foreign chat is "not found". No reply
-   * is requested, so agents never trigger each other.
+   * is requested, so agents never trigger each other. Address it with the legacy `chatId` (a DM
+   * room or a thread root id) or with `{ roomId, parentId? }` (parentId = a message of the room).
    */
   async postAgentMessage(
     auth: AuthContext,
     agentId: string,
-    chatId: string,
+    target: string | { roomId: string; parentId?: string | null },
     markdown: string,
   ): Promise<Message> {
     const text = markdown?.trim();
@@ -483,44 +440,62 @@ export class ChatService implements OnApplicationBootstrap {
       throw new BadRequestException({ message: 'chat.MESSAGE_TOO_LONG' });
     }
     return transactionWithEffects(this.dataSource, async (manager, effects) => {
-      const chat = await this.requireChat(manager, auth, chatId);
-      if (chat.kind === 'dm' && chat.room.agentId !== agentId) {
+      let scope: RoomScope;
+      let rootId: string | null;
+      if (typeof target === 'string') {
+        const chat = await this.requireChat(manager, auth, target);
+        scope = chat;
+        rootId = chat.root?.id ?? null;
+      } else {
+        scope = await this.store.resolveRoom(manager, auth, target.roomId);
+        rootId = target.parentId
+          ? (await this.store.resolveRoot(manager, scope.room, target.parentId)).id
+          : null;
+      }
+      if (scope.room.kind === 'dm' && scope.room.agentId !== agentId) {
         throw new BadRequestException({ message: 'chat.UNKNOWN_AGENT' });
       }
-      if (chat.roomAgentIds && !chat.roomAgentIds.includes(agentId)) {
+      if (scope.roomAgentIds && !scope.roomAgentIds.includes(agentId)) {
         throw new BadRequestException({ message: 'chat.AGENT_NOT_IN_ROOM' });
       }
-      const row = await manager.save(
-        manager.create(ChatMessage, {
-          workspaceId: auth.workspaceId,
-          chatId: chat.id,
-          chatKind: chat.kind,
-          authorKind: 'agent',
-          authorAgentId: agentId,
-          status: 'complete',
-          markdown: text,
-          assignmentId: null,
-          draft: null,
-          createdAt: this.clock.now(),
-        }),
-      );
-      const message = toMessage(row);
-      const audience = audienceOf(chat);
-      effects.push(() => this.publishMessage(auth.workspaceId, message, audience));
-      effects.push(() => this.publishRoomsChanged(auth.workspaceId, audience));
-      return message;
+      return this.store.insertAgentMessage(manager, effects, auth, scope, rootId, agentId, text);
     });
   }
 
-  /** The chat id (DM room or thread) of a chat reply assignment, or null. */
+  /**
+   * The chat id (DM room id or thread root id) of a chat reply assignment, or null. This is the
+   * daemon's session key, so it stays the old thread id for converted threads.
+   */
   async chatIdOfReply(assignmentId: string): Promise<string | null> {
-    const rows = returnedRows<{ chat_id: string }>(
+    const rows = returnedRows<{
+      id: string;
+      parent_id: string | null;
+      room_id: string;
+      kind: string;
+    }>(
       await this.dataSource.query(
-        `SELECT m.chat_id FROM messages m WHERE m.assignment_id = $1 LIMIT 1`,
+        `SELECT m.id, m.parent_id, m.room_id, r.kind
+         FROM messages m JOIN rooms r ON r.id = m.room_id
+         WHERE m.assignment_id = $1 LIMIT 1`,
         [assignmentId],
       ),
     );
-    return rows[0]?.chat_id ?? null;
+    const row = rows[0];
+    if (!row) return null;
+    return row.parent_id ?? (row.kind === 'dm' ? row.room_id : row.id);
+  }
+
+  /** `{ roomId, parentId }` of a chat reply assignment (parentId = the thread root, null in a DM main timeline). */
+  async placeOfReply(
+    assignmentId: string,
+  ): Promise<{ roomId: string; parentId: string | null } | null> {
+    const rows = returnedRows<{ room_id: string; parent_id: string | null }>(
+      await this.dataSource.query(
+        `SELECT room_id, parent_id FROM messages WHERE assignment_id = $1 LIMIT 1`,
+        [assignmentId],
+      ),
+    );
+    return rows[0] ? { roomId: rows[0].room_id, parentId: rows[0].parent_id } : null;
   }
 
   // ---------- used by the runners ----------
@@ -540,7 +515,7 @@ export class ChatService implements OnApplicationBootstrap {
     const workspaceId = ctx.assignment.workspaceId;
     // A DM is private to its member and a private channel to its members: the activity log
     // and the workspace feed get a neutral line only (no text, no room or thread name).
-    const dm = ctx.chat.kind === 'dm';
+    const dm = ctx.chat.room.kind === 'dm';
     const privateRoom = !dm && ctx.chat.room.isPrivate;
     const preview = dm || privateRoom ? '' : previewOf(text);
     await manager.getRepository(AgentActivity).insert({
@@ -590,54 +565,43 @@ export class ChatService implements OnApplicationBootstrap {
       message,
       agent,
       chat,
-      memberIds: audienceOf(chat),
+      memberIds: chat.audience,
       where:
-        chat.kind === 'dm'
+        chat.room.kind === 'dm'
           ? 'DM'
           : chat.room.isPrivate
             ? PRIVATE_CHANNEL_WHERE
-            : `# ${chat.room.name} › ${chat.thread?.name ?? ''}`,
+            : `# ${chat.room.name}${chat.root ? ` › ${threadNameOf(chat.root, previewOf)}` : ''}`,
     };
   }
 
   /**
-   * Who may see a chat's events right now (a thread's room members, a DM's member, undefined =
-   * the whole workspace for an inbox). Streams call this on every publish so a member removed
-   * from a private room mid-reply stops receiving chunks. `null` = the chat is gone.
+   * Who may see a room's events right now (a DM's member, a channel's members, undefined = the
+   * whole workspace for an inbox). Streams call this on every publish so a member removed from
+   * a private room mid-reply stops receiving chunks. `null` = the room is gone.
    */
-  async currentAudience(chatId: string): Promise<{ audience: string[] | undefined } | null> {
+  async currentAudience(roomId: string): Promise<{ audience: string[] | undefined } | null> {
+    if (!isUUID(roomId)) return null;
     const manager = this.dataSource.manager;
     const rows = returnedRows<{
-      kind: 'thread' | 'dm';
-      room_id: string;
+      kind: 'channel' | 'dm';
       member_id: string | null;
       connection_id: string | null;
     }>(
-      await manager.query(
-        `SELECT 'thread' AS kind, r.id AS room_id, r.member_id, r.connection_id
-         FROM threads t JOIN rooms r ON r.id = t.room_id WHERE t.id = $1
-         UNION ALL
-         SELECT 'dm', r.id, r.member_id, r.connection_id FROM rooms r WHERE r.id = $1 AND r.kind = 'dm'`,
-        [chatId],
-      ),
+      await manager.query(`SELECT kind, member_id, connection_id FROM rooms WHERE id = $1`, [
+        roomId,
+      ]),
     );
     const row = rows[0];
     if (!row) return null;
     if (row.kind === 'dm') return { audience: row.member_id ? [row.member_id] : undefined };
     if (row.connection_id) return { audience: undefined };
-    return { audience: await roomMemberIds(manager, row.room_id) };
+    return { audience: await roomMemberIds(manager, roomId) };
   }
 
   /** The message as clients see it, with its assignment's current state. */
-  async loadMessage(
-    id: string,
-    manager: EntityManager = this.dataSource.manager,
-  ): Promise<Message> {
-    const row = await manager.findOneOrFail(ChatMessage, {
-      where: { id },
-      relations: { assignment: true },
-    });
-    return toMessage(row);
+  loadMessage(id: string, manager: EntityManager = this.dataSource.manager): Promise<Message> {
+    return this.store.loadMessage(id, manager);
   }
 
   publishMessage(
@@ -645,11 +609,11 @@ export class ChatService implements OnApplicationBootstrap {
     message: Message,
     memberIds: readonly string[] | undefined,
   ): void {
-    this.events.publish(workspaceId, { type: 'message.upserted', message }, { memberIds });
+    this.store.publishMessage(workspaceId, message, memberIds);
   }
 
   publishRoomsChanged(workspaceId: string, memberIds: readonly string[] | undefined): void {
-    this.events.publish(workspaceId, { type: 'rooms.changed' }, { memberIds });
+    this.store.publishRoomsChanged(workspaceId, memberIds);
   }
 
   /**
@@ -663,7 +627,7 @@ export class ChatService implements OnApplicationBootstrap {
       const rows = returnedRows<{ id: string }>(
         await this.dataSource.query(
           `UPDATE messages SET status = 'failed'
-           WHERE assignment_id = $1 AND status = 'streaming' RETURNING id`,
+           WHERE assignment_id = $1 AND status = 'streaming' AND deleted_at IS NULL RETURNING id`,
           [payload.assignmentId],
         ),
       );
@@ -685,70 +649,28 @@ export class ChatService implements OnApplicationBootstrap {
 
   // ---------- internals ----------
 
-  /**
-   * Who answers: an explicit agent of this workspace, else the first agent of the chat whose
-   * `@name` the text mentions (case-sensitive), else a DM's partner, else nobody. Only agents
-   * that belong to the channel can be woken: mentioning another agent just posts the message.
-   */
-  private pickTarget(
-    chat: ResolvedChat,
-    agents: Agent[],
-    text: string,
-    explicitId: string | undefined,
-  ): Agent | undefined {
-    if (explicitId) {
-      const explicit = agents.find((agent) => agent.id === explicitId);
-      if (!explicit || (chat.kind === 'dm' && explicit.id !== chat.room.agentId))
-        throw new BadRequestException({ message: 'chat.UNKNOWN_AGENT' });
-      if (chat.roomAgentIds && !chat.roomAgentIds.includes(explicit.id))
-        throw new BadRequestException({ message: 'chat.AGENT_NOT_IN_ROOM' });
-      return explicit;
-    }
-    const inChat = this.agentsOfChat(chat, agents);
-    return (
-      inChat.find((agent) => text.includes('@' + agent.name)) ??
-      (chat.kind === 'dm' ? inChat[0] : undefined)
-    );
-  }
-
-  /**
-   * DM: the partner. A connected inbox thread: the connection's agent. Any other thread:
-   * the channel's agents whose computer is not offline, in workspace order.
-   */
-  private agentsOfChat(chat: ResolvedChat, agents: Agent[]): Agent[] {
-    if (chat.kind === 'dm') return agents.filter((agent) => agent.id === chat.room.agentId);
-    if (chat.connectionAgentId)
-      return agents.filter((agent) => agent.id === chat.connectionAgentId);
-    const members = chat.roomAgentIds;
-    return agents.filter(
-      (agent) =>
-        (!members || members.includes(agent.id)) &&
-        deriveAgentStatus(agent.computer.status, false) !== 'offline',
-    );
-  }
-
   private async toChat(manager: EntityManager, chat: ResolvedChat): Promise<Chat> {
     const agents = await manager.find(Agent, {
       where: { workspaceId: chat.room.workspaceId },
       relations: { computer: true },
       order: { createdAt: 'ASC', id: 'ASC' },
     });
-    const agentIds = this.agentsOfChat(chat, agents).map((agent) => agent.id);
-    if (chat.kind === 'dm') {
-      const partner = agents.find((agent) => agent.id === chat.room.agentId);
+    const agentIds = this.store.wakeable(chat, agents).map((agent) => agent.id);
+    if (chat.root) {
       return {
         id: chat.id,
-        kind: 'dm',
-        title: partner?.name ?? chat.room.name,
-        subtitle: null,
+        kind: 'thread',
+        title: threadNameOf(chat.root, previewOf),
+        subtitle: chat.room.kind === 'dm' ? null : `# ${chat.room.name}`,
         agentIds,
       };
     }
+    const partner = agents.find((agent) => agent.id === chat.room.agentId);
     return {
       id: chat.id,
-      kind: 'thread',
-      title: chat.thread?.name ?? '',
-      subtitle: `# ${chat.room.name}`,
+      kind: 'dm',
+      title: partner?.name ?? chat.room.name,
+      subtitle: null,
       agentIds,
     };
   }
@@ -764,8 +686,9 @@ export class ChatService implements OnApplicationBootstrap {
   }
 
   /**
-   * A thread id first, then a DM room id. A DM of another member and anything of another
-   * workspace resolve to nothing (the same answer as an unknown id).
+   * A thread root message id first, then a DM room id. A DM of another member, a channel the
+   * caller is not in and anything of another workspace resolve to nothing (the same answer as
+   * an unknown id).
    */
   private async findChat(
     manager: EntityManager,
@@ -773,95 +696,39 @@ export class ChatService implements OnApplicationBootstrap {
     id: string,
   ): Promise<ResolvedChat | null> {
     if (!isUUID(id)) return null;
-    const thread = await manager.findOne(Thread, {
-      where: { id, workspaceId: auth.workspaceId },
-      relations: { room: true },
+    const root = await manager.findOne(ChatMessage, {
+      where: { id, workspaceId: auth.workspaceId, parentId: IsNull() },
     });
-    if (thread) {
-      const scope = await this.channelScope(manager, thread.room, auth.memberId);
-      if (!scope) return null;
-      return {
-        id: thread.id,
-        kind: 'thread',
-        room: thread.room,
-        thread,
-        connectionAgentId: await this.connectionAgentOf(manager, thread),
-        ...scope,
-      };
+    if (root && !root.deletedAt) {
+      const room = await manager.findOne(Room, {
+        where: { id: root.roomId },
+        relations: { agent: true },
+      });
+      const scope = room ? await this.store.scopeOf(manager, room, auth.memberId) : null;
+      return scope ? { ...scope, id: root.id, kind: 'thread', root } : null;
     }
     const room = await manager.findOne(Room, {
       where: { id, workspaceId: auth.workspaceId, kind: 'dm', memberId: auth.memberId },
       relations: { agent: true },
     });
     // A deleted agent's DM is gone for clients (the join skips soft-deleted agents).
-    return room?.agent
-      ? {
-          id: room.id,
-          kind: 'dm',
-          room,
-          thread: null,
-          audience: audienceOfDm(room),
-          roomAgentIds: null,
-        }
-      : null;
+    const scope = room ? await this.store.scopeOf(manager, room, auth.memberId) : null;
+    return scope ? { ...scope, id: scope.room.id, kind: 'dm', root: null } : null;
   }
 
-  /**
-   * Who may see a channel's chats and which agents it holds. Connection inboxes are open to
-   * the whole workspace (no restriction); any other channel needs the caller's membership
-   * (null = not a member, which looks like an unknown chat). Pass no member to skip the check.
-   */
-  private async channelScope(
-    manager: EntityManager,
-    room: Room,
-    memberId: string | null,
-  ): Promise<{ audience: string[] | undefined; roomAgentIds: string[] | null } | null> {
-    if (room.connectionId) return { audience: undefined, roomAgentIds: null };
-    const audience = await roomMemberIds(manager, room.id);
-    if (memberId && !audience.includes(memberId)) return null;
-    return { audience, roomAgentIds: await roomAgentIds(manager, room.id) };
-  }
-
-  /** The agent of the connection behind an inbox thread (plain query: no module cycle). */
-  private async connectionAgentOf(manager: EntityManager, thread: Thread): Promise<string | null> {
-    if (!thread.connectionId) return null;
-    const rows = returnedRows<{ agent_id: string | null }>(
-      await manager.query(
-        `SELECT agent_id FROM workspace_connections WHERE workspace_id = $1 AND provider = $2`,
-        [thread.workspaceId, thread.connectionId],
-      ),
-    );
-    return rows[0]?.agent_id ?? null;
-  }
-
+  /** The chat a message belongs to, for runners (no caller: nothing is hidden, even a deleted agent's DM). */
   private async chatOfMessage(
     manager: EntityManager,
     message: ChatMessage,
   ): Promise<ResolvedChat | null> {
-    if (message.chatKind === 'thread') {
-      const thread = await manager.findOne(Thread, {
-        where: { id: message.chatId },
-        relations: { room: true },
-      });
-      if (!thread) return null;
-      const scope = await this.channelScope(manager, thread.room, null);
-      return scope ? { id: thread.id, kind: 'thread', room: thread.room, thread, ...scope } : null;
-    }
-    const room = await manager.findOneBy(Room, { id: message.chatId });
-    return room
-      ? {
-          id: room.id,
-          kind: 'dm',
-          room,
-          thread: null,
-          audience: audienceOfDm(room),
-          roomAgentIds: null,
-        }
+    const room = await manager.findOneBy(Room, { id: message.roomId });
+    const scope = room ? await this.store.scopeOf(manager, room, null, false) : null;
+    if (!scope) return null;
+    const root = message.parentId
+      ? await manager.findOneBy(ChatMessage, { id: message.parentId })
       : null;
-  }
-
-  private emitReplyRequested(workspaceId: string, assignmentId: string): void {
-    const payload: ChatReplyRequestedPayload = { workspaceId, assignmentId };
-    this.emitter.emit(CHAT_REPLY_REQUESTED_EVENT, payload);
+    return root
+      ? { ...scope, id: root.id, kind: 'thread', root }
+      : { ...scope, id: scope.room.id, kind: 'dm', root: null };
   }
 }

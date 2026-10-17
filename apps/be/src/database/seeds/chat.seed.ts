@@ -5,7 +5,6 @@ import { Agent } from '../../modules/agents/entities/agent.entity';
 import { ensureDmRoom } from '../../modules/chat/dm-room';
 import { ChatMessage } from '../../modules/chat/entities/chat-message.entity';
 import { Room } from '../../modules/chat/entities/room.entity';
-import { Thread } from '../../modules/chat/entities/thread.entity';
 import { TaskEntity } from '../../modules/tasks/entities/task.entity';
 import { Member } from '../../modules/workspace/entities/member.entity';
 import { Workspace } from '../../modules/workspace/entities/workspace.entity';
@@ -104,23 +103,47 @@ const seedChatFor = async (
   const base = now - 23 * HOUR;
   const createdAt = (offset: number) => new Date(now - 24 * HOUR + offset * MIN);
 
-  const insertMessages = async (chatId: string, chatKind: 'dm' | 'thread', list: MessageSeed[]) => {
-    if (await manager.exists(ChatMessage, { where: { workspaceId, chatId } })) return false;
-    for (const m of list) {
-      await manager.insert(ChatMessage, {
-        workspaceId,
-        chatId,
-        chatKind,
-        authorKind: m.by === 'u1' ? 'human' : 'agent',
-        authorMemberId: m.by === 'u1' ? actor.u1 : null,
-        authorAgentId: m.by === 'u1' ? null : actor[m.by],
-        status: 'complete',
-        markdown: m.markdown,
-        draft: null,
-        createdAt: new Date(base - m.beforeMin * MIN),
-      });
+  const row = (roomId: string, m: MessageSeed, parentId: string | null) => ({
+    workspaceId,
+    roomId,
+    parentId,
+    authorKind: m.by === 'u1' ? ('human' as const) : ('agent' as const),
+    authorMemberId: m.by === 'u1' ? actor.u1 : null,
+    authorAgentId: m.by === 'u1' ? null : actor[m.by],
+    status: 'complete' as const,
+    markdown: m.markdown,
+    draft: null,
+    createdAt: new Date(base - m.beforeMin * MIN),
+  });
+
+  /** The main timeline of a DM; only filled while it is empty. */
+  const insertDmMessages = async (roomId: string, list: MessageSeed[]) => {
+    if (await manager.exists(ChatMessage, { where: { workspaceId, roomId } })) return;
+    for (const m of list) await manager.insert(ChatMessage, row(roomId, m, null));
+  };
+
+  /** A titled thread: the first message is the root, the others its replies. Returns the root id. */
+  const ensureThread = async (
+    roomId: string,
+    title: string,
+    list: MessageSeed[],
+  ): Promise<{ id: string; fresh: boolean }> => {
+    const existing = await manager.findOne(ChatMessage, {
+      where: { workspaceId, roomId, parentId: IsNull(), threadTitle: title },
+    });
+    if (existing) return { id: existing.id, fresh: false };
+    const [first, ...rest] = list;
+    const root = (
+      await manager.insert(ChatMessage, { ...row(roomId, first, null), threadTitle: title })
+    ).identifiers[0].id as string;
+    let last = row(roomId, first, null).createdAt;
+    for (const m of rest) {
+      const reply = row(roomId, m, root);
+      last = reply.createdAt;
+      await manager.insert(ChatMessage, reply);
     }
-    return true;
+    await manager.update(ChatMessage, { id: root }, { replyCount: rest.length, lastReplyAt: last });
+    return { id: root, fresh: true };
   };
 
   const dm = await ensureDmRoom(manager, {
@@ -130,7 +153,7 @@ const seedChatFor = async (
     now: createdAt(0),
   });
   if (dm.created) logger.log("Created DM with khanhpv's Claude");
-  await insertMessages(dm.id, 'dm', DM_MESSAGES);
+  await insertDmMessages(dm.id, DM_MESSAGES);
 
   // The seed runs on every dev start: once channels exist they belong to the users (they can
   // rename or delete them), so missing ones are not recreated.
@@ -180,22 +203,9 @@ const seedChatFor = async (
       );
     }
     if (!channel.thread) continue;
-    let thread = await manager.findOne(Thread, {
-      where: { workspaceId, roomId: room.id, name: channel.thread },
-    });
-    if (!thread) {
-      thread = await manager.save(
-        manager.create(Thread, {
-          workspaceId,
-          roomId: room.id,
-          name: channel.thread,
-          connectionId: null,
-          createdAt: createdAt(i + 1),
-        }),
-      );
-    }
+    const thread = await ensureThread(room.id, channel.thread, THREAD_MESSAGES);
     helloThreadId = thread.id;
-    if (await insertMessages(thread.id, 'thread', THREAD_MESSAGES)) {
+    if (thread.fresh) {
       // As in the mock fixtures, khanhpv has already read the thread (unread 0).
       await manager.query(
         `INSERT INTO thread_reads (member_id, chat_id, last_read_at) VALUES ($1, $2, $3)

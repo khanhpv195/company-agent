@@ -50,6 +50,9 @@ export interface GatewayAssignment {
   context: string;
   requestedBy: { id: string; name: string; role: 'owner' | 'admin' | 'member' } | null;
   leaseMs: number;
+  /** Chat runs only (additive; older daemons ignore them): the room and the thread root of the reply. */
+  roomId?: string;
+  parentId?: string | null;
 }
 
 /** How long a cancelled assignment is still reported on a heartbeat that lists no running ids. */
@@ -237,6 +240,7 @@ export class DaemonGatewayService {
     await this.gateway.setSessionKey(row.id, key);
     const saved = await manager.findOneBy(AgentSession, { agentId: agent.id, key });
     if (row.sourceKind === 'chat') await this.streams.publishNow(row.id);
+    const place = row.sourceKind === 'chat' ? await this.chat.placeOfReply(row.id) : null;
 
     return {
       id: row.id,
@@ -250,6 +254,7 @@ export class DaemonGatewayService {
         ? { id: requester.id, name: requester.name, role: requester.role }
         : null,
       leaseMs: LEASE_MS,
+      ...(place ? { roomId: place.roomId, parentId: place.parentId } : {}),
     };
   }
 
@@ -352,9 +357,10 @@ export class DaemonGatewayService {
       const written = dto.text?.trim() ? dto.text : clipResultText(streamed);
       // A completed reply is never an empty bubble.
       const text = ok && !written.trim() ? EMPTY_REPLY : written;
+      // Never write into a message that was deleted while the agent was answering.
       await manager.update(
         ChatMessage,
-        { id: context.message.id },
+        { id: context.message.id, deletedAt: IsNull() },
         { markdown: text, status: ok ? 'complete' : 'failed' },
       );
       const message = await this.chat.loadMessage(context.message.id, manager);
