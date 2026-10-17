@@ -2,6 +2,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { Modal } from '../../components/Modal';
 import { useUi } from '../../stores/ui';
+import { selectableComputers } from '../computers/computers.logic';
 import { usePeople } from '../workspace/workspace.api';
 import {
   DEFAULT_MAX_TURNS,
@@ -34,7 +35,10 @@ function NewAgentForm({
   const navigate = useNavigate();
   const [values, setValues] = useState<AgentFormValues>({
     name: '',
-    computerId: initialComputerId ?? people.computers.find((c) => c.status === 'online')?.id ?? '',
+    computerId:
+      initialComputerId ??
+      selectableComputers(people.computers).find((c) => c.status === 'online')?.id ??
+      '',
     persona: '',
     workdir: '',
     maxTurns: '',
@@ -107,7 +111,7 @@ function NewAgentForm({
             onChange={(e) => set({ computerId: e.target.value })}
           >
             <option value="">Chọn computer…</option>
-            {people.computers.map((c) => (
+            {selectableComputers(people.computers).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
                 {c.status === 'offline' ? ' (offline)' : ''}

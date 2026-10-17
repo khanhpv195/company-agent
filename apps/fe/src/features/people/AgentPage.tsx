@@ -8,6 +8,7 @@ import { Modal } from '../../components/Modal';
 import { rel } from '../../lib/format';
 import { useNow } from '../../lib/use-now';
 import { useOpenDm } from '../chat/chat.api';
+import { selectableComputers } from '../computers/computers.logic';
 import { useTasks } from '../tasks/tasks.api';
 import { usePeople } from '../workspace/workspace.api';
 import {
@@ -260,6 +261,9 @@ export function AgentPage() {
               onClick={() =>
                 remove.mutate(agent.id, {
                   onSuccess: () => {
+                    // The page stays mounted when it navigates to the next agent; close the
+                    // confirm so it does not reopen for that agent.
+                    setConfirmDelete(false);
                     const next = nextAgentAfterDelete(people.agents, agent.id);
                     void (next
                       ? navigate({ to: '/people/agents/$agentId', params: { agentId: next } })
@@ -292,7 +296,11 @@ function RuntimeEditor({
 }) {
   const people = usePeople();
   const [name, setName] = useState(agent.name);
-  const [computerId, setComputerId] = useState(agent.computerId);
+  const computers = selectableComputers(people.computers);
+  // An agent on a revoked computer starts with no selection so the user must pick a live one.
+  const [computerId, setComputerId] = useState(
+    computers.some((c) => c.id === agent.computerId) ? agent.computerId : '',
+  );
   const [workdir, setWorkdir] = useState(agent.workdir);
   const [maxTurns, setMaxTurns] = useState(String(agent.maxTurns));
   const [errors, setErrors] = useState<AgentFormErrors>({});
@@ -301,7 +309,7 @@ function RuntimeEditor({
     const found = validateAgentForm(
       { name, computerId, persona: '', workdir, maxTurns },
       people.agents.filter((a) => a.id !== agent.id).map((a) => a.name),
-      people.computers.map((c) => c.id),
+      computers.map((c) => c.id),
       { requireWorkdir: true },
     );
     setErrors(found);
@@ -338,7 +346,8 @@ function RuntimeEditor({
           value={computerId}
           onChange={(e) => setComputerId(e.target.value)}
         >
-          {people.computers.map((c) => (
+          {!computers.some((c) => c.id === computerId) && <option value="">Chọn computer…</option>}
+          {computers.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
               {c.status === 'offline' ? ' (offline)' : ''}

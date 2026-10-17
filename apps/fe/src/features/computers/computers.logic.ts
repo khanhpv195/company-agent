@@ -24,6 +24,10 @@ export const formatCountdown = (seconds: number): string => {
   return `${m}:${String(s).padStart(2, '0')}`;
 };
 
+/** Computers an agent can be assigned to: revoked computers are never offered. */
+export const selectableComputers = (list: readonly Computer[]): Computer[] =>
+  list.filter((c) => !c.revokedAt);
+
 /** Computers that were not in `before`, in list order. A revoked computer never counts as paired. */
 export const arrivals = (before: ReadonlySet<string>, now: Computer[]): Computer[] =>
   now.filter((c) => !before.has(c.id) && !c.revokedAt);

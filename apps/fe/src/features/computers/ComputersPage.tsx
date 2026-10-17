@@ -114,13 +114,15 @@ export function ComputersPage() {
                   <td>{c.keepAwake ? 'On' : 'Off'}</td>
                   {canManage && (
                     <td style={{ textAlign: 'right' }}>
-                      <button
-                        className="btn sm"
-                        title={`Thêm agent trên ${c.name}`}
-                        onClick={() => openNewAgent(c.id)}
-                      >
-                        <Icon name="plus" size={14} /> Thêm agent
-                      </button>
+                      {!c.revokedAt && (
+                        <button
+                          className="btn sm"
+                          title={`Thêm agent trên ${c.name}`}
+                          onClick={() => openNewAgent(c.id)}
+                        >
+                          <Icon name="plus" size={14} /> Thêm agent
+                        </button>
+                      )}
                       {!isSimulated(c) && !c.revokedAt && (
                         <button
                           className="btn sm"

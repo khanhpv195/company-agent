@@ -651,6 +651,30 @@ label {
   padding: 0;
   color: inherit;
 }
+.md-table-wrap {
+  overflow-x: auto;
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.md-table-wrap table {
+  font-size: 13px;
+  min-width: 100%;
+}
+.md-table-wrap th,
+.md-table-wrap td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.md-table-wrap th {
+  background: var(--hover);
+  color: var(--soft);
+  font-weight: 600;
+}
+.md-table-wrap tbody tr:last-child td {
+  border-bottom: 0;
+}
 .mention {
   color: var(--link);
   font-weight: 600;

@@ -38,7 +38,13 @@ export function LoginPage() {
               <br />
               {name}.
             </h1>
-            <button className="notyou" onClick={() => setEmail('')}>
+            <button
+              className="notyou"
+              onClick={() => {
+                setEmail('');
+                setPassword('');
+              }}
+            >
               Not you?
             </button>
             <div className="card">

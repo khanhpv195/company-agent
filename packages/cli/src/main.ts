@@ -6,6 +6,7 @@ import {
   startCommand,
   statusCommand,
 } from './commands.js';
+import { normalizeArgv } from './argv.js';
 import { errorMessage } from './log.js';
 
 const program = new Command();
@@ -48,7 +49,7 @@ program
     await disconnectCommand();
   });
 
-program.parseAsync().catch((err) => {
+program.parseAsync(normalizeArgv(process.argv)).catch((err) => {
   console.error(`Error: ${errorMessage(err)}`);
   process.exit(1);
 });

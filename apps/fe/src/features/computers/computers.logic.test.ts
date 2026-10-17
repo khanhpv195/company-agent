@@ -5,6 +5,7 @@ import {
   isSimulated,
   pairingCommand,
   secondsLeft,
+  selectableComputers,
   serverOrigin,
 } from './computers.logic';
 
@@ -54,5 +55,16 @@ describe('computers logic', () => {
   it('marks simulated only when the API says so', () => {
     expect(isSimulated(pc('a'))).toBe(false);
     expect(isSimulated(pc('a', { simulated: true }))).toBe(true);
+  });
+});
+
+describe('selectableComputers', () => {
+  it('drops revoked computers and keeps order', () => {
+    const list = [pc('a'), pc('b', { revokedAt: '2026-10-16T00:00:00.000Z' }), pc('c')];
+    expect(selectableComputers(list).map((c) => c.id)).toEqual(['a', 'c']);
+  });
+
+  it('returns an empty list when every computer is revoked', () => {
+    expect(selectableComputers([pc('a', { revokedAt: '2026-10-16T00:00:00.000Z' })])).toEqual([]);
   });
 });
