@@ -5,6 +5,7 @@ import { EntityManager, IsNull, Repository } from 'typeorm';
 import { ClockService } from '../../common/clock';
 import { returnedRows, type AfterCommit } from '../../common/utils';
 import { TaskActivityRow } from '../tasks/entities/task-activity.entity';
+import { leaveAllRooms, lockRooms } from '../chat/room-access';
 import { EventsService } from '../events';
 import { Member } from './entities/member.entity';
 import { Workspace } from './entities/workspace.entity';
@@ -96,6 +97,12 @@ export class WorkspaceService {
     effects: AfterCommit[],
   ): Promise<RemovedMemberCounts> {
     const now = this.clock.now();
+    // Room commands serialize on this lock (callers take it first, before their own row locks,
+    // so the lock order stays the same everywhere).
+    const [{ workspace_id: workspaceId }] = returnedRows<{ workspace_id: string }>(
+      await manager.query('SELECT workspace_id FROM members WHERE id = $1', [memberId]),
+    );
+    await lockRooms(manager, workspaceId);
     await manager.query(
       'UPDATE refresh_tokens SET revoked_at = $2 WHERE member_id = $1 AND revoked_at IS NULL',
       [memberId, now],
@@ -103,6 +110,7 @@ export class WorkspaceService {
     // Read cursors are per member and meaningless afterwards. There are no per-member drafts:
     // draft replies belong to a connection's room, so they stay.
     await manager.query('DELETE FROM thread_reads WHERE member_id = $1', [memberId]);
+    const left = await leaveAllRooms(manager, memberId);
     await manager.update(
       Member,
       { id: memberId },
@@ -148,6 +156,15 @@ export class WorkspaceService {
       });
     }
     effects.push(() => this.events.closeMemberStreams(memberId));
+    if (left.changed) {
+      effects.push(() =>
+        this.events.publish(
+          member.workspaceId,
+          { type: 'rooms.changed' },
+          { memberIds: left.audience },
+        ),
+      );
+    }
     if (tasks.length > 0) {
       effects.push(() => this.events.publish(member.workspaceId, { type: 'tasks.changed' }));
     }

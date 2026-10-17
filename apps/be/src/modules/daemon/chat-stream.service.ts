@@ -128,10 +128,22 @@ export class ChatStreamService {
       await this.publishNow(assignmentId);
       return;
     }
-    this.chat.publishMessage(
-      state.workspaceId,
-      { ...state.base, markdown: state.text },
-      state.memberIds,
-    );
+    // The audience is re-read on every flush: a member removed from a private room mid-reply
+    // must stop receiving chunks (a cheap two-query lookup, at most 10 per second and stream).
+    try {
+      const current = await this.chat.currentAudience(state.base.chatId);
+      if (!current || !this.streams.has(assignmentId)) return;
+      state.memberIds = current.audience;
+      this.chat.publishMessage(
+        state.workspaceId,
+        { ...state.base, markdown: state.text },
+        current.audience,
+      );
+    } catch (error) {
+      // Never fall back to the stale audience: skip this chunk, the next flush retries.
+      this.logger.warn(
+        `Resolving the audience of chat reply ${assignmentId} failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 }

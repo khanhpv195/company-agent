@@ -25,6 +25,10 @@ import { Workspace } from '../../workspace/entities/workspace.entity';
   unique: true,
   where: `"kind" = 'dm'`,
 })
+// Channel names are unique per workspace ignoring case: UQ_rooms_channel_name_ci is
+// `(workspace_id, lower(name)) WHERE kind = 'channel'`, created by hand in a migration because
+// TypeORM cannot declare an expression index; `synchronize: false` keeps it out of the drift diff.
+@Index('UQ_rooms_channel_name_ci', { synchronize: false })
 export class Room {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -48,6 +52,10 @@ export class Room {
 
   @Column({ name: 'is_private', type: 'boolean', default: false })
   isPrivate: boolean;
+
+  /** The channel every new member joins (set by the backfill / seed; it cannot be deleted or made private). */
+  @Column({ name: 'is_default', type: 'boolean', default: false })
+  isDefault: boolean;
 
   /** DM partner. */
   @Column({ name: 'agent_id', type: 'uuid', nullable: true })

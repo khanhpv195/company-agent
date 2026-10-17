@@ -286,9 +286,13 @@ export class DashboardService {
             ? payload.ok
               ? 'trả lời trong DM'
               : 'thất bại khi trả lời trong DM'
-            : payload.ok
-              ? `trả lời **${payload.preview}**`
-              : `thất bại khi trả lời **${payload.preview}**`,
+            : payload.privateRoom
+              ? payload.ok
+                ? 'trả lời trong kênh riêng'
+                : 'thất bại khi trả lời trong kênh riêng'
+              : payload.ok
+                ? `trả lời **${payload.preview}**`
+                : `thất bại khi trả lời **${payload.preview}**`,
         ),
       ),
     );

@@ -26,6 +26,7 @@ import { Member } from '../src/modules/workspace/entities/member.entity';
 import {
   createAgent,
   createComputer,
+  joinAll,
   createTestApp,
   LoggedInClient,
   mintAccessToken,
@@ -154,6 +155,7 @@ describe('Chat (e2e)', () => {
       }),
     );
     channelId = channel.id;
+    await joinAll(dataSource, channel.id, [me.memberId, member.id], [a1.id, a2.id, a3.id]);
     threadId = (
       await dataSource.getRepository(Thread).save(
         dataSource.getRepository(Thread).create({
@@ -481,6 +483,7 @@ describe('Chat (e2e)', () => {
         // a DM's text never leaves the DM
         preview: '',
         dm: true,
+        privateRoom: false,
       },
     ]);
     expect(

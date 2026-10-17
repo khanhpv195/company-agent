@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import type { RoomIcon } from '@repo/shared';
-import { In, IsNull, type DataSource, type EntityManager } from 'typeorm';
+import { ILike, In, IsNull, type DataSource, type EntityManager } from 'typeorm';
 import { Agent } from '../../modules/agents/entities/agent.entity';
 import { ensureDmRoom } from '../../modules/chat/dm-room';
 import { ChatMessage } from '../../modules/chat/entities/chat-message.entity';
@@ -132,12 +132,19 @@ const seedChatFor = async (
   if (dm.created) logger.log("Created DM with khanhpv's Claude");
   await insertMessages(dm.id, 'dm', DM_MESSAGES);
 
+  // The seed runs on every dev start: once channels exist they belong to the users (they can
+  // rename or delete them), so missing ones are not recreated.
+  const hadChannels = await manager.exists(Room, { where: { workspaceId, kind: 'channel' } });
   let helloThreadId: string | null = null;
   for (const [i, channel] of CHANNELS.entries()) {
     let room = await manager.findOne(Room, {
-      where: { workspaceId, kind: 'channel', name: channel.name },
+      // ILike: channel names are unique ignoring case (UQ_rooms_channel_name_ci).
+      where: { workspaceId, kind: 'channel', name: ILike(channel.name) },
     });
+    let fresh = false;
+    if (!room && hadChannels) continue;
     if (!room) {
+      fresh = true;
       room = await manager.save(
         manager.create(Room, {
           workspaceId,
@@ -145,6 +152,8 @@ const seedChatFor = async (
           name: channel.name,
           icon: channel.icon,
           isPrivate: channel.isPrivate,
+          // The channel every new member joins.
+          isDefault: channel.name === 'all-members',
           agentId: null,
           memberId: null,
           connectionId: null,
@@ -152,6 +161,23 @@ const seedChatFor = async (
         }),
       );
       logger.log(`Created room #${channel.name}`);
+    }
+    // Everybody of the workspace belongs to the seeded channels; the dev member owns them.
+    // Only when created here: later removals by users must survive the seed that runs on every start.
+    if (fresh) {
+      await manager.query(
+        `INSERT INTO room_members (workspace_id, room_id, member_id, role)
+       SELECT $1, $2, m.id, CASE WHEN m.id = $3 THEN 'owner' ELSE 'member' END
+       FROM members m WHERE m.workspace_id = $1 AND m.removed_at IS NULL
+       ON CONFLICT DO NOTHING`,
+        [workspaceId, room.id, actor.u1],
+      );
+      await manager.query(
+        `INSERT INTO room_members (workspace_id, room_id, agent_id, role)
+       SELECT $1, $2, a.id, 'member' FROM agents a WHERE a.workspace_id = $1 AND a.deleted_at IS NULL
+       ON CONFLICT DO NOTHING`,
+        [workspaceId, room.id],
+      );
     }
     if (!channel.thread) continue;
     let thread = await manager.findOne(Thread, {

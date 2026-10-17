@@ -18,8 +18,17 @@ export interface ChatRunEndedPayload {
   agentId: string;
   ok: boolean;
   durationSec: number;
-  /** First line of the request, markdown stripped. Empty for a DM (its text stays private). */
+  /** First line of the request, markdown stripped. Empty for a DM or private channel (its text stays private). */
   preview: string;
   /** The run answered a DM: workspace-visible rows must not carry its text. */
   dm: boolean;
+  /** The run answered in a private channel: workspace-visible rows carry neither text nor room name. */
+  privateRoom?: boolean;
 }
+
+/** Longest channel name. */
+export const ROOM_NAME_MAX = 80;
+/** Longest thread name. */
+export const THREAD_NAME_MAX = 120;
+/** Most members plus agents one request may add. */
+export const MAX_ROOM_ADDS = 200;

@@ -34,6 +34,7 @@ import { SeatSyncService } from '../billing/seat-sync.service';
 import { PlanLimitsService } from '../billing/plan-limits.service';
 import { Member } from '../workspace/entities/member.entity';
 import { Workspace } from '../workspace/entities/workspace.entity';
+import { joinDefaultRooms } from '../chat/room-access';
 import { toSession } from '../workspace/workspace.mapper';
 import { AcceptInviteDto, CreateInviteDto } from './dto/team.dto';
 import { Invite } from './entities/invite.entity';
@@ -297,6 +298,7 @@ export class InvitesService {
             passwordChangedAt: now,
           }),
         );
+        await joinDefaultRooms(manager, workspace.id, member.id);
         const pair = await this.tokens.issuePair(manager, member, randomUUID(), meta);
         await this.audit.record(
           {

@@ -27,6 +27,7 @@ import { MailService } from '../mail/mail.service';
 import { Member } from '../workspace/entities/member.entity';
 import { toSession } from '../workspace/workspace.mapper';
 import { WorkspaceService } from '../workspace/workspace.service';
+import { lockRooms } from '../chat/room-access';
 import { ChangePasswordDto, DeleteAccountDto, UpdateProfileDto } from './dto/account.dto';
 
 /** At most one verification email per member in this window. */
@@ -175,6 +176,8 @@ export class AccountService {
   async deleteAccount(auth: AuthContext, dto: DeleteAccountDto): Promise<void> {
     const member = await this.checkPassword(auth, dto.password);
     await transactionWithEffects(this.dataSource, async (manager, effects) => {
+      // The rooms lock first (lock order shared with the room commands), then the workspace row.
+      await lockRooms(manager, member.workspaceId);
       // Same workspace row lock as transfer-ownership: the role is re-read once it has settled,
       // so a transfer and a self-deletion can never leave the workspace without a live owner.
       await manager.query('SELECT id FROM workspaces WHERE id = $1 FOR UPDATE', [

@@ -191,6 +191,14 @@ describe('Connections (e2e)', () => {
         agentId: null,
       });
       expect(room.threads).toHaveLength(1);
+      const roomMembers = await dataSource.query(
+        `SELECT member_id, agent_id FROM room_members WHERE room_id = $1`,
+        [room.id],
+      );
+      expect(roomMembers.filter((r: { agent_id: string | null }) => r.agent_id)).toEqual([
+        expect.objectContaining({ agent_id: sales.id }),
+      ]);
+      expect(roomMembers.filter((r: { member_id: string | null }) => r.member_id)).toHaveLength(1);
       const thread = room.threads[0];
       expect(thread).toMatchObject({
         name: 'Nguyễn Lan',

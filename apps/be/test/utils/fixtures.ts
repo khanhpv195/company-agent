@@ -43,3 +43,28 @@ export const createAgent = (
       ...overrides,
     }),
   );
+
+/** Puts members and agents into a channel (rooms inserted directly have no memberships). */
+export const joinAll = async (
+  ds: DataSource,
+  roomId: string,
+  memberIds: string[],
+  agentIds: string[] = [],
+): Promise<void> => {
+  const [{ workspace_id: workspaceId }] = (await ds.query(
+    `SELECT workspace_id FROM rooms WHERE id = $1`,
+    [roomId],
+  )) as { workspace_id: string }[];
+  for (const id of memberIds) {
+    await ds.query(
+      `INSERT INTO room_members (workspace_id, room_id, member_id, role) VALUES ($1, $2, $3, 'member')`,
+      [workspaceId, roomId, id],
+    );
+  }
+  for (const id of agentIds) {
+    await ds.query(
+      `INSERT INTO room_members (workspace_id, room_id, agent_id, role) VALUES ($1, $2, $3, 'member')`,
+      [workspaceId, roomId, id],
+    );
+  }
+};

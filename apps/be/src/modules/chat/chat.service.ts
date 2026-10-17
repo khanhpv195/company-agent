@@ -12,10 +12,15 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import type { Chat, Message, Room as RoomContract, Thread as ThreadContract } from '@repo/shared';
 import { isUUID } from 'class-validator';
 import { randomUUID } from 'node:crypto';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, Not } from 'typeorm';
 import { ClockService } from '../../common/clock';
 import { agentConfig } from '../../config';
-import { requestLanguage, returnedRows, transactionWithEffects } from '../../common/utils';
+import {
+  requestLanguage,
+  returnedRows,
+  transactionWithEffects,
+  type AfterCommit,
+} from '../../common/utils';
 import type { AuthContext } from '../../common/types';
 import { deriveAgentStatus } from '../agents/agent-status.util';
 import { Agent } from '../agents/entities/agent.entity';
@@ -35,6 +40,7 @@ import {
 import { toMessage, toRoom, toThread, type LastMessage } from './chat.mapper';
 import { previewOf } from './chat.util';
 import { ensureDmRoom } from './dm-room';
+import { roomAgentIds, roomMemberIds } from './room-access';
 import type { SendMessageDto } from './dto/chat.dto';
 import { ChatMessage, type ChatKind } from './entities/chat-message.entity';
 import { Room } from './entities/room.entity';
@@ -52,6 +58,13 @@ export interface ResolvedChat {
   thread: Thread | null;
   /** The agent of the connection a connected inbox thread belongs to. */
   connectionAgentId?: string | null;
+  /**
+   * The only members who may see this chat's events: a DM's member, a channel's live members.
+   * undefined = the whole workspace (connection inboxes are visible to everybody).
+   */
+  audience: string[] | undefined;
+  /** Agents that belong to the channel; null when membership does not restrict them (DMs, inboxes). */
+  roomAgentIds: string[] | null;
 }
 
 /** Everything a runner needs to work on one chat reply. */
@@ -62,13 +75,22 @@ export interface ReplyContext {
   chat: ResolvedChat;
   /** The only members who may see this chat's events; undefined = the whole workspace. */
   memberIds: string[] | undefined;
-  /** Where the request came from, for the agent's activity log: "DM" or "# room › thread". */
+  /**
+   * Where the request came from, for the agent's activity log (a workspace-visible surface):
+   * "DM", "# room › thread", or a neutral "private channel" for a private room's thread.
+   */
   where: string;
 }
 
-/** DMs are private to their member: their events carry that audience, threads have none. */
-export const audienceOf = (chat: Pick<ResolvedChat, 'kind' | 'room'>): string[] | undefined =>
-  chat.kind === 'dm' && chat.room.memberId ? [chat.room.memberId] : undefined;
+/** DMs go to their member only, channel threads to the channel's members (inboxes to all). */
+export const audienceOf = (chat: Pick<ResolvedChat, 'audience'>): string[] | undefined =>
+  chat.audience;
+
+/** Neutral `where` of an agent activity for a private channel (the real name stays private). */
+export const PRIVATE_CHANNEL_WHERE = 'Kênh riêng';
+
+const audienceOfDm = (room: Room): string[] | undefined =>
+  room.memberId ? [room.memberId] : undefined;
 
 @Injectable()
 export class ChatService implements OnApplicationBootstrap {
@@ -128,20 +150,46 @@ export class ChatService implements OnApplicationBootstrap {
 
   // ---------- reads ----------
 
-  /** Channels of the workspace plus the caller's own DMs, with derived previews and unread. */
+  /**
+   * The caller's DMs, the channels they belong to (public or private) and the connection
+   * inboxes (visible to every member), with derived previews and unread.
+   */
   async listRooms(auth: AuthContext): Promise<RoomContract[]> {
+    return this.assembleRooms(auth, undefined);
+  }
+
+  /** One room as `GET /rooms` shows it; null when the caller cannot see it. */
+  async roomOf(auth: AuthContext, roomId: string): Promise<RoomContract | null> {
+    if (!isUUID(roomId)) return null;
+    return (await this.assembleRooms(auth, roomId))[0] ?? null;
+  }
+
+  private async assembleRooms(auth: AuthContext, onlyRoomId: string | undefined) {
     const { workspaceId, memberId } = auth;
     const manager = this.dataSource.manager;
+    const mine = returnedRows<{ room_id: string; role: 'owner' | 'member' }>(
+      await manager.query(
+        `SELECT room_id, role FROM room_members WHERE workspace_id = $1 AND member_id = $2`,
+        [workspaceId, memberId],
+      ),
+    );
+    const roleByRoom = new Map(mine.map((row) => [row.room_id, row.role]));
     const rooms = (
       await manager.find(Room, {
         where: [
-          { workspaceId, kind: 'channel' },
+          { workspaceId, kind: 'channel', id: In([...roleByRoom.keys()]) },
+          { workspaceId, kind: 'channel', connectionId: Not(IsNull()) },
           { workspaceId, kind: 'dm', memberId },
+          // A workspace owner/admin managing one room may see it without being a member.
+          ...(onlyRoomId && (auth.role === 'owner' || auth.role === 'admin')
+            ? [{ workspaceId, kind: 'channel' as const, id: onlyRoomId }]
+            : []),
         ],
         // The join skips soft-deleted agents: a deleted agent's DM is hidden.
         relations: { agent: true },
       })
     )
+      .filter((room) => !onlyRoomId || room.id === onlyRoomId)
       .filter((room) => room.kind === 'channel' || room.agent)
       // DMs first (newest first, like the mock's unshift), then channels in creation order.
       .sort((a, b) =>
@@ -153,6 +201,25 @@ export class ChatService implements OnApplicationBootstrap {
             ? b.createdAt.getTime() - a.createdAt.getTime() || a.id.localeCompare(b.id)
             : a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id),
       );
+    const counts = new Map<string, { members: number; agents: number }>();
+    const countIds = rooms.filter((room) => room.kind === 'channel').map((room) => room.id);
+    if (countIds.length) {
+      for (const row of returnedRows<{ room_id: string; members: string; agents: string }>(
+        await manager.query(
+          `SELECT rm.room_id,
+                  count(m.id) AS members,
+                  count(a.id) AS agents
+           FROM room_members rm
+           LEFT JOIN members m ON m.id = rm.member_id AND m.removed_at IS NULL
+           LEFT JOIN agents a ON a.id = rm.agent_id AND a.deleted_at IS NULL
+           WHERE rm.room_id = ANY($1::uuid[])
+           GROUP BY rm.room_id`,
+          [countIds],
+        ),
+      )) {
+        counts.set(row.room_id, { members: Number(row.members), agents: Number(row.agents) });
+      }
+    }
     const channelIds = rooms.filter((room) => room.kind === 'channel').map((room) => room.id);
     const threads = channelIds.length
       ? await manager
@@ -208,14 +275,22 @@ export class ChatService implements OnApplicationBootstrap {
       );
       threadsByRoom.set(thread.roomId, list);
     }
-    return rooms.map((room) =>
-      toRoom(
+    return rooms.map((room) => ({
+      ...toRoom(
         room,
         threadsByRoom.get(room.id) ?? [],
         room.kind === 'dm' ? lastByChat.get(room.id) : undefined,
         previewOf,
       ),
-    );
+      ...(room.kind === 'channel'
+        ? {
+            memberCount: counts.get(room.id)?.members ?? 0,
+            agentCount: counts.get(room.id)?.agents ?? 0,
+            isDefault: room.isDefault,
+            myRole: roleByRoom.get(room.id) ?? null,
+          }
+        : {}),
+    }));
   }
 
   async getChat(auth: AuthContext, id: string): Promise<Chat> {
@@ -248,11 +323,17 @@ export class ChatService implements OnApplicationBootstrap {
    * pending chat assignment (all in one transaction). A runner (the simulator today, a daemon
    * later) picks the reply up after the commit through `chat.reply.requested`.
    */
-  async sendMessage(auth: AuthContext, chatId: string, dto: SendMessageDto): Promise<Message> {
+  async sendMessage(
+    auth: AuthContext,
+    chatId: string,
+    dto: SendMessageDto,
+    /** Join the caller's transaction (its effects fire after its commit) instead of opening one. */
+    tx?: { manager: EntityManager; effects: AfterCommit[] },
+  ): Promise<Message> {
     const text = dto.markdown?.trim();
     if (!text) throw new BadRequestException({ message: 'chat.MESSAGE_EMPTY' });
 
-    return transactionWithEffects(this.dataSource, async (manager, effects) => {
+    const run = async (manager: EntityManager, effects: AfterCommit[]): Promise<Message> => {
       const chat = await this.requireChat(manager, auth, chatId);
       const agents = await manager.find(Agent, {
         where: { workspaceId: auth.workspaceId },
@@ -321,7 +402,8 @@ export class ChatService implements OnApplicationBootstrap {
       }
       effects.push(() => this.publishRoomsChanged(auth.workspaceId, audience));
       return humanMessage;
-    });
+    };
+    return tx ? run(tx.manager, tx.effects) : transactionWithEffects(this.dataSource, run);
   }
 
   /** Marks the chat read for the caller. Chats the caller cannot see are a silent no-op. */
@@ -405,6 +487,9 @@ export class ChatService implements OnApplicationBootstrap {
       if (chat.kind === 'dm' && chat.room.agentId !== agentId) {
         throw new BadRequestException({ message: 'chat.UNKNOWN_AGENT' });
       }
+      if (chat.roomAgentIds && !chat.roomAgentIds.includes(agentId)) {
+        throw new BadRequestException({ message: 'chat.AGENT_NOT_IN_ROOM' });
+      }
       const row = await manager.save(
         manager.create(ChatMessage, {
           workspaceId: auth.workspaceId,
@@ -453,14 +538,16 @@ export class ChatService implements OnApplicationBootstrap {
     durationSec: number,
   ): Promise<void> {
     const workspaceId = ctx.assignment.workspaceId;
-    // A DM is private to its member: the activity log and the feed get a neutral line only.
+    // A DM is private to its member and a private channel to its members: the activity log
+    // and the workspace feed get a neutral line only (no text, no room or thread name).
     const dm = ctx.chat.kind === 'dm';
-    const preview = dm ? '' : previewOf(text);
+    const privateRoom = !dm && ctx.chat.room.isPrivate;
+    const preview = dm || privateRoom ? '' : previewOf(text);
     await manager.getRepository(AgentActivity).insert({
       workspaceId,
       agentId: ctx.agent.id,
       location: ctx.where,
-      request: dm ? 'Tin nhắn riêng (DM)' : preview,
+      request: dm ? 'Tin nhắn riêng (DM)' : privateRoom ? 'Tin nhắn trong kênh riêng' : preview,
       status: ok ? 'completed' : 'failed',
       at: this.clock.now(),
     });
@@ -472,6 +559,7 @@ export class ChatService implements OnApplicationBootstrap {
         durationSec,
         preview,
         dm,
+        privateRoom,
       };
       this.emitter.emit(CHAT_RUN_ENDED_EVENT, payload);
       this.events.publish(workspaceId, { type: 'agents.changed' });
@@ -503,8 +591,41 @@ export class ChatService implements OnApplicationBootstrap {
       agent,
       chat,
       memberIds: audienceOf(chat),
-      where: chat.kind === 'dm' ? 'DM' : `# ${chat.room.name} › ${chat.thread?.name ?? ''}`,
+      where:
+        chat.kind === 'dm'
+          ? 'DM'
+          : chat.room.isPrivate
+            ? PRIVATE_CHANNEL_WHERE
+            : `# ${chat.room.name} › ${chat.thread?.name ?? ''}`,
     };
+  }
+
+  /**
+   * Who may see a chat's events right now (a thread's room members, a DM's member, undefined =
+   * the whole workspace for an inbox). Streams call this on every publish so a member removed
+   * from a private room mid-reply stops receiving chunks. `null` = the chat is gone.
+   */
+  async currentAudience(chatId: string): Promise<{ audience: string[] | undefined } | null> {
+    const manager = this.dataSource.manager;
+    const rows = returnedRows<{
+      kind: 'thread' | 'dm';
+      room_id: string;
+      member_id: string | null;
+      connection_id: string | null;
+    }>(
+      await manager.query(
+        `SELECT 'thread' AS kind, r.id AS room_id, r.member_id, r.connection_id
+         FROM threads t JOIN rooms r ON r.id = t.room_id WHERE t.id = $1
+         UNION ALL
+         SELECT 'dm', r.id, r.member_id, r.connection_id FROM rooms r WHERE r.id = $1 AND r.kind = 'dm'`,
+        [chatId],
+      ),
+    );
+    const row = rows[0];
+    if (!row) return null;
+    if (row.kind === 'dm') return { audience: row.member_id ? [row.member_id] : undefined };
+    if (row.connection_id) return { audience: undefined };
+    return { audience: await roomMemberIds(manager, row.room_id) };
   }
 
   /** The message as clients see it, with its assignment's current state. */
@@ -566,7 +687,8 @@ export class ChatService implements OnApplicationBootstrap {
 
   /**
    * Who answers: an explicit agent of this workspace, else the first agent of the chat whose
-   * `@name` the text mentions (case-sensitive), else a DM's partner, else nobody.
+   * `@name` the text mentions (case-sensitive), else a DM's partner, else nobody. Only agents
+   * that belong to the channel can be woken: mentioning another agent just posts the message.
    */
   private pickTarget(
     chat: ResolvedChat,
@@ -578,6 +700,8 @@ export class ChatService implements OnApplicationBootstrap {
       const explicit = agents.find((agent) => agent.id === explicitId);
       if (!explicit || (chat.kind === 'dm' && explicit.id !== chat.room.agentId))
         throw new BadRequestException({ message: 'chat.UNKNOWN_AGENT' });
+      if (chat.roomAgentIds && !chat.roomAgentIds.includes(explicit.id))
+        throw new BadRequestException({ message: 'chat.AGENT_NOT_IN_ROOM' });
       return explicit;
     }
     const inChat = this.agentsOfChat(chat, agents);
@@ -589,13 +713,18 @@ export class ChatService implements OnApplicationBootstrap {
 
   /**
    * DM: the partner. A connected inbox thread: the connection's agent. Any other thread:
-   * every agent whose computer is not offline, in workspace order.
+   * the channel's agents whose computer is not offline, in workspace order.
    */
   private agentsOfChat(chat: ResolvedChat, agents: Agent[]): Agent[] {
     if (chat.kind === 'dm') return agents.filter((agent) => agent.id === chat.room.agentId);
     if (chat.connectionAgentId)
       return agents.filter((agent) => agent.id === chat.connectionAgentId);
-    return agents.filter((agent) => deriveAgentStatus(agent.computer.status, false) !== 'offline');
+    const members = chat.roomAgentIds;
+    return agents.filter(
+      (agent) =>
+        (!members || members.includes(agent.id)) &&
+        deriveAgentStatus(agent.computer.status, false) !== 'offline',
+    );
   }
 
   private async toChat(manager: EntityManager, chat: ResolvedChat): Promise<Chat> {
@@ -649,12 +778,15 @@ export class ChatService implements OnApplicationBootstrap {
       relations: { room: true },
     });
     if (thread) {
+      const scope = await this.channelScope(manager, thread.room, auth.memberId);
+      if (!scope) return null;
       return {
         id: thread.id,
         kind: 'thread',
         room: thread.room,
         thread,
         connectionAgentId: await this.connectionAgentOf(manager, thread),
+        ...scope,
       };
     }
     const room = await manager.findOne(Room, {
@@ -662,7 +794,32 @@ export class ChatService implements OnApplicationBootstrap {
       relations: { agent: true },
     });
     // A deleted agent's DM is gone for clients (the join skips soft-deleted agents).
-    return room?.agent ? { id: room.id, kind: 'dm', room, thread: null } : null;
+    return room?.agent
+      ? {
+          id: room.id,
+          kind: 'dm',
+          room,
+          thread: null,
+          audience: audienceOfDm(room),
+          roomAgentIds: null,
+        }
+      : null;
+  }
+
+  /**
+   * Who may see a channel's chats and which agents it holds. Connection inboxes are open to
+   * the whole workspace (no restriction); any other channel needs the caller's membership
+   * (null = not a member, which looks like an unknown chat). Pass no member to skip the check.
+   */
+  private async channelScope(
+    manager: EntityManager,
+    room: Room,
+    memberId: string | null,
+  ): Promise<{ audience: string[] | undefined; roomAgentIds: string[] | null } | null> {
+    if (room.connectionId) return { audience: undefined, roomAgentIds: null };
+    const audience = await roomMemberIds(manager, room.id);
+    if (memberId && !audience.includes(memberId)) return null;
+    return { audience, roomAgentIds: await roomAgentIds(manager, room.id) };
   }
 
   /** The agent of the connection behind an inbox thread (plain query: no module cycle). */
@@ -686,10 +843,21 @@ export class ChatService implements OnApplicationBootstrap {
         where: { id: message.chatId },
         relations: { room: true },
       });
-      return thread ? { id: thread.id, kind: 'thread', room: thread.room, thread } : null;
+      if (!thread) return null;
+      const scope = await this.channelScope(manager, thread.room, null);
+      return scope ? { id: thread.id, kind: 'thread', room: thread.room, thread, ...scope } : null;
     }
     const room = await manager.findOneBy(Room, { id: message.chatId });
-    return room ? { id: room.id, kind: 'dm', room, thread: null } : null;
+    return room
+      ? {
+          id: room.id,
+          kind: 'dm',
+          room,
+          thread: null,
+          audience: audienceOfDm(room),
+          roomAgentIds: null,
+        }
+      : null;
   }
 
   private emitReplyRequested(workspaceId: string, assignmentId: string): void {

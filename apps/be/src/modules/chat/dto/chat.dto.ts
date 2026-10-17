@@ -11,6 +11,7 @@ import type {
   Room,
   RoomIcon,
   RoomKind,
+  RoomMemberRole,
   SendMessageInput,
   Thread,
   ToolCall,
@@ -79,6 +80,22 @@ export class RoomDto implements Room {
 
   @ApiProperty({ type: [ThreadDto] })
   threads: ThreadDto[];
+
+  @ApiPropertyOptional({ description: 'Live human members of a channel' })
+  memberCount?: number;
+
+  @ApiPropertyOptional({ description: 'Live agents of a channel' })
+  agentCount?: number;
+
+  @ApiPropertyOptional({ description: 'The channel every new member joins (cannot be deleted)' })
+  isDefault?: boolean;
+
+  @ApiPropertyOptional({
+    enum: ['owner', 'member'],
+    nullable: true,
+    description: 'The caller role in the channel',
+  })
+  myRole?: RoomMemberRole | null;
 }
 
 export class ChatDto implements Chat {

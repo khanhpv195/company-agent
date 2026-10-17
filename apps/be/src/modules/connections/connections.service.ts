@@ -18,6 +18,7 @@ import { Agent } from '../agents/entities/agent.entity';
 import { toMessage } from '../chat/chat.mapper';
 import { ChatMessage } from '../chat/entities/chat-message.entity';
 import { Room } from '../chat/entities/room.entity';
+import { assertRoomNameFree, mapRoomNameConflict } from '../chat/room-access';
 import { Thread } from '../chat/entities/thread.entity';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { AuditService } from '../audit/audit.service';
@@ -106,134 +107,157 @@ export class ConnectionsService {
     const definition = this.definition(provider);
     this.assertAvailable();
     const { workspaceId, memberId } = auth;
-    return this.lock.run(workspaceId, async (manager, effects) => {
-      const agent = isUUID(dto.agentId)
-        ? await manager.findOneBy(Agent, { id: dto.agentId, workspaceId })
-        : null;
-      if (!agent) throw new BadRequestException({ message: 'connections.UNKNOWN_AGENT' });
-      const now = this.clock.now();
-      const sample = CONNECTION_SAMPLES[definition.id];
-      const roomName = dto.roomName.trim().replace(/^#/, '') || `${definition.id}-inbox`;
-      const existing = await manager.findOneBy(WorkspaceConnection, {
-        workspaceId,
-        provider: definition.id,
-      });
-
-      let room = existing?.roomId
-        ? await manager.findOneBy(Room, { id: existing.roomId, workspaceId })
-        : null;
-      if (room) {
-        if (room.name !== roomName) await manager.update(Room, { id: room.id }, { name: roomName });
-      } else {
-        room = await manager.save(
-          manager.create(Room, {
-            workspaceId,
-            kind: 'channel',
-            name: roomName,
-            icon: 'inbox',
-            isPrivate: false,
-            agentId: null,
-            memberId: null,
-            connectionId: definition.id,
-            createdAt: now,
-          }),
-        );
-      }
-      let thread = await manager.findOneBy(Thread, {
-        workspaceId,
-        roomId: room.id,
-        connectionId: definition.id,
-      });
-      const fresh = !thread;
-      if (!thread) {
-        thread = await manager.save(
-          manager.create(Thread, {
-            workspaceId,
-            roomId: room.id,
-            name: sample.from,
-            connectionId: definition.id,
-            createdAt: now,
-          }),
-        );
-      }
-
-      if (fresh) {
-        const external = await manager.save(
-          manager.create(ChatMessage, {
-            workspaceId,
-            chatId: thread.id,
-            chatKind: 'thread',
-            authorKind: 'external',
-            externalConnectionId: definition.id,
-            externalName: sample.from,
-            status: 'complete',
-            markdown: sample.text,
-            draft: null,
-            createdAt: now,
-          }),
-        );
-        const reply = await manager.save(
-          manager.create(ChatMessage, {
-            workspaceId,
-            chatId: thread.id,
-            chatKind: 'thread',
-            authorKind: 'agent',
-            authorAgentId: agent.id,
-            status: 'complete',
-            markdown: sample.reply,
-            // Real provider adapters plug in at `send-draft` (ChatService.sendDraft): today the
-            // draft is only marked sent and nothing leaves the product.
-            draft: {
-              connectionId: definition.id,
-              state: dto.mode === 'draft' ? 'pending' : 'sent',
-            },
-            createdAt: now,
-          }),
-        );
-        for (const row of [external, reply]) {
-          const message = toMessage(row);
-          effects.push(() =>
-            this.events.publish(workspaceId, { type: 'message.upserted', message }),
-          );
-        }
-        await this.dashboard.recordFeed(
-          manager,
-          effects,
-          workspaceId,
-          memberId,
-          `kết nối **${definition.name}** vào **#${roomName}**`,
-        );
-      }
-
-      const row = await manager.save(
-        manager.create(WorkspaceConnection, {
+    return this.lock
+      .run(workspaceId, async (manager, effects) => {
+        const agent = isUUID(dto.agentId)
+          ? await manager.findOneBy(Agent, { id: dto.agentId, workspaceId })
+          : null;
+        if (!agent) throw new BadRequestException({ message: 'connections.UNKNOWN_AGENT' });
+        const now = this.clock.now();
+        const sample = CONNECTION_SAMPLES[definition.id];
+        const roomName = dto.roomName.trim().replace(/^#/, '') || `${definition.id}-inbox`;
+        const existing = await manager.findOneBy(WorkspaceConnection, {
           workspaceId,
           provider: definition.id,
-          status: 'on',
-          account: dto.account,
-          roomName,
-          roomId: room.id,
-          agentId: agent.id,
-          mode: dto.mode,
-          connectedAt:
-            existing?.status === 'on' && existing.connectedAt ? existing.connectedAt : now,
-        }),
-      );
-      effects.push(() => this.publishChanged(workspaceId));
-      await this.audit.record(
-        {
+        });
+
+        let room = existing?.roomId
+          ? await manager.findOneBy(Room, { id: existing.roomId, workspaceId })
+          : null;
+        if (room) {
+          if (room.name !== roomName) {
+            await assertRoomNameFree(manager, workspaceId, roomName, room.id);
+            await manager.update(Room, { id: room.id }, { name: roomName });
+          }
+        } else {
+          await assertRoomNameFree(manager, workspaceId, roomName, null);
+          room = await manager.save(
+            manager.create(Room, {
+              workspaceId,
+              kind: 'channel',
+              name: roomName,
+              icon: 'inbox',
+              isPrivate: false,
+              agentId: null,
+              memberId: null,
+              connectionId: definition.id,
+              createdAt: now,
+            }),
+          );
+          // Inboxes are open to the workspace: every live member plus the connection's agent.
+          await manager.query(
+            `INSERT INTO room_members (workspace_id, room_id, member_id, role)
+           SELECT $1, $2, m.id, CASE WHEN m.id = $3 THEN 'owner' ELSE 'member' END
+           FROM members m WHERE m.workspace_id = $1 AND m.removed_at IS NULL
+           ON CONFLICT DO NOTHING`,
+            [workspaceId, room.id, memberId],
+          );
+        }
+        await manager.query(
+          `DELETE FROM room_members WHERE room_id = $1 AND agent_id IS NOT NULL AND agent_id <> $2`,
+          [room.id, agent.id],
+        );
+        await manager.query(
+          `INSERT INTO room_members (workspace_id, room_id, agent_id, role)
+         VALUES ($1, $2, $3, 'member') ON CONFLICT DO NOTHING`,
+          [workspaceId, room.id, agent.id],
+        );
+        let thread = await manager.findOneBy(Thread, {
           workspaceId,
-          actorMemberId: memberId,
-          action: 'connection.connected',
-          targetType: 'connection',
-          targetId: definition.id,
-          meta: { agentId: agent.id, mode: dto.mode },
-          ip: auth.ip,
-        },
-        manager,
-      );
-      return toConnection(definition, row, this.availability);
-    });
+          roomId: room.id,
+          connectionId: definition.id,
+        });
+        const fresh = !thread;
+        if (!thread) {
+          thread = await manager.save(
+            manager.create(Thread, {
+              workspaceId,
+              roomId: room.id,
+              name: sample.from,
+              connectionId: definition.id,
+              createdAt: now,
+            }),
+          );
+        }
+
+        if (fresh) {
+          const external = await manager.save(
+            manager.create(ChatMessage, {
+              workspaceId,
+              chatId: thread.id,
+              chatKind: 'thread',
+              authorKind: 'external',
+              externalConnectionId: definition.id,
+              externalName: sample.from,
+              status: 'complete',
+              markdown: sample.text,
+              draft: null,
+              createdAt: now,
+            }),
+          );
+          const reply = await manager.save(
+            manager.create(ChatMessage, {
+              workspaceId,
+              chatId: thread.id,
+              chatKind: 'thread',
+              authorKind: 'agent',
+              authorAgentId: agent.id,
+              status: 'complete',
+              markdown: sample.reply,
+              // Real provider adapters plug in at `send-draft` (ChatService.sendDraft): today the
+              // draft is only marked sent and nothing leaves the product.
+              draft: {
+                connectionId: definition.id,
+                state: dto.mode === 'draft' ? 'pending' : 'sent',
+              },
+              createdAt: now,
+            }),
+          );
+          for (const row of [external, reply]) {
+            const message = toMessage(row);
+            effects.push(() =>
+              this.events.publish(workspaceId, { type: 'message.upserted', message }),
+            );
+          }
+          await this.dashboard.recordFeed(
+            manager,
+            effects,
+            workspaceId,
+            memberId,
+            `kết nối **${definition.name}** vào **#${roomName}**`,
+          );
+        }
+
+        const row = await manager.save(
+          manager.create(WorkspaceConnection, {
+            workspaceId,
+            provider: definition.id,
+            status: 'on',
+            account: dto.account,
+            roomName,
+            roomId: room.id,
+            agentId: agent.id,
+            mode: dto.mode,
+            connectedAt:
+              existing?.status === 'on' && existing.connectedAt ? existing.connectedAt : now,
+          }),
+        );
+        effects.push(() => this.publishChanged(workspaceId));
+        await this.audit.record(
+          {
+            workspaceId,
+            actorMemberId: memberId,
+            action: 'connection.connected',
+            targetType: 'connection',
+            targetId: definition.id,
+            meta: { agentId: agent.id, mode: dto.mode },
+            ip: auth.ip,
+          },
+          manager,
+        );
+        return toConnection(definition, row, this.availability);
+      })
+      .catch(mapRoomNameConflict);
   }
 
   /** Turns it off: the inbox room, its threads, messages and read marks are deleted. */

@@ -26,6 +26,7 @@ import { Member } from '../workspace/entities/member.entity';
 import { Workspace } from '../workspace/entities/workspace.entity';
 import { toMember, toWorkspace } from '../workspace/workspace.mapper';
 import { WorkspaceService } from '../workspace/workspace.service';
+import { lockRooms } from '../chat/room-access';
 import {
   DeleteWorkspaceDto,
   TransferOwnershipDto,
@@ -98,6 +99,8 @@ export class TeamService {
   /** Owner removes anyone but self; an admin removes plain members only. */
   async removeMember(auth: AuthContext, memberId: string): Promise<void> {
     await transactionWithEffects(this.dataSource, async (manager, effects) => {
+      // The rooms lock first: removing a member also leaves their rooms (see WorkspaceService).
+      await lockRooms(manager, auth.workspaceId);
       const actor = await this.lockActor(manager, auth, ['owner', 'admin']);
       const target = await this.findTarget(manager, auth.workspaceId, memberId);
       if (target.id === actor.id) {
