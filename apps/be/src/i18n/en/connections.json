@@ -1,0 +1,8 @@
+{
+  "LISTED": "Connections loaded",
+  "AUTHORIZED": "Authorization granted",
+  "CONNECTED": "Connection enabled",
+  "DISCONNECTED": "Connection disabled",
+  "NOT_FOUND": "Connection {id} not found",
+  "UNKNOWN_AGENT": "Unknown agent"
+}

@@ -15,6 +15,12 @@ const FORCED: Record<string, string> = {
   DB_LOGGING: 'false',
   JWT_ACCESS_SECRET: 'e2e-test-access-secret-0123456789abcdef',
   AGENT_SIMULATOR: 'false',
+  AUTH_THROTTLE_LIMIT: '1000',
+  // Cheap argon2: the default (64 MiB x 3) costs 150-700 ms per hash and starves under load.
+  ARGON2_MEMORY_COST: '4096',
+  ARGON2_TIME_COST: '2',
+  ARGON2_PARALLELISM: '1',
+  RECONCILE_ENABLED: 'false',
   SWAGGER_ENABLED: 'false',
 };
 

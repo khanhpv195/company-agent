@@ -6,5 +6,8 @@
   "IS_ENUM": "{property} có giá trị không hợp lệ",
   "MIN": "{property} không được nhỏ hơn {constraints.0}",
   "MAX": "{property} không được lớn hơn {constraints.0}",
-  "MAX_LENGTH": "{property} tối đa {constraints.0} ký tự"
+  "MAX_LENGTH": "{property} tối đa {constraints.0} ký tự",
+  "IS_EMAIL": "{property} phải là địa chỉ email hợp lệ",
+  "MIN_LENGTH": "{property} phải có ít nhất {constraints.0} ký tự",
+  "IS_ARRAY": "{property} phải là một mảng"
 }

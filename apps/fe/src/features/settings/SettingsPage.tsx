@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getRouteApi, Link, useNavigate } from '@tanstack/react-router';
 import { Icon } from '../../components/Icon';
 import { api } from '../../lib/api-client';
+import { clearTokens, getTokens } from '../../lib/auth-tokens';
 import { ROLE_NAME, usePeople, useSession } from '../workspace/workspace.api';
 
 const route = getRouteApi('/_app/settings/$section');
@@ -57,7 +58,13 @@ function Section({ id }: { id: string }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const logout = async () => {
-    await api.post('/auth/logout');
+    try {
+      await api.post('/auth/logout', { refreshToken: getTokens()?.refreshToken });
+    } catch {
+      /* log out locally even if the API call fails */
+    } finally {
+      clearTokens();
+    }
     qc.clear();
     await navigate({ to: '/login' });
   };

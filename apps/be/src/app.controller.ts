@@ -1,9 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { HealthStatus } from '@repo/shared';
-import { RawResponse } from './common/decorators';
+import { Public, RawResponse } from './common/decorators';
 
 @ApiTags('health')
+@Public()
 @Controller()
 export class AppController {
   @Get('health')

@@ -30,6 +30,7 @@ export const setupSwagger = (app: INestApplication): void => {
     .setTitle('Backend API')
     .setDescription('NestJS API consumed by the Tauri desktop app')
     .setVersion(DEFAULT_API_VERSION)
+    .addBearerAuth()
     .addGlobalParameters({
       in: 'header',
       name: 'Accept-Language',

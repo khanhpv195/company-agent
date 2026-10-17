@@ -3,10 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api-client';
 import { qk } from '../../lib/query-keys';
 
-export const useAgentActivity = (id: string) =>
+/** `enabled` stays false for an unknown agent id (the API answers 404 for it). */
+export const useAgentActivity = (id: string, enabled = true) =>
   useQuery({
     queryKey: qk.agentActivity(id),
     queryFn: () => api.get<AgentActivity[]>(`/agents/${id}/activity`),
+    enabled,
   }).data ?? [];
 
 export function useUpdateAgent(id: string) {

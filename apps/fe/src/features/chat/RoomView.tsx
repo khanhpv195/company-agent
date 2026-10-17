@@ -7,6 +7,9 @@ import { useChat, useMarkRead, useMessages, useSendMessage } from './chat.api';
 import { Composer } from './Composer';
 import { MessageItem } from './MessageItem';
 
+/** How long a new message must sit before the open chat is marked read again. */
+const READ_DEBOUNCE_MS = 500;
+
 const route = getRouteApi('/_app/chat/$chatId');
 
 export function RoomView() {
@@ -22,6 +25,17 @@ export function RoomView() {
   const { mutate: read } = markRead;
 
   useEffect(() => read(chatId), [chatId, read]);
+
+  // New messages while this chat is open count as seen: re-mark it read (debounced), but only
+  // while the window is visible so a hidden window keeps its unread badge.
+  const lastId = messages.data?.[messages.data.length - 1]?.id;
+  useEffect(() => {
+    if (!lastId) return;
+    const timer = setTimeout(() => {
+      if (document.visibilityState === 'visible') read(chatId);
+    }, READ_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [chatId, lastId, read]);
 
   // Follow new content while the user is at the bottom.
   const list = messages.data;

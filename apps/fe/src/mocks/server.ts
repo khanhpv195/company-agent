@@ -1,8 +1,10 @@
 import type {
+  AuthResult,
   CommentInput,
   ConnectInput,
   CreateTaskInput,
   LoginInput,
+  RegisterInput,
   MoveTaskInput,
   RealtimeEvent,
   SchedulerState,
@@ -67,6 +69,11 @@ const session = (): Session => {
   const user = db.members.find((m) => m.id === db.meId)!;
   return { user, workspace: db.workspace, onboarded: db.session.onboarded };
 };
+const authResult = (): AuthResult => ({
+  session: session(),
+  accessToken: 'mock-access',
+  refreshToken: 'mock-refresh',
+});
 const requireAuth = () => {
   if (!db.session.loggedIn) throw new HttpError(401, 'Not logged in');
 };
@@ -77,11 +84,30 @@ on('GET', '/session', () => {
   return session();
 });
 on('POST', '/auth/login', (ctx) => {
-  const { email } = body<LoginInput>(ctx);
+  const { email, password } = body<LoginInput>(ctx);
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) throw new HttpError(400, 'Email không hợp lệ');
+  if (!password) throw new HttpError(400, 'Vui lòng nhập mật khẩu');
   db.session.loggedIn = true;
   saveSession();
-  return session();
+  return authResult();
+});
+on('POST', '/auth/register', (ctx) => {
+  const { name, email, password, workspaceName } = body<RegisterInput>(ctx);
+  if (!name?.trim()) throw new HttpError(400, 'Vui lòng nhập tên');
+  if (!email || !/^\S+@\S+\.\S+$/.test(email)) throw new HttpError(400, 'Email không hợp lệ');
+  if (!password || password.length < 8) throw new HttpError(400, 'Mật khẩu tối thiểu 8 ký tự');
+  const me = db.members.find((m) => m.id === db.meId)!;
+  me.name = name.trim();
+  me.email = email;
+  if (workspaceName?.trim()) db.workspace.name = workspaceName.trim();
+  db.session.loggedIn = true;
+  db.session.onboarded = false;
+  saveSession();
+  return authResult();
+});
+on('POST', '/auth/refresh', () => {
+  requireAuth();
+  return authResult();
 });
 on('POST', '/auth/logout', () => {
   db.session.loggedIn = false;

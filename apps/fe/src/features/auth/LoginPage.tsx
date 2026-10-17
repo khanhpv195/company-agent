@@ -1,8 +1,9 @@
-import type { Session } from '@repo/shared';
+import type { AuthResult, LoginInput } from '@repo/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
-import { api, ApiError } from '../../lib/api-client';
+import { api, ApiError, MOCK } from '../../lib/api-client';
+import { setTokens } from '../../lib/auth-tokens';
 import { qk } from '../../lib/query-keys';
 import { LoginHero } from './LoginHero';
 
@@ -10,13 +11,20 @@ export function LoginPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [email, setEmail] = useState('khanhpv@holatech.tech');
+  const [password, setPassword] = useState('');
   const login = useMutation({
-    mutationFn: () => api.post<Session>('/auth/login', { email }),
-    onSuccess: async (session) => {
-      qc.setQueryData(qk.session, session);
-      await navigate({ to: session.onboarded ? '/' : '/onboarding' });
+    mutationFn: (pw: string) =>
+      api.post<AuthResult>('/auth/login', { email, password: pw } satisfies LoginInput),
+    onSuccess: async (result) => {
+      setTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken });
+      qc.setQueryData(qk.session, result.session);
+      await navigate({ to: result.session.onboarded ? '/' : '/onboarding' });
     },
   });
+  // SSO is not wired to a real provider yet; it only works against the mock backend.
+  const sso = () => {
+    if (MOCK) login.mutate('sso-mock');
+  };
   const name = email.split('@')[0] || 'bạn';
 
   return (
@@ -38,7 +46,7 @@ export function LoginPage() {
                 className="card-body"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  login.mutate();
+                  login.mutate(password);
                 }}
               >
                 <div className="sso">
@@ -46,7 +54,8 @@ export function LoginPage() {
                     type="button"
                     title="Apple"
                     aria-label="Đăng nhập với Apple"
-                    onClick={() => login.mutate()}
+                    disabled={!MOCK || login.isPending}
+                    onClick={sso}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
                       <path
@@ -59,7 +68,8 @@ export function LoginPage() {
                     type="button"
                     title="Google"
                     aria-label="Đăng nhập với Google"
-                    onClick={() => login.mutate()}
+                    disabled={!MOCK || login.isPending}
+                    onClick={sso}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
                       <path
@@ -84,7 +94,8 @@ export function LoginPage() {
                     type="button"
                     title="Microsoft"
                     aria-label="Đăng nhập với Microsoft"
-                    onClick={() => login.mutate()}
+                    disabled={!MOCK || login.isPending}
+                    onClick={sso}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
                       <path fill="#F25022" d="M1 1h10v10H1z" />
@@ -105,6 +116,16 @@ export function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
+                <label htmlFor="password">Password</label>
+                <input
+                  id="password"
+                  className="field"
+                  type="password"
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
                 {login.error && (
                   <div className="err-line">
                     {login.error instanceof ApiError ? login.error.message : 'Không đăng nhập được'}
@@ -115,7 +136,7 @@ export function LoginPage() {
                 </button>
               </form>
               <div className="card-foot">
-                Don&apos;t have an account? <a href="#/login">Sign up</a>
+                Don&apos;t have an account? <Link to="/register">Sign up</Link>
               </div>
             </div>
           </div>

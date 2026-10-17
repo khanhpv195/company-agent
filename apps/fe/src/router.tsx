@@ -7,7 +7,9 @@ import {
   Outlet,
   redirect,
 } from '@tanstack/react-router';
+import { ApiError } from './lib/api-client';
 import { LoginPage } from './features/auth/LoginPage';
+import { RegisterPage } from './features/auth/RegisterPage';
 import { OnboardingPage } from './features/auth/OnboardingPage';
 import { ChatLayout } from './features/chat/ChatLayout';
 import { ChatEmpty, RoomView } from './features/chat/RoomView';
@@ -19,7 +21,7 @@ import { MemberPage } from './features/people/MemberPage';
 import { PeopleLayout } from './features/people/PeopleLayout';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { TasksPage, type TasksView } from './features/tasks/TasksPage';
-import { sessionQuery } from './features/workspace/workspace.api';
+import { agentsQuery, sessionQuery } from './features/workspace/workspace.api';
 import { AppShell } from './layout/AppShell';
 
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: Outlet });
@@ -30,6 +32,12 @@ const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',
   component: LoginPage,
+});
+
+const registerRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/register',
+  component: RegisterPage,
 });
 
 const onboardingRoute = createRoute({
@@ -94,8 +102,17 @@ const peopleRoute = createRoute({
 const peopleIndexRoute = createRoute({
   getParentRoute: () => peopleRoute,
   path: '/',
-  beforeLoad: () => {
-    throw redirect({ to: '/people/agents/$agentId', params: { agentId: 'a1' } });
+  beforeLoad: async ({ context }) => {
+    // fetchQuery (not ensureQueryData) so a stale cache cannot pick an agent that no longer exists.
+    const agents = await context.queryClient
+      .fetchQuery({ ...agentsQuery, staleTime: 5_000 })
+      .catch((error: unknown) => {
+        if (error instanceof ApiError && error.status === 401) throw error;
+        return [];
+      });
+    const first = agents[0];
+    if (!first) throw redirect({ to: '/computers' });
+    throw redirect({ to: '/people/agents/$agentId', params: { agentId: first.id } });
   },
 });
 const agentRoute = createRoute({
@@ -145,6 +162,7 @@ const connectionsRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  registerRoute,
   onboardingRoute,
   appRoute.addChildren([
     dashboardRoute,

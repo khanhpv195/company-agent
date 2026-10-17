@@ -2,6 +2,9 @@ import { SupportedLanguage } from '@repo/shared';
 import * as Joi from 'joi';
 import { DEFAULT_CORS_ORIGINS } from '../contacts';
 
+/** `<number>[s|m|h|d]`, see `parseDuration`. */
+const DURATION_PATTERN = /^\d+[smhd]$/;
+
 export const envValidationSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
   PORT: Joi.number().port().default(3000),
@@ -12,9 +15,17 @@ export const envValidationSchema = Joi.object({
     .default(SupportedLanguage.EN),
 
   JWT_ACCESS_SECRET: Joi.string().min(32).required(),
-  JWT_ACCESS_TTL: Joi.string().default('15m'),
-  JWT_REFRESH_TTL: Joi.string().default('30d'),
-  AGENT_SIMULATOR: Joi.boolean().default(true),
+  JWT_ACCESS_TTL: Joi.string().pattern(DURATION_PATTERN).default('15m'),
+  JWT_REFRESH_TTL: Joi.string().pattern(DURATION_PATTERN).default('30d'),
+  AUTH_THROTTLE_LIMIT: Joi.number().integer().min(1).default(10),
+  AUTH_THROTTLE_TTL: Joi.string().pattern(DURATION_PATTERN).default('60s'),
+  ARGON2_MEMORY_COST: Joi.number().integer().min(1024).default(65536),
+  ARGON2_TIME_COST: Joi.number().integer().min(1).default(3),
+  ARGON2_PARALLELISM: Joi.number().integer().min(1).default(4),
+  SEED_PASSWORD: Joi.string().min(8).optional(),
+  AGENT_SIMULATOR: Joi.boolean().default(false),
+  RECONCILE_ENABLED: Joi.boolean().default(true),
+  SSE_HEARTBEAT_MS: Joi.number().integer().min(50).default(25000),
 
   DB_HOST: Joi.string().default('localhost'),
   DB_PORT: Joi.number().port().default(5432),

@@ -1,0 +1,22 @@
+{
+  "LISTED": "Tasks loaded",
+  "CREATED": "Task created",
+  "UPDATED": "Task updated",
+  "MOVED": "Task moved",
+  "APPROVED": "Task approved",
+  "REVISED": "Task sent back for revision",
+  "STOPPED": "Task stopped",
+  "RETRIED": "Task retried",
+  "RUN_NOW": "Task moved up the queue",
+  "COMMENTED": "Comment added",
+  "SPANS_LISTED": "Run spans loaded",
+  "SCHEDULER_LOADED": "Scheduler loaded",
+  "SCHEDULER_UPDATED": "Scheduler updated",
+  "NOT_FOUND": "Task {id} not found",
+  "TITLE_REQUIRED": "Title is required",
+  "UNKNOWN_ASSIGNEE": "Unknown assignee",
+  "NOT_IN_REVIEW": "Task is not waiting for review",
+  "NOT_RUNNING": "Task is not running",
+  "NO_AGENT": "Task has no agent",
+  "COMMENT_EMPTY": "Comment is empty"
+}

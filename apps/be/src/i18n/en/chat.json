@@ -1,0 +1,14 @@
+{
+  "ROOMS_LISTED": "Rooms loaded",
+  "LOADED": "Chat loaded",
+  "MESSAGES_LISTED": "Messages loaded",
+  "MESSAGE_SENT": "Message sent",
+  "READ": "Chat marked as read",
+  "DM_READY": "Direct message ready",
+  "DRAFT_SENT": "Draft sent",
+  "NOT_FOUND": "Chat {id} not found",
+  "MESSAGE_EMPTY": "Message is empty",
+  "UNKNOWN_AGENT": "Unknown agent",
+  "AGENT_NOT_FOUND": "Agent not found",
+  "DRAFT_NOT_FOUND": "Draft not found"
+}

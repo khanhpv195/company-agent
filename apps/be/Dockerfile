@@ -39,7 +39,7 @@ RUN pnpm --filter @repo/shared build
 WORKDIR /app/apps/be
 ENV NODE_ENV=development
 EXPOSE 3000 9229
-CMD ["sh", "-c", "pnpm --filter @repo/shared build && sh scripts/migrate.sh run && pnpm exec nest start --watch --debug 0.0.0.0:9229"]
+CMD ["sh", "-c", "pnpm --filter @repo/shared build && sh scripts/migrate.sh run && if [ \"${RUN_SEED:-false}\" = \"true\" ]; then sh scripts/seed.sh; fi && pnpm exec nest start --watch --debug 0.0.0.0:9229"]
 
 # ---------- build: compile and produce a production-only node_modules ----------
 FROM deps AS build

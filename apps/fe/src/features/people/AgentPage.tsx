@@ -26,7 +26,7 @@ export function AgentPage() {
   const navigate = useNavigate();
   const people = usePeople();
   const agent = people.agent(agentId);
-  const activity = useAgentActivity(agentId);
+  const activity = useAgentActivity(agentId, !!agent);
   const tasks = useTasks().data ?? [];
   const update = useUpdateAgent(agentId);
   const openDm = useOpenDm();

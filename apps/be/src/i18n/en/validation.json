@@ -6,5 +6,8 @@
   "IS_ENUM": "{property} has an invalid value",
   "MIN": "{property} must not be less than {constraints.0}",
   "MAX": "{property} must not be greater than {constraints.0}",
-  "MAX_LENGTH": "{property} must be at most {constraints.0} characters"
+  "MAX_LENGTH": "{property} must be at most {constraints.0} characters",
+  "IS_EMAIL": "{property} must be a valid email address",
+  "MIN_LENGTH": "{property} must be at least {constraints.0} characters",
+  "IS_ARRAY": "{property} must be an array"
 }

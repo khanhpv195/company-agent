@@ -1,0 +1,22 @@
+{
+  "LISTED": "Đã tải danh sách task",
+  "CREATED": "Đã tạo task",
+  "UPDATED": "Đã cập nhật task",
+  "MOVED": "Đã chuyển task",
+  "APPROVED": "Đã duyệt task",
+  "REVISED": "Đã yêu cầu sửa task",
+  "STOPPED": "Đã dừng task",
+  "RETRIED": "Đã chạy lại task",
+  "RUN_NOW": "Đã đưa task lên đầu hàng đợi",
+  "COMMENTED": "Đã thêm bình luận",
+  "SPANS_LISTED": "Đã tải lịch sử run",
+  "SCHEDULER_LOADED": "Đã tải trạng thái bộ lập lịch",
+  "SCHEDULER_UPDATED": "Đã cập nhật bộ lập lịch",
+  "NOT_FOUND": "Task {id} not found",
+  "TITLE_REQUIRED": "Title is required",
+  "UNKNOWN_ASSIGNEE": "Unknown assignee",
+  "NOT_IN_REVIEW": "Task is not waiting for review",
+  "NOT_RUNNING": "Task is not running",
+  "NO_AGENT": "Task has no agent",
+  "COMMENT_EMPTY": "Comment is empty"
+}

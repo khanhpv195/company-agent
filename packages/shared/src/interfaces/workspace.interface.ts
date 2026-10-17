@@ -26,6 +26,28 @@ export interface Session {
 
 export interface LoginInput {
   email: string;
+  password: string;
+}
+
+export interface RegisterInput {
+  name: string;
+  email: string;
+  password: string;
+  workspaceName?: string;
+}
+
+export interface RefreshInput {
+  refreshToken: string;
+}
+
+export interface LogoutInput {
+  refreshToken?: string;
+}
+
+export interface AuthResult {
+  session: Session;
+  accessToken: string;
+  refreshToken: string;
 }
 
 export interface CliStatus {

@@ -8,3 +8,4 @@ apps/fe/src-tauri/target
 apps/fe/src-tauri/gen
 apps/fe/src-tauri/icons
 .playwright-mcp
+docs/mockups/

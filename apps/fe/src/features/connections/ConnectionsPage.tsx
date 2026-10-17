@@ -4,6 +4,8 @@ import { AgentArt } from '../../components/Avatar';
 import { ChannelLogo, LetterLogo } from '../../components/ChannelLogo';
 import { Icon } from '../../components/Icon';
 import { useUi } from '../../stores/ui';
+import { useRooms } from '../chat/chat.api';
+import { inboxThreadId } from '../chat/chat.logic';
 import { usePeople, useSession } from '../workspace/workspace.api';
 import { useConnectionActions, useConnections } from './connections.api';
 
@@ -120,6 +122,8 @@ function ConnectionCard({ c }: { c: Connection }) {
   const setWizard = useUi((s) => s.setWizard);
   const { disconnect } = useConnectionActions();
   const people = usePeople();
+  const rooms = useRooms();
+  const inboxId = inboxThreadId(rooms, c.id) ?? c.roomId;
   if (c.status !== 'on')
     return (
       <div className="conn">
@@ -162,9 +166,13 @@ function ConnectionCard({ c }: { c: Connection }) {
       <dl className="kv">
         <dt>Room nhận tin</dt>
         <dd>
-          <Link className="link" to="/chat/$chatId" params={{ chatId: `t-${c.id}` }}>
-            #{c.roomName}
-          </Link>
+          {inboxId ? (
+            <Link className="link" to="/chat/$chatId" params={{ chatId: inboxId }}>
+              #{c.roomName}
+            </Link>
+          ) : (
+            <>#{c.roomName}</>
+          )}
         </dd>
         <dt>Agent phụ trách</dt>
         <dd>{people.name(c.agentId)}</dd>
@@ -172,9 +180,11 @@ function ConnectionCard({ c }: { c: Connection }) {
         <dd>{c.mode === 'draft' ? 'Soạn nháp, bạn duyệt rồi gửi' : 'Agent tự trả lời'}</dd>
       </dl>
       <div className="foot">
-        <Link className="btn" to="/chat/$chatId" params={{ chatId: `t-${c.id}` }}>
-          <Icon name="inbox" size={15} /> Mở room
-        </Link>
+        {inboxId && (
+          <Link className="btn" to="/chat/$chatId" params={{ chatId: inboxId }}>
+            <Icon name="inbox" size={15} /> Mở room
+          </Link>
+        )}
         <button className="btn" onClick={() => setWizard(c.id)}>
           Cấu hình
         </button>

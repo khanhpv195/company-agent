@@ -6,11 +6,13 @@ Không chứa secret. **Chưa có screenshot UI thật**: Kylon desktop chỉ l�
 là suy ra từ mô hình dữ liệu + IPC; cần screenshot của user để khớp pixel.
 
 ## Sản phẩm là gì
+
 - "AI-native workspace": người và AI agent cùng chat trong **room** (giống Slack). Agent là Claude Code
   chạy trên **computer** (máy thật của user) qua một gateway daemon.
 - Vendor: PURE REASON INC. Desktop: Electron, internal name `@p2/desktop`, URL scheme `p2://`.
 
 ## Mô hình dữ liệu quan sát được
+
 - **Workspace** → có members (user, auth kiểu Clerk `user_…`), computers, agents, rooms.
 - **Computer**: máy đã đăng ký vào workspace (id, online/heartbeat, lifecycle `connected/live`,
   keepAwake). Kết nối SSE tới server, hay reconnect khi máy ngủ dậy.
@@ -24,6 +26,7 @@ là suy ra từ mô hình dữ liệu + IPC; cần screenshot của user để k
   ngắn hạn theo lượt (`turn-auth`).
 
 ## Tính năng desktop (34 IPC `p2-desktop:*`)
+
 - Onboarding máy local: cài CLI, kiểm tra trạng thái CLI (`cli-install`, `cli-status`, `local-onboarding`)
   → màn "Kết nối máy này làm computer".
 - Đăng nhập qua trình duyệt ngoài + deep link callback, ủy quyền kết nối.
@@ -34,6 +37,7 @@ là suy ra từ mô hình dữ liệu + IPC; cần screenshot của user để k
 - 2 BrowserWindow (main + phụ, có thể là login/onboarding).
 
 ## Màn hình suy ra (để dựng UI giống Kylon)
+
 1. **Sidebar trái kiểu Slack**: switch workspace, danh sách Rooms, DM với agent/người, mục Agents, Computers.
 2. **Room view**: timeline chat, tin agent stream dần (markdown + code + tool call), composer có @mention
    agent, đính kèm file, nút gọi.

@@ -1,0 +1,6 @@
+{
+  "INVALID_TRANSITION": "Không thể chuyển nhiệm vụ này sang trạng thái đó",
+  "NOT_FOUND": "Không tìm thấy nhiệm vụ",
+  "AGENT_NOT_FOUND": "Không tìm thấy agent",
+  "AGENT_BUSY": "Agent đang chạy một task khác"
+}

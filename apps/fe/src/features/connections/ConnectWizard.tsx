@@ -1,10 +1,14 @@
-import type { Connection, ReplyMode } from '@repo/shared';
+import type { Connection, ReplyMode, Room } from '@repo/shared';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { ChannelLogo } from '../../components/ChannelLogo';
 import { Icon } from '../../components/Icon';
 import { Modal } from '../../components/Modal';
+import { api } from '../../lib/api-client';
+import { qk } from '../../lib/query-keys';
 import { useUi } from '../../stores/ui';
+import { inboxThreadId } from '../chat/chat.logic';
 import { usePeople } from '../workspace/workspace.api';
 import { useConnectionActions, useConnections } from './connections.api';
 
@@ -22,6 +26,7 @@ const STEP_NAMES = ['Ủy quyền', 'Chọn tài khoản', 'Định tuyến'];
 function Wizard({ c, onClose }: { c: Connection; onClose: () => void }) {
   const people = usePeople();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const actions = useConnectionActions();
   const on = c.status === 'on';
   const agents = people.agents.filter((a) => a.status !== 'offline');
@@ -43,7 +48,19 @@ function Wizard({ c, onClose }: { c: Connection; onClose: () => void }) {
       {
         onSuccess: () => {
           onClose();
-          if (!on) void navigate({ to: '/chat/$chatId', params: { chatId: `t-${c.id}` } });
+          if (on) return;
+          // The inbox thread id is server-generated: look it up in a fresh room list.
+          void qc
+            .fetchQuery({
+              queryKey: qk.rooms,
+              queryFn: () => api.get<Room[]>('/rooms'),
+              staleTime: 0,
+            })
+            .then((rooms) => {
+              const chatId = inboxThreadId(rooms, c.id);
+              if (chatId) void navigate({ to: '/chat/$chatId', params: { chatId } });
+            })
+            .catch(() => undefined);
         },
       },
     );

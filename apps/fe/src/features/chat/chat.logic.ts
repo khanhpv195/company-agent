@@ -11,6 +11,15 @@ export function chatLabel(rooms: Room[], chatId: string): string {
   return chatId;
 }
 
+/** The inbox thread a connection's sample conversation lives in (ids are server-generated). */
+export function inboxThreadId(rooms: Room[], connectionId: string): string | null {
+  for (const r of rooms) {
+    const t = r.threads.find((x) => x.connectionId === connectionId);
+    if (t) return t.id;
+  }
+  return null;
+}
+
 /** Text after the last "@" up to the caret, if the caret is inside a mention. */
 export function mentionQuery(text: string, caret: number): string | null {
   const m = text.slice(0, caret).match(/@([\p{L}\p{N}_' ]*)$/u);

@@ -1,0 +1,6 @@
+{
+  "INVALID_TRANSITION": "This assignment cannot change to that state",
+  "NOT_FOUND": "Assignment not found",
+  "AGENT_NOT_FOUND": "Agent not found",
+  "AGENT_BUSY": "This agent is already running a task"
+}

@@ -1,4 +1,5 @@
-import type { ApiErrorResponse, ApiResponse } from '@repo/shared';
+import type { ApiErrorResponse, ApiResponse, AuthResult } from '@repo/shared';
+import { clearTokens, getTokens, setTokens } from './auth-tokens';
 
 export const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1').replace(
   /\/+$/,
@@ -33,10 +34,11 @@ export const toSearchParams = (params: Record<string, QueryValue>): string => {
   return query ? `?${query}` : '';
 };
 
-export async function apiRequest<TData, TMeta = Record<string, unknown>>(
+async function execute<TData, TMeta>(
   path: string,
-  init: RequestInit = {},
+  init: RequestInit,
 ): Promise<ApiResponse<TData, TMeta>> {
+  const tokens = getTokens();
   let response: Response;
   try {
     response = await transport(`${API_URL}${path}`, {
@@ -44,6 +46,7 @@ export async function apiRequest<TData, TMeta = Record<string, unknown>>(
       headers: {
         'Content-Type': 'application/json',
         'Accept-Language': navigator.language,
+        ...(tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : {}),
         ...init.headers,
       },
     });
@@ -60,6 +63,75 @@ export async function apiRequest<TData, TMeta = Record<string, unknown>>(
   }
 
   return body as ApiResponse<TData, TMeta>;
+}
+
+let refreshing: Promise<boolean> | null = null;
+
+/** Single-flight: parallel 401s share one /auth/refresh call. */
+export function refreshTokens(): Promise<boolean> {
+  refreshing ??= (async () => {
+    const tokens = getTokens();
+    if (!tokens) return false;
+    try {
+      const res = await execute<AuthResult, Record<string, unknown>>('/auth/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken: tokens.refreshToken }),
+      });
+      setTokens({ accessToken: res.data.accessToken, refreshToken: res.data.refreshToken });
+      return true;
+    } catch (e) {
+      // Only a rejected refresh token ends the session; outages keep it for a later retry.
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        clearTokens();
+        return false;
+      }
+      throw e;
+    }
+  })().finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
+
+let onSessionExpired: (() => void) | null = null;
+
+/** Registers the one place that reacts to a final 401 (queries and mutations alike). */
+export function setSessionExpiredHandler(handler: (() => void) | null): void {
+  onSessionExpired = handler;
+}
+
+/** For non-fetch callers (the SSE client) that find the session gone: routes the app to login. */
+export function triggerSessionExpired(): void {
+  onSessionExpired?.();
+}
+
+const isUnauthorized = (e: unknown): e is ApiError => e instanceof ApiError && e.status === 401;
+
+export async function apiRequest<TData, TMeta = Record<string, unknown>>(
+  path: string,
+  init: RequestInit = {},
+): Promise<ApiResponse<TData, TMeta>> {
+  const sentWith = getTokens()?.accessToken;
+  try {
+    return await execute<TData, TMeta>(path, init);
+  } catch (e) {
+    if (!isUnauthorized(e) || path.startsWith('/auth/')) throw e;
+    // Another request already rotated the tokens while this one was in flight: just retry.
+    const current = getTokens()?.accessToken;
+    if (!current || current === sentWith) {
+      if (!(await refreshTokens())) {
+        onSessionExpired?.();
+        throw e;
+      }
+    }
+    try {
+      return await execute<TData, TMeta>(path, init);
+    } catch (retryError) {
+      // Still 401 with freshly rotated tokens: the session is gone.
+      if (isUnauthorized(retryError)) onSessionExpired?.();
+      throw retryError;
+    }
+  }
 }
 
 const send =

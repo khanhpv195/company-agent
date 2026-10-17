@@ -1,0 +1,14 @@
+{
+  "ROOMS_LISTED": "Đã tải danh sách phòng",
+  "LOADED": "Đã tải cuộc trò chuyện",
+  "MESSAGES_LISTED": "Đã tải tin nhắn",
+  "MESSAGE_SENT": "Đã gửi tin nhắn",
+  "READ": "Đã đánh dấu đã đọc",
+  "DM_READY": "Tin nhắn riêng đã sẵn sàng",
+  "DRAFT_SENT": "Đã gửi bản nháp",
+  "NOT_FOUND": "Chat {id} not found",
+  "MESSAGE_EMPTY": "Message is empty",
+  "UNKNOWN_AGENT": "Unknown agent",
+  "AGENT_NOT_FOUND": "Agent not found",
+  "DRAFT_NOT_FOUND": "Draft not found"
+}

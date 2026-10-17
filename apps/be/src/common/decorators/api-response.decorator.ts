@@ -5,6 +5,7 @@ import { PaginationMetaDto, ResponseDto } from '../dto/response.dto';
 export const ApiWrappedResponse = <TModel extends Type<unknown>>(
   model: TModel | null,
   status: HttpStatus = HttpStatus.OK,
+  options: { isArray?: boolean } = {},
 ) =>
   applyDecorators(
     ApiExtraModels(ResponseDto, ...(model ? [model] : [])),
@@ -15,7 +16,11 @@ export const ApiWrappedResponse = <TModel extends Type<unknown>>(
           { $ref: getSchemaPath(ResponseDto) },
           {
             properties: {
-              data: model ? { $ref: getSchemaPath(model) } : { type: 'null', nullable: true },
+              data: !model
+                ? { type: 'null', nullable: true }
+                : options.isArray
+                  ? { type: 'array', items: { $ref: getSchemaPath(model) } }
+                  : { $ref: getSchemaPath(model) },
             },
           },
         ],
