@@ -208,6 +208,15 @@ describe('Chat (e2e)', () => {
       .chatId;
   const send = (chatId: string, markdown: string, extra: object = {}, client = me) =>
     call<Message>('post', `/chats/${chatId}/messages`, { markdown, ...extra }, 200, client);
+  const sendIn = async (chatId: string, markdown: string, lang: string) => {
+    const response = await request(app.getHttpServer())
+      .post(`/api/v1/chats/${chatId}/messages`)
+      .set(me.bearer)
+      .set('Accept-Language', lang)
+      .send({ markdown });
+    expect(response.status).toBe(200);
+    return (response.body as ApiResponse<Message>).data;
+  };
   const messages = (chatId: string, client = me) =>
     call<Message[]>('get', `/chats/${chatId}/messages`, undefined, 200, client);
   const replies = async (chatId: string) =>
@@ -407,7 +416,7 @@ describe('Chat (e2e)', () => {
   it('answers through a full simulated run: states, an honest demo reply streamed', async () => {
     const mine = await dmOf(a1);
     realtime = [];
-    const human = await send(mine, 'viết hàm sortBy giúp em');
+    const human = await sendIn(mine, 'viết hàm sortBy giúp em', 'vi');
     expect(human).toMatchObject({ author: { kind: 'human', id: me.memberId }, status: 'complete' });
     expect(human.assignment).toBeNull();
 
@@ -491,7 +500,7 @@ describe('Chat (e2e)', () => {
     );
 
   it('shows the agent as working while a reply runs, and the other thread reply text', async () => {
-    await send(threadId, 'tóm tắt repo giúp em @Research Bot');
+    await sendIn(threadId, 'tóm tắt repo giúp em @Research Bot', 'vi');
     const [reply] = await replies(threadId);
     await drainUntil(async () => frames(reply.id).some((m) => m.assignment!.status === 'running'));
     const agents = await call<{ id: string; status: string }[]>('get', '/agents');
@@ -517,6 +526,22 @@ describe('Chat (e2e)', () => {
     expect(
       await dataSource.getRepository(AgentActivity).findOneByOrFail({ agentId: a1.id }),
     ).toMatchObject({ status: 'completed' });
+  });
+
+  it('answers in the request language (Accept-Language), whatever the message text', async () => {
+    const mine = await dmOf(a1);
+    await sendIn(mine, 'hello', 'vi');
+    await drainUntil(() => ended.length > 0);
+    expect((await replies(mine))[0]).toMatchObject({
+      status: 'complete',
+      markdown: DEMO_REPLIES.vi,
+    });
+    await sendIn(mine, 'xin chào', 'en');
+    await drainUntil(() => ended.length > 1);
+    expect((await replies(mine))[1]).toMatchObject({
+      status: 'complete',
+      markdown: DEMO_REPLIES.en,
+    });
   });
 
   it('expires the reply of an agent whose computer is offline', async () => {

@@ -14,12 +14,21 @@ export const DEMO_REPLIES: Record<SupportedLanguage, string> = {
 const VIETNAMESE_MARKS = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
 
 /**
- * The member's language is not stored: a message written with Vietnamese letters is answered in
- * Vietnamese, anything else in the server's fallback language.
+ * The reply speaks the language recorded with the request (the member's UI language). Only when
+ * none is recorded does a message written with Vietnamese letters get Vietnamese, anything else
+ * the server's fallback language.
  */
-export const demoReplyFor = (text: string, fallback: SupportedLanguage): string =>
-  DEMO_REPLIES[VIETNAMESE_MARKS.test(text) ? SupportedLanguage.VI : fallback] ??
-  DEMO_REPLIES[SupportedLanguage.EN];
+export const demoReplyFor = (
+  text: string,
+  fallback: SupportedLanguage,
+  lang?: string | null,
+): string => {
+  const known = lang === SupportedLanguage.VI || lang === SupportedLanguage.EN ? lang : null;
+  return (
+    DEMO_REPLIES[known ?? (VIETNAMESE_MARKS.test(text) ? SupportedLanguage.VI : fallback)] ??
+    DEMO_REPLIES[SupportedLanguage.EN]
+  );
+};
 
 export const CHAT_STEP_MS = 450;
 export const CHAT_OFFLINE_MS = 1200;

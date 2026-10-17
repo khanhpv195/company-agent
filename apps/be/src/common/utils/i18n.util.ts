@@ -1,8 +1,17 @@
+import { SupportedLanguage } from '@repo/shared';
 import { I18nContext } from 'nestjs-i18n';
 
 const I18N_KEY_PATTERN = /^[\w-]+(\.[\w-]+)+$/;
 
 export const isI18nKey = (value: string): boolean => I18N_KEY_PATTERN.test(value);
+
+/** The request language as 'vi' | 'en', or null when unknown or unsupported. */
+export const requestLanguage = (): SupportedLanguage | null => {
+  const lang = I18nContext.current()?.lang?.toLowerCase() ?? '';
+  if (lang.startsWith('vi')) return SupportedLanguage.VI;
+  if (lang.startsWith('en')) return SupportedLanguage.EN;
+  return null;
+};
 
 /** Translates `key` when an i18n context is available, otherwise returns the key unchanged. */
 export const translate = (

@@ -47,6 +47,13 @@ const taskToolsHint = (): string =>
     UNTRUSTED_HINT,
   ].join(' ');
 
+const languageLine = (lang: string | null): string =>
+  lang === 'vi'
+    ? "Requester's language: Vietnamese. Reply in Vietnamese unless asked otherwise."
+    : lang === 'en'
+      ? "Requester's language: English. Reply in English unless asked otherwise."
+      : '';
+
 @Injectable()
 export class AssignmentBriefService {
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
@@ -117,6 +124,7 @@ export class AssignmentBriefService {
       `Workspace: ${workspace.name}`,
       `Conversation: ${where}`,
       this.requesterLine(requester),
+      languageLine(row.lang),
       `You are ${agent.name}.`,
       lines.length ? `Recent messages (oldest first):\n${lines.join('\n')}` : '',
       chatToolsHint(),

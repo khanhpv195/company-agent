@@ -138,7 +138,7 @@ export class SimulatorChatRunner {
     this.events.publish(workspaceId, { type: 'agents.changed' });
     const attempt = claimed.attempt;
 
-    const full = demoReplyFor(text, this.i18n.fallbackLanguage);
+    const full = demoReplyFor(text, this.i18n.fallbackLanguage, ctx.assignment.lang);
     const base = await this.chat.loadMessage(messageId);
     let shown = 0;
     while (shown < full.length) {

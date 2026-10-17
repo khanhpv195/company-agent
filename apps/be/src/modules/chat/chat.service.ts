@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import { ClockService } from '../../common/clock';
 import { agentConfig } from '../../config';
-import { returnedRows, transactionWithEffects } from '../../common/utils';
+import { requestLanguage, returnedRows, transactionWithEffects } from '../../common/utils';
 import type { AuthContext } from '../../common/types';
 import { deriveAgentStatus } from '../agents/agent-status.util';
 import { Agent } from '../agents/entities/agent.entity';
@@ -288,6 +288,7 @@ export class ChatService implements OnApplicationBootstrap {
             sourceKind: 'chat',
             sourceId: replyId,
             activation: text,
+            lang: requestLanguage(),
             requestedByMemberId: auth.memberId,
           },
           tx,

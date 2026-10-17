@@ -34,6 +34,8 @@ export interface CreateAssignmentInput {
   sourceKind: AssignmentSourceKind;
   sourceId: string;
   activation?: string | null;
+  /** The requester's language ('vi' | 'en'), when known. */
+  lang?: string | null;
   /** The member the run acts for (tools run with their permissions). */
   requestedByMemberId?: string | null;
 }
@@ -114,6 +116,7 @@ export class AgentGatewayService {
         sourceKind: input.sourceKind,
         sourceId: input.sourceId,
         activation: input.activation ?? null,
+        lang: input.lang ?? null,
         requestedByMemberId: input.requestedByMemberId ?? null,
         status: 'pending',
       }),

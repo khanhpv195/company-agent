@@ -102,6 +102,10 @@ export class Assignment {
   @Column({ type: 'text', nullable: true })
   error: string | null;
 
+  /** The requester's UI language ('vi' | 'en') when the run was created by a request. */
+  @Column({ type: 'varchar', length: 8, nullable: true })
+  lang: string | null;
+
   /** The member on whose behalf the run acts (chat sender, task starter or creator). */
   @Column({ name: 'requested_by_member_id', type: 'uuid', nullable: true })
   requestedByMemberId: string | null;

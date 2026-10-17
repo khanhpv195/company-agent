@@ -19,4 +19,16 @@ describe('demoReplyFor', () => {
       'Mình là agent demo chạy trên máy mô phỏng nên chưa thể thực hiện yêu cầu này. Kết nối một máy tính thật ở mục Máy tính để dùng Claude Code.',
     );
   });
+
+  it('prefers the recorded request language over the text heuristic', () => {
+    expect(demoReplyFor('hello', SupportedLanguage.EN, 'vi')).toBe(
+      DEMO_REPLIES[SupportedLanguage.VI],
+    );
+    expect(demoReplyFor('viết hàm', SupportedLanguage.EN, 'en')).toBe(
+      DEMO_REPLIES[SupportedLanguage.EN],
+    );
+    expect(demoReplyFor('viết hàm', SupportedLanguage.EN, null)).toBe(
+      DEMO_REPLIES[SupportedLanguage.VI],
+    );
+  });
 });
