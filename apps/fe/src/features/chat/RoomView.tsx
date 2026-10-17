@@ -1,3 +1,4 @@
+import type { Message } from '@repo/shared';
 import { DemoBadge } from '../../components/DemoBadge';
 import { getRouteApi } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useRef } from 'react';
@@ -14,6 +15,15 @@ import { StartDmList } from './StartDmList';
 const READ_DEBOUNCE_MS = 500;
 
 const route = getRouteApi('/_app/chat/$chatId');
+
+/** Consecutive messages from the same person (never external channel senders). */
+function sameAuthor(prev: Message | undefined, m: Message) {
+  if (!prev) return false;
+  const a = prev.author;
+  const b = m.author;
+  if (a.kind === 'external' || b.kind === 'external') return false;
+  return a.kind === b.kind && a.id === b.id;
+}
 
 export function RoomView() {
   const t = useT();
@@ -60,12 +70,13 @@ export function RoomView() {
 
   const info = chat.data;
   const agents = (info?.agentIds ?? []).map((id) => people.agent(id)).filter((a) => !!a);
-  const dmAgent = info?.kind === 'dm' ? agents[0] : undefined;
+  const isDm = info?.kind === 'dm';
+  const dmAgent = isDm ? agents[0] : undefined;
   const offline =
     dmAgent && dmAgent.status === 'offline' ? t('chat.agentOffline', { name: dmAgent.name }) : null;
 
   return (
-    <main className="main">
+    <main className={isDm ? 'main room-dm' : 'main'}>
       <div className="chat-head drag" data-tauri-drag-region>
         {dmAgent && <AgentAvatar agent={dmAgent} size={26} />}
         <div>
@@ -93,8 +104,14 @@ export function RoomView() {
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
         }}
       >
-        {list?.map((m) => (
-          <MessageItem key={m.id} message={m} />
+        {list?.map((m, i) => (
+          <MessageItem
+            key={m.id}
+            message={m}
+            dm={isDm}
+            me={me}
+            grouped={isDm && sameAuthor(list[i - 1], m)}
+          />
         ))}
         {list && !list.length && (
           <div className="empty-line" style={{ padding: '40px 70px' }}>

@@ -10,6 +10,8 @@
   --active: #ebebea;
   --bubble-agent: #f5f5f4;
   --bubble-human: #efede6;
+  --bubble-mine: var(--olive);
+  --bubble-mine-ink: #ffffff;
   --olive: #6b7046;
   --olive-dark: #5a5e3a;
   --olive-ink: #5a5e3a;
@@ -716,6 +718,62 @@ label {
 }
 .msg.human .bubble {
   background: var(--bubble-human);
+}
+.msg .msg-body {
+  min-width: 0;
+  flex: 1;
+}
+.msg .av-ghost {
+  width: 32px;
+  flex: none;
+}
+.msg-time {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* DM rooms: messenger layout. Own messages sit right in an olive bubble, the agent stays left. */
+.room-dm .msg.grouped {
+  padding-top: 3px;
+}
+.room-dm .msg.agent .msg-body {
+  max-width: 85%;
+}
+.room-dm .msg.agent .msg-body > .tool {
+  max-width: none;
+}
+.room-dm .bubble {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.room-dm .msg.mine .msg-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.room-dm .msg.mine .bubble {
+  background: var(--bubble-mine);
+  color: var(--bubble-mine-ink);
+  max-width: 70%;
+}
+.room-dm .msg.mine .bubble a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.room-dm .msg.mine .bubble code {
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: inherit;
+}
+.room-dm .msg.mine .bubble .mention {
+  color: inherit;
+  background: rgba(255, 255, 255, 0.2);
+}
+.room-dm .msg.mine .bubble .md-table-wrap {
+  background: var(--surface);
+  color: var(--text);
 }
 .bubble p {
   margin: 0 0 10px;
@@ -3203,6 +3261,8 @@ label.terms input {
   --active: #2b2c32;
   --bubble-agent: #202126;
   --bubble-human: #27261f;
+  --bubble-mine: var(--olive-dark);
+  --bubble-mine-ink: #ffffff;
   --olive: #747a4c;
   --olive-dark: #646a40;
   --olive-ink: #aab37a;

@@ -4,7 +4,7 @@ import type { Message } from '@repo/shared';
 import { AgentAvatar, MemberAvatar } from '../../components/Avatar';
 import { Icon } from '../../components/Icon';
 import { Markdown } from '../../components/Markdown';
-import { usd } from '../../lib/format';
+import { hhmm, usd } from '../../lib/format';
 import { useT, type MessageKey } from '../../i18n';
 import { useComputers, usePeople } from '../workspace/workspace.api';
 import { useSendDraft } from './chat.api';
@@ -27,7 +27,17 @@ const ASSIGNMENT_STATUS: Record<AssignmentStatus, MessageKey> = {
   cancelled: 'chat.assignmentStatus.cancelled',
 };
 
-export function MessageItem({ message: m }: { message: Message }) {
+interface MessageItemProps {
+  message: Message;
+  /** DM room: own messages align right, the other side keeps the avatar and name. */
+  dm?: boolean;
+  /** Session member id, used to tell own messages apart in a DM. */
+  me?: string;
+  /** Same author as the previous message in a DM: the avatar and name are shown once. */
+  grouped?: boolean;
+}
+
+export function MessageItem({ message: m, dm = false, me, grouped = false }: MessageItemProps) {
   const t = useT();
   const people = usePeople();
   const computers = useComputers();
@@ -38,6 +48,7 @@ export function MessageItem({ message: m }: { message: Message }) {
   const as = m.assignment;
   const streaming = m.status === 'streaming';
   const hasRealComputer = computers.some((c) => !c.simulated && !c.revokedAt);
+  const mine = dm && a.kind === 'human' && a.id === me;
 
   let avatar;
   let name;
@@ -65,13 +76,17 @@ export function MessageItem({ message: m }: { message: Message }) {
   }
 
   return (
-    <div className={`msg ${agent ? 'agent' : 'human'}`}>
-      {avatar}
-      <div className="msg-body" style={{ minWidth: 0, flex: 1 }}>
-        <div className="who">
-          {name}
-          {agent && <span className="spark">✳</span>}
-        </div>
+    <div
+      className={`msg ${agent ? 'agent' : 'human'}${mine ? ' mine' : ''}${grouped ? ' grouped' : ''}`}
+    >
+      {!mine && (grouped ? <span className="av-ghost" aria-hidden="true" /> : avatar)}
+      <div className="msg-body">
+        {!mine && !grouped && (
+          <div className="who">
+            {name}
+            {agent && <span className="spark">✳</span>}
+          </div>
+        )}
         {as && (
           <div
             className={`assign ${as.status === 'completed' ? 'completed' : as.status === 'failed' || as.status === 'expired' ? 'failed' : ''}`}
@@ -126,6 +141,11 @@ export function MessageItem({ message: m }: { message: Message }) {
           <div className="bubble">
             <Markdown text={m.markdown}>{streaming && <span className="caret" />}</Markdown>
           </div>
+        )}
+        {mine && (
+          <time className="msg-time" dateTime={m.createdAt}>
+            {hhmm(Date.parse(m.createdAt))}
+          </time>
         )}
         {agent?.simulated && !streaming && m.markdown && (
           <div className="demo-cta">
