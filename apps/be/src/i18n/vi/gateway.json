@@ -2,5 +2,22 @@
   "INVALID_TRANSITION": "Không thể chuyển nhiệm vụ này sang trạng thái đó",
   "NOT_FOUND": "Không tìm thấy nhiệm vụ",
   "AGENT_NOT_FOUND": "Không tìm thấy agent",
-  "AGENT_BUSY": "Agent đang chạy một task khác"
+  "AGENT_BUSY": "Agent đang chạy một task khác",
+  "INVALID_PAIRING_CODE": "Mã ghép nối không hợp lệ, đã hết hạn hoặc đã dùng",
+  "INVALID_API_KEY": "API key của máy không hợp lệ hoặc đã bị thu hồi",
+  "NOT_RUNNING": "Nhiệm vụ này không còn chạy",
+  "UNKNOWN_TOOL": "Không có công cụ {name}",
+  "TOOL_INPUT": "Dữ liệu công cụ không hợp lệ: {detail}",
+  "TOOL_LIMIT": "Quá nhiều thay đổi trong một lượt chạy (tối đa {max}); hãy dừng và báo lại cho người dùng",
+  "TASK_RUN_NO_ASSIGN": "Task run không được giao việc cho agent; hãy để người duyệt",
+  "TASK_RUN_NO_DONE": "Task run không được chuyển task sang done; việc duyệt là quyết định của người",
+  "TASK_RUN_NO_REVIEW_CHANGE": "Task run không được đổi yêu cầu duyệt của task; đó là quyết định của người",
+  "TASK_RUN_NO_ADMIN": "Task run không được dùng công cụ quản trị (create_agent, update_agent); hãy nhờ người dùng làm trong ứng dụng",
+  "PAIRED": "Đã ghép nối máy",
+  "HEARTBEAT": "Đã nhận heartbeat",
+  "CLAIMED": "Đã xử lý yêu cầu nhận việc",
+  "ACCEPTED": "Đã nhận nhiệm vụ",
+  "PROGRESS": "Đã ghi tiến độ",
+  "RESULT": "Đã ghi kết quả",
+  "TOOL_DONE": "Đã chạy công cụ"
 }

@@ -8,4 +8,8 @@ export interface Computer {
   lastHeartbeatAt: string;
   keepAwake: boolean;
   cliVersion: string;
+  /** Demo machine driven by the in-app simulator (no real daemon). */
+  simulated: boolean;
+  /** Set when the computer was revoked (its key no longer works). */
+  revokedAt: string | null;
 }

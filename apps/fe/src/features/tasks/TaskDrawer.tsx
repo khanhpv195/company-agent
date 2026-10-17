@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { Inline, Markdown } from '../../components/Markdown';
 import { Who } from '../../components/Who';
-import { dur, hhmm, mmss, ms, rel } from '../../lib/format';
+import { dur, hhmm, mmss, ms, rel, usd } from '../../lib/format';
 import { useNow } from '../../lib/use-now';
 import { useUi } from '../../stores/ui';
 import { useRooms } from '../chat/chat.api';
@@ -354,6 +354,7 @@ export function TaskDrawer({
                     <th>Trạng thái</th>
                     <th>Thời lượng</th>
                     <th>Tools</th>
+                    <th>Chi phí</th>
                     <th>Lúc</th>
                   </tr>
                 </thead>
@@ -366,6 +367,7 @@ export function TaskDrawer({
                       </td>
                       <td>{mmss(now - ms(run.startedAt))}</td>
                       <td>{run.step}</td>
+                      <td />
                       <td style={{ color: 'var(--muted)' }}>{hhmm(ms(run.startedAt))}</td>
                     </tr>
                   )}
@@ -382,6 +384,9 @@ export function TaskDrawer({
                       </td>
                       <td>{r.durationSec ? dur(r.durationSec) : '–'}</td>
                       <td>{r.toolCalls}</td>
+                      <td style={{ color: 'var(--muted)' }}>
+                        {r.costUsd != null ? usd(r.costUsd) : '–'}
+                      </td>
                       <td style={{ color: 'var(--muted)' }}>{rel(r.at, now)}</td>
                     </tr>
                   ))}

@@ -48,6 +48,35 @@ Be concise. Reply in the user's language. When you are mentioned in a room, read
 const skills = (names: string[], enabled: number) =>
   names.map((name, i) => ({ id: name, name, enabled: i < enabled }));
 
+/** The skill catalog a new agent can pick from (mirrors the API's `/agents/skill-catalog`). */
+export const SKILL_NAMES = [
+  'browser-use',
+  'build-app',
+  'deploy-app',
+  'email-processor',
+  'web-research',
+  'website-migration',
+  'code-review',
+  'git-ops',
+  'pdf-reader',
+  'sheet-analyst',
+  'slack-digest',
+  'calendar',
+  'image-gen',
+  'summarize',
+  'translate',
+  'sql-query',
+  'test-writer',
+  'docs-writer',
+  'jira-sync',
+  'notion-sync',
+  'scraper',
+  'scheduler',
+  'memory',
+];
+export const DEFAULT_ENABLED_SKILLS = 18;
+export const skillCatalog = () => skills(SKILL_NAMES, DEFAULT_ENABLED_SKILLS);
+
 export function seed(now: number = Date.now()): MockDb {
   const T0 = now;
   let n = 0;
@@ -81,7 +110,7 @@ export function seed(now: number = Date.now()): MockDb {
     toolCalls: number,
     at: number,
     error: string | null = null,
-  ): TaskRun => ({ n, status, durationSec, toolCalls, at: iso(at), error });
+  ): TaskRun => ({ n, status, durationSec, toolCalls, costUsd: null, at: iso(at), error });
   const subs = (...items: [string, number][]) =>
     items.map(([title, done]) => ({ title, done: !!done }));
 
@@ -100,6 +129,8 @@ export function seed(now: number = Date.now()): MockDb {
       lastHeartbeatAt: iso(T0 - 2000),
       keepAwake: true,
       cliVersion: '0.14.2',
+      simulated: false,
+      revokedAt: null,
     },
     {
       id: 'c2',
@@ -109,6 +140,8 @@ export function seed(now: number = Date.now()): MockDb {
       lastHeartbeatAt: iso(T0 - 7240_000),
       keepAwake: false,
       cliVersion: '0.13.9',
+      simulated: false,
+      revokedAt: null,
     },
   ];
 
@@ -123,34 +156,7 @@ export function seed(now: number = Date.now()): MockDb {
       workdir: '~/.agent/agents/a1',
       maxTurns: 40,
       status: 'idle',
-      skills: skills(
-        [
-          'browser-use',
-          'build-app',
-          'deploy-app',
-          'email-processor',
-          'web-research',
-          'website-migration',
-          'code-review',
-          'git-ops',
-          'pdf-reader',
-          'sheet-analyst',
-          'slack-digest',
-          'calendar',
-          'image-gen',
-          'summarize',
-          'translate',
-          'sql-query',
-          'test-writer',
-          'docs-writer',
-          'jira-sync',
-          'notion-sync',
-          'scraper',
-          'scheduler',
-          'memory',
-        ],
-        18,
-      ),
+      skills: skills(SKILL_NAMES, DEFAULT_ENABLED_SKILLS),
     },
     {
       id: 'a2',

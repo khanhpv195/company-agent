@@ -4,6 +4,8 @@ import { AgentArt } from '../../components/Avatar';
 import { ChannelLogo, LetterLogo } from '../../components/ChannelLogo';
 import { Icon } from '../../components/Icon';
 import { useUi } from '../../stores/ui';
+import { MANAGER_ONLY_HINT } from '../people/agent-form.logic';
+import { useCanManage } from '../people/people.api';
 import { useRooms } from '../chat/chat.api';
 import { inboxThreadId } from '../chat/chat.logic';
 import { usePeople, useSession } from '../workspace/workspace.api';
@@ -121,6 +123,8 @@ export function ConnectionsPage() {
 function ConnectionCard({ c }: { c: Connection }) {
   const setWizard = useUi((s) => s.setWizard);
   const { disconnect } = useConnectionActions();
+  const canManage = useCanManage();
+  const gate = { disabled: !canManage, title: canManage ? undefined : MANAGER_ONLY_HINT };
   const people = usePeople();
   const rooms = useRooms();
   const inboxId = inboxThreadId(rooms, c.id) ?? c.roomId;
@@ -144,7 +148,7 @@ function ConnectionCard({ c }: { c: Connection }) {
           ))}
         </div>
         <div className="foot">
-          <button className="btn primary" onClick={() => setWizard(c.id)}>
+          <button className="btn primary" {...gate} onClick={() => setWizard(c.id)}>
             <Icon name="plug" size={15} /> Kết nối {c.shortName}
           </button>
         </div>
@@ -185,12 +189,13 @@ function ConnectionCard({ c }: { c: Connection }) {
             <Icon name="inbox" size={15} /> Mở room
           </Link>
         )}
-        <button className="btn" onClick={() => setWizard(c.id)}>
+        <button className="btn" {...gate} onClick={() => setWizard(c.id)}>
           Cấu hình
         </button>
         <button
           className="btn"
           style={{ color: 'var(--err)' }}
+          {...gate}
           onClick={() => disconnect.mutate(c.id)}
         >
           Ngắt kết nối

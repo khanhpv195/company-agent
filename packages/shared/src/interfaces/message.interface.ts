@@ -15,6 +15,8 @@ export interface Assignment {
   status: AssignmentStatus;
   toolCalls: ToolCall[];
   turns: number;
+  /** Reported by a real daemon when the run ends; null while running or for simulated runs. */
+  costUsd: number | null;
   error: string | null;
 }
 

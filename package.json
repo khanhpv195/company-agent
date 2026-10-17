@@ -9,6 +9,7 @@
     "dev": "turbo run dev --parallel",
     "dev:be": "turbo run dev --filter=be",
     "dev:fe": "pnpm --filter @repo/shared build && pnpm --filter fe dev",
+    "agent": "pnpm --filter @agent/cli start --",
     "build": "turbo run build",
     "build:desktop": "pnpm --filter @repo/shared build && pnpm --filter fe tauri:build",
     "lint": "turbo run lint",

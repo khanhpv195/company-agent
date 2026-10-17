@@ -1,12 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { i18nValidationMessage } from 'nestjs-i18n';
@@ -15,11 +19,21 @@ import type {
   AgentActivity as AgentActivityContract,
   AgentSkill,
   AgentStatus,
+  CreateAgentInput,
   UpdateAgentInput,
 } from '@repo/shared';
 
 export const MAX_PERSONA_LENGTH = 20_000;
+export const MAX_NAME_LENGTH = 60;
+export const MAX_WORKDIR_LENGTH = 300;
+export const MAX_TURNS_LIMIT = 200;
 const MAX_SKILLS = 200;
+
+const isString = { message: i18nValidationMessage('validation.IS_STRING') };
+const notEmpty = { message: i18nValidationMessage('validation.IS_NOT_EMPTY') };
+const maxLength = { message: i18nValidationMessage('validation.MAX_LENGTH') };
+const trim = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' ? value.trim() : value;
 
 export class AgentSkillDto implements AgentSkill {
   @ApiProperty()
@@ -92,6 +106,61 @@ export class SkillToggleDto implements Pick<AgentSkill, 'id' | 'enabled'> {
   enabled: boolean;
 }
 
+export class CreateAgentDto implements CreateAgentInput {
+  @ApiProperty({
+    maxLength: MAX_NAME_LENGTH,
+    description: 'Unique per workspace, case-insensitive',
+  })
+  @Transform(trim)
+  @IsString(isString)
+  @IsNotEmpty(notEmpty)
+  @MaxLength(MAX_NAME_LENGTH, maxLength)
+  name: string;
+
+  @ApiProperty({ format: 'uuid', description: 'A computer of the caller workspace' })
+  @IsString(isString)
+  @IsNotEmpty(notEmpty)
+  computerId: string;
+
+  @ApiPropertyOptional({
+    maxLength: MAX_PERSONA_LENGTH,
+    description: 'Defaults to the stock persona',
+  })
+  @IsOptional()
+  @IsString(isString)
+  @MaxLength(MAX_PERSONA_LENGTH, maxLength)
+  persona?: string;
+
+  @ApiPropertyOptional({
+    type: [SkillToggleDto],
+    description: 'Catalog skill ids and their flags; defaults to the catalog defaults',
+  })
+  @IsOptional()
+  @IsArray({ message: i18nValidationMessage('validation.IS_ARRAY') })
+  @ArrayMaxSize(MAX_SKILLS, maxLength)
+  @ValidateNested({ each: true })
+  @Type(() => SkillToggleDto)
+  skills?: SkillToggleDto[];
+
+  @ApiPropertyOptional({
+    maxLength: MAX_WORKDIR_LENGTH,
+    description: 'Defaults to ~/.agent/agents/<slug>',
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString(isString)
+  @IsNotEmpty(notEmpty)
+  @MaxLength(MAX_WORKDIR_LENGTH, maxLength)
+  workdir?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: MAX_TURNS_LIMIT, default: 40 })
+  @IsOptional()
+  @IsInt({ message: i18nValidationMessage('validation.IS_INT') })
+  @Min(1, { message: i18nValidationMessage('validation.MIN') })
+  @Max(MAX_TURNS_LIMIT, { message: i18nValidationMessage('validation.MAX') })
+  maxTurns?: number;
+}
+
 export class UpdateAgentDto implements UpdateAgentInput {
   @ApiPropertyOptional({ maxLength: MAX_PERSONA_LENGTH, description: 'Replaced when present' })
   @IsOptional()
@@ -109,4 +178,36 @@ export class UpdateAgentDto implements UpdateAgentInput {
   @ValidateNested({ each: true })
   @Type(() => SkillToggleDto)
   skills?: SkillToggleDto[];
+
+  @ApiPropertyOptional({ maxLength: MAX_NAME_LENGTH })
+  @IsOptional()
+  @Transform(trim)
+  @IsString(isString)
+  @IsNotEmpty(notEmpty)
+  @MaxLength(MAX_NAME_LENGTH, maxLength)
+  name?: string;
+
+  @ApiPropertyOptional({ maxLength: MAX_WORKDIR_LENGTH })
+  @IsOptional()
+  @Transform(trim)
+  @IsString(isString)
+  @IsNotEmpty(notEmpty)
+  @MaxLength(MAX_WORKDIR_LENGTH, maxLength)
+  workdir?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: MAX_TURNS_LIMIT })
+  @IsOptional()
+  @IsInt({ message: i18nValidationMessage('validation.IS_INT') })
+  @Min(1, { message: i18nValidationMessage('validation.MIN') })
+  @Max(MAX_TURNS_LIMIT, { message: i18nValidationMessage('validation.MAX') })
+  maxTurns?: number;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Move to another computer of the workspace; 409 while the agent has open work',
+  })
+  @IsOptional()
+  @IsString(isString)
+  @IsNotEmpty(notEmpty)
+  computerId?: string;
 }

@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { Toast } from '../components/Toast';
 import { ConnectComputerModal } from '../features/computers/ConnectComputerModal';
 import { ConnectWizard } from '../features/connections/ConnectWizard';
+import { NewAgentModal } from '../features/people/NewAgentModal';
 import { NewTaskModal } from '../features/tasks/NewTaskModal';
 import { useRealtimeSync } from '../lib/use-realtime-sync';
 import { useUi } from '../stores/ui';
@@ -32,6 +33,7 @@ export function AppShell() {
       <Toast />
       <ConnectComputerModal />
       <NewTaskModal />
+      <NewAgentModal />
       <ConnectWizard />
       <CommandPalette />
     </div>

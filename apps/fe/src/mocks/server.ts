@@ -2,6 +2,7 @@ import type {
   AuthResult,
   CommentInput,
   ConnectInput,
+  CreateAgentInput,
   CreateTaskInput,
   LoginInput,
   RegisterInput,
@@ -14,6 +15,7 @@ import type {
   UpdateTaskInput,
 } from '@repo/shared';
 import { HttpError, MockBackend } from './backend';
+import { skillCatalog } from './fixtures';
 import {
   connect,
   disconnect,
@@ -130,7 +132,39 @@ on('POST', '/onboarding/complete', () => {
 // ----- people & machines -----
 on('GET', '/members', () => db.members);
 on('GET', '/computers', () => db.computers);
+
+const requireManager = () => {
+  const role = db.members.find((m) => m.id === db.meId)?.role;
+  if (role !== 'owner' && role !== 'admin')
+    throw new HttpError(403, 'Bạn không có quyền thực hiện thao tác này');
+};
+const PAIR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const pairingChunk = () =>
+  Array.from(
+    { length: 4 },
+    () => PAIR_ALPHABET[Math.floor(backend.random() * PAIR_ALPHABET.length)],
+  ).join('');
+on('POST', '/computers/pairing-codes', () => {
+  requireManager();
+  return {
+    code: `${pairingChunk()}-${pairingChunk()}`,
+    expiresAt: new Date(backend.now() + 10 * 60_000).toISOString(),
+  };
+});
+on('DELETE', '/computers/:id', ({ params }) => {
+  requireManager();
+  const index = db.computers.findIndex((c) => c.id === params.id);
+  if (index < 0) throw new HttpError(404, 'Computer not found');
+  // The mock keeps agents pointing at real computers; the API revokes instead (see B1).
+  if (db.agents.some((a) => a.computerId === params.id))
+    throw new HttpError(409, 'Máy còn agent. Chuyển hoặc xoá agent trước khi gỡ máy.');
+  db.computers.splice(index, 1);
+  backend.emit({ type: 'computers.changed' });
+  return null;
+});
 on('GET', '/agents', () => db.agents);
+on('GET', '/agents/skill-catalog', () => skillCatalog());
+on('POST', '/agents', (ctx) => backend.createAgent(body<CreateAgentInput>(ctx)));
 on('GET', '/agents/:id', ({ params }) => {
   const a = backend.agent(params.id);
   if (!a) throw new HttpError(404, 'Agent not found');
@@ -139,14 +173,12 @@ on('GET', '/agents/:id', ({ params }) => {
 on('PATCH', '/agents/:id', (ctx) => {
   const a = backend.agent(ctx.params.id);
   if (!a) throw new HttpError(404, 'Agent not found');
-  const patch = body<UpdateAgentInput>(ctx);
-  if (patch.persona !== undefined) a.persona = patch.persona;
-  for (const s of patch.skills ?? []) {
-    const skill = a.skills.find((x) => x.id === s.id);
-    if (skill) skill.enabled = s.enabled;
-  }
-  backend.emit({ type: 'agents.changed' });
+  backend.updateAgent(a, body<UpdateAgentInput>(ctx));
   return a;
+});
+on('DELETE', '/agents/:id', ({ params }) => {
+  backend.deleteAgent(params.id);
+  return null;
 });
 on('GET', '/agents/:id/activity', ({ params }) => db.agentActivity[params.id] ?? []);
 on('POST', '/agents/:id/dm', ({ params }) => ensureDm(backend, params.id));

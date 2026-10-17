@@ -121,9 +121,12 @@ export const seedAgents = async (ds: DataSource): Promise<void> => {
     }
 
     for (const data of AGENTS) {
-      if (await manager.exists(Agent, { where: { workspaceId: workspace.id, name: data.name } })) {
-        continue;
-      }
+      // Soft-deleted agents count too: a seed never resurrects what a user deleted.
+      const taken = await manager.exists(Agent, {
+        where: { workspaceId: workspace.id, name: data.name },
+        withDeleted: true,
+      });
+      if (taken) continue;
       const agent = await manager.save(
         manager.create(Agent, {
           workspaceId: workspace.id,

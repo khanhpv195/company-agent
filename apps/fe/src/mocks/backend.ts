@@ -13,15 +13,17 @@ import {
   stepsFor,
   subtasksDue,
   type Agent,
+  type CreateAgentInput,
   type CreateTaskInput,
   type RealtimeEvent,
   type Task,
   type TaskActivity,
   type TaskRun,
   type TaskStatus,
+  type UpdateAgentInput,
   type UpdateTaskInput,
 } from '@repo/shared';
-import { iso, seed, type MockDb } from './fixtures';
+import { iso, PERSONA, seed, skillCatalog, type MockDb } from './fixtures';
 
 export class HttpError extends Error {
   constructor(
@@ -162,6 +164,7 @@ export class MockBackend {
       status,
       durationSec: Math.round((end - started) / 1000),
       toolCalls: run.step,
+      costUsd: null,
       at: iso(end),
       error,
     };
@@ -455,6 +458,139 @@ export class MockBackend {
       }, 1400);
     }
     this.changed();
+  }
+
+  // ---------- agents ----------
+  private agentName(raw: string | undefined): string {
+    const name = raw?.trim();
+    if (!name || name.length > 60) throw new HttpError(400, 'Tên agent phải có 1-60 ký tự');
+    return name;
+  }
+
+  private assertNameFree(name: string, exceptId?: string) {
+    const key = name.toLowerCase();
+    if (this.db.agents.some((a) => a.id !== exceptId && a.name.toLowerCase() === key))
+      throw new HttpError(409, 'Đã có agent trùng tên');
+  }
+
+  private assertComputer(id: string | undefined) {
+    const pc = this.db.computers.find((c) => c.id === id);
+    if (!pc) throw new HttpError(400, 'Không tìm thấy computer trong workspace');
+    return pc;
+  }
+
+  private assertMaxTurns(value: number | undefined) {
+    if (value !== undefined && (!Number.isInteger(value) || value < 1 || value > 200))
+      throw new HttpError(400, 'Max turns phải từ 1 đến 200');
+  }
+
+  private assertManager() {
+    const role = this.db.members.find((m) => m.id === this.db.meId)?.role;
+    if (role !== 'owner' && role !== 'admin')
+      throw new HttpError(403, 'Bạn không có quyền thực hiện thao tác này');
+  }
+
+  createAgent(input: CreateAgentInput): Agent {
+    this.assertManager();
+    const name = this.agentName(input.name);
+    const pc = this.assertComputer(input.computerId);
+    this.assertNameFree(name);
+    this.assertMaxTurns(input.maxTurns);
+    const catalog = skillCatalog();
+    if (input.skills?.some((x) => !catalog.some((c) => c.id === x.id)))
+      throw new HttpError(400, 'Skill không tồn tại');
+    const slug =
+      name
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || this.nextId('agent');
+    const agent: Agent = {
+      id: this.nextId('a'),
+      name,
+      avatar: this.db.agents.length % 3,
+      provider: 'claude-code',
+      computerId: pc.id,
+      persona: input.persona?.trim() ? input.persona : PERSONA,
+      skills: catalog.map((skill) => ({
+        ...skill,
+        enabled: input.skills
+          ? !!input.skills.find((x) => x.id === skill.id)?.enabled
+          : skill.enabled,
+      })),
+      workdir: input.workdir?.trim() || `~/.agent/agents/${slug}`,
+      maxTurns: input.maxTurns ?? 40,
+      status: 'idle',
+    };
+    this.db.agents.push(agent);
+    this.syncAgents();
+    this.emit({ type: 'agents.changed' });
+    return agent;
+  }
+
+  updateAgent(a: Agent, patch: UpdateAgentInput) {
+    this.assertManager();
+    const name = patch.name === undefined ? undefined : this.agentName(patch.name);
+    if (name !== undefined) this.assertNameFree(name, a.id);
+    this.assertMaxTurns(patch.maxTurns);
+    let computerId: string | undefined;
+    if (patch.computerId !== undefined && patch.computerId !== a.computerId) {
+      computerId = this.assertComputer(patch.computerId).id;
+      if (this.runningOf(a.id) || this.chatBusy.has(a.id))
+        throw new HttpError(409, 'Agent đang có việc dở; hãy đợi xong hoặc dừng trước');
+    }
+    if (name !== undefined && name !== a.name) {
+      a.name = name;
+      for (const r of this.db.rooms) if (r.kind === 'dm' && r.agentId === a.id) r.name = name;
+      this.emit({ type: 'rooms.changed' });
+    }
+    if (computerId) a.computerId = computerId;
+    if (patch.workdir?.trim()) a.workdir = patch.workdir.trim();
+    if (patch.maxTurns !== undefined) a.maxTurns = patch.maxTurns;
+    if (patch.persona !== undefined) a.persona = patch.persona;
+    for (const s of patch.skills ?? []) {
+      const skill = a.skills.find((x) => x.id === s.id);
+      if (skill) skill.enabled = s.enabled;
+    }
+    this.syncAgents();
+    this.emit({ type: 'agents.changed' });
+  }
+
+  /** Releases what the agent held (run, open tasks, DM, connections), then removes it. */
+  deleteAgent(id: string) {
+    this.assertManager();
+    const a = this.agent(id);
+    if (!a) throw new HttpError(404, 'Agent not found');
+    for (const t of this.db.tasks) {
+      if (t.assigneeId !== id || t.status === 'done') continue;
+      if (t.activeRun) this.cancelRun(t, this.db.meId);
+      t.assigneeId = null;
+      if (t.status === 'doing') t.status = 'todo';
+      this.log(t, this.db.meId, `bỏ giao: agent **${a.name}** đã bị xoá`);
+    }
+    for (const r of this.db.rooms.filter((x) => x.kind === 'dm' && x.agentId === id))
+      delete this.db.messages[r.id];
+    this.db.rooms = this.db.rooms.filter((r) => !(r.kind === 'dm' && r.agentId === id));
+    let disconnected = false;
+    for (const c of this.db.connections) {
+      if (c.agentId !== id) continue;
+      if (c.status === 'on') {
+        this.db.rooms = this.db.rooms.filter((r) => r.id !== c.roomId);
+        delete this.db.messages[`t-${c.id}`];
+        c.status = 'off';
+        c.roomId = null;
+        c.account = null;
+      }
+      c.agentId = null;
+      disconnected = true;
+    }
+    if (disconnected) this.emit({ type: 'connections.changed' });
+    this.db.dashboard.byAgent = this.db.dashboard.byAgent.filter((x) => x.agentId !== id);
+    this.chatBusy.delete(id);
+    this.db.agents = this.db.agents.filter((x) => x.id !== id);
+    this.changed();
+    this.emit({ type: 'rooms.changed' });
   }
 
   setPaused(paused: boolean) {

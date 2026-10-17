@@ -2,5 +2,22 @@
   "INVALID_TRANSITION": "This assignment cannot change to that state",
   "NOT_FOUND": "Assignment not found",
   "AGENT_NOT_FOUND": "Agent not found",
-  "AGENT_BUSY": "This agent is already running a task"
+  "AGENT_BUSY": "This agent is already running a task",
+  "INVALID_PAIRING_CODE": "The pairing code is invalid, expired or already used",
+  "INVALID_API_KEY": "Invalid or revoked computer API key",
+  "NOT_RUNNING": "This assignment is not running",
+  "UNKNOWN_TOOL": "Unknown tool {name}",
+  "TOOL_INPUT": "Invalid tool input: {detail}",
+  "TOOL_LIMIT": "Too many changes in one run (limit {max}); stop and report to the user",
+  "TASK_RUN_NO_ASSIGN": "A task run cannot assign work to agents; leave that to the reviewer",
+  "TASK_RUN_NO_DONE": "A task run cannot mark a task done; review stays a human decision",
+  "TASK_RUN_NO_REVIEW_CHANGE": "A task run cannot change whether a task requires review; that is a human decision",
+  "TASK_RUN_NO_ADMIN": "A task run cannot use admin tools (create_agent, update_agent); ask the user to do it in the app",
+  "PAIRED": "Computer paired",
+  "HEARTBEAT": "Heartbeat received",
+  "CLAIMED": "Claim processed",
+  "ACCEPTED": "Assignment accepted",
+  "PROGRESS": "Progress recorded",
+  "RESULT": "Result recorded",
+  "TOOL_DONE": "Tool executed"
 }

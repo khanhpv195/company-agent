@@ -22,6 +22,11 @@ interface UiState {
   openNewTask: (status?: TaskStatus) => void;
   closeNewTask: () => void;
 
+  /** The "new agent" dialog: closed (null) or open, optionally with a computer preselected. */
+  newAgent: { computerId: string | null } | null;
+  openNewAgent: (computerId?: string) => void;
+  closeNewAgent: () => void;
+
   /** Connection the connect wizard is open for. */
   wizard: string | null;
   setWizard: (id: string | null) => void;
@@ -54,6 +59,10 @@ export const useUi = create<UiState>()((set) => ({
   newTask: null,
   openNewTask: (status = 'todo') => set({ newTask: status }),
   closeNewTask: () => set({ newTask: null }),
+
+  newAgent: null,
+  openNewAgent: (computerId) => set({ newAgent: { computerId: computerId ?? null } }),
+  closeNewAgent: () => set({ newAgent: null }),
 
   wizard: null,
   setWizard: (wizard) => set({ wizard }),

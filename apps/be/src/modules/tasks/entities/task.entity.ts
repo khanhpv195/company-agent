@@ -79,6 +79,14 @@ export class TaskEntity {
   @Column({ type: 'text', nullable: true })
   error: string | null;
 
+  /** Who created it: a run of this task acts on their behalf unless someone else starts it. */
+  @Column({ name: 'created_by_member_id', type: 'uuid', nullable: true })
+  createdByMemberId: string | null;
+
+  @ManyToOne(() => Member, { onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'created_by_member_id' })
+  createdByMember: Member | null;
+
   /** Manual order on the board; the engine renumbers it 0..n-1 when a task is reordered. */
   @Column({ type: 'double precision', default: 0 })
   rank: number;

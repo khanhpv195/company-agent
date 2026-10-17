@@ -10,5 +10,6 @@
   "MESSAGE_EMPTY": "Message is empty",
   "UNKNOWN_AGENT": "Unknown agent",
   "AGENT_NOT_FOUND": "Agent not found",
-  "DRAFT_NOT_FOUND": "Draft not found"
+  "DRAFT_NOT_FOUND": "Draft not found",
+  "MESSAGE_TOO_LONG": "Message is too long"
 }

@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 import { Agent } from '../../agents/entities/agent.entity';
 import { Computer } from '../../computers/entities/computer.entity';
+import { Member } from '../../workspace/entities/member.entity';
 import { Workspace } from '../../workspace/entities/workspace.entity';
 
 export type AssignmentSourceKind = 'chat' | 'task';
@@ -100,6 +101,29 @@ export class Assignment {
 
   @Column({ type: 'text', nullable: true })
   error: string | null;
+
+  /** The member on whose behalf the run acts (chat sender, task starter or creator). */
+  @Column({ name: 'requested_by_member_id', type: 'uuid', nullable: true })
+  requestedByMemberId: string | null;
+
+  @ManyToOne(() => Member, { onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'requested_by_member_id' })
+  requestedBy: Member | null;
+
+  /** Reported by a real daemon with its result. */
+  @Column({
+    name: 'cost_usd',
+    type: 'numeric',
+    nullable: true,
+    transformer: {
+      to: (value: number | null | undefined) => value ?? null,
+      from: (value: string | null) => (value === null ? null : Number(value)),
+    },
+  })
+  costUsd: number | null;
+
+  @Column({ name: 'num_turns', type: 'int', nullable: true })
+  numTurns: number | null;
 
   @Column({ name: 'started_at', type: 'timestamptz', nullable: true })
   startedAt: Date | null;

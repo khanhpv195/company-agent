@@ -1,26 +1,26 @@
-import type { CliStatus, Session } from '@repo/shared';
+import type { CliStatus, Computer, Session } from '@repo/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { api } from '../../lib/api-client';
 import { ago } from '../../lib/format';
 import { qk } from '../../lib/query-keys';
 import { useNow } from '../../lib/use-now';
-import { CopyCommand } from '../computers/CopyCommand';
-import { computersQuery } from '../workspace/workspace.api';
+import { PairingPanel } from '../computers/PairingPanel';
+import { useComputerArrivals } from '../computers/computers.api';
 
 export function OnboardingPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const now = useNow();
-  const session = qc.getQueryData<Session>(qk.session);
   const status = useQuery({
     queryKey: ['onboarding', 'cli-status'],
     queryFn: () => api.get<CliStatus>('/onboarding/cli-status'),
     refetchInterval: (q) => (q.state.data?.connected ? false : 1000),
   });
-  const connected = !!status.data?.connected;
-  const computers = useQuery({ ...computersQuery, enabled: connected, refetchInterval: 3000 }).data;
-  const pc = computers?.find((c) => c.id === status.data?.computerId);
+  // Simulator path: the cli-status poll names the simulated computer once it is online.
+  const { computers: list, arrived, rebase } = useComputerArrivals();
+  const pc = list.find((c) => c.id === status.data?.computerId);
+  const shown: Computer | undefined = pc ?? arrived;
   const finish = useMutation({
     mutationFn: () => api.post<Session>('/onboarding/complete'),
     onSuccess: async (s) => {
@@ -41,27 +41,23 @@ export function OnboardingPage() {
           </div>
           <h2>Connect this computer</h2>
           <p className="lead">
-            Agent chạy Claude Code ngay trên máy của bạn. Cài CLI để máy này nhận việc khi có người
-            @mention agent trong room.
+            Agent chạy Claude Code ngay trên máy của bạn. Tạo mã kết nối và chạy lệnh trên máy đó để
+            máy nhận việc khi có người @mention agent trong room.
           </p>
-          <CopyCommand
-            command={`npx @agent/cli connect --workspace ${session?.workspace.slug ?? 'workspace'}`}
-          />
+          <PairingPanel arrived={arrived} onAgain={rebase} />
           <ol>
-            <li>Mở Terminal và chạy lệnh trên.</li>
-            <li>Đăng nhập trong trình duyệt khi CLI hỏi.</li>
-            <li>
-              Giữ CLI chạy nền, máy sẽ hiện <b>online</b> bên dưới.
-            </li>
+            <li>Mở Terminal trên máy muốn kết nối và chạy lệnh trên.</li>
+            <li>Giữ CLI chạy nền, máy sẽ hiện online bên dưới.</li>
           </ol>
           <div className="status" aria-live="polite">
-            {connected && pc ? (
+            {shown ? (
               <>
                 <span className="dot on" />
                 <div>
-                  <b>{pc.name}</b> đã kết nối
+                  <b>{shown.name}</b> đã kết nối
                   <div style={{ color: 'var(--muted)', fontSize: 12 }}>
-                    {pc.os} · CLI {pc.cliVersion} · heartbeat {ago(pc.lastHeartbeatAt, now)}
+                    {shown.os} · CLI {shown.cliVersion} · heartbeat{' '}
+                    {ago(shown.lastHeartbeatAt, now)}
                   </div>
                 </div>
               </>
@@ -72,9 +68,14 @@ export function OnboardingPage() {
               </>
             )}
           </div>
+          {!shown && (
+            <p style={{ color: 'var(--muted)', fontSize: 12, textAlign: 'center' }}>
+              Đang dùng máy mô phỏng (demo)? Máy đó sẽ tự kết nối sau vài giây.
+            </p>
+          )}
           <button
             className="btn-olive"
-            disabled={!connected || finish.isPending}
+            disabled={!shown || finish.isPending}
             onClick={() => finish.mutate()}
           >
             Tạo agent đầu tiên&nbsp;&nbsp;›

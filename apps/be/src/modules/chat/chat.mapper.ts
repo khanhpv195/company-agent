@@ -15,6 +15,7 @@ export const toAssignment = (row: Assignment): NonNullable<Message['assignment']
   status: row.status,
   toolCalls: row.toolLog ?? [],
   turns: row.turns,
+  costUsd: row.costUsd,
   error: row.error,
 });
 

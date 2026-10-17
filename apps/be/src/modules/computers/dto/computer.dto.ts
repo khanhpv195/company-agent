@@ -22,4 +22,10 @@ export class ComputerDto implements ComputerContract {
 
   @ApiProperty({ example: '2.1.0' })
   cliVersion: string;
+
+  @ApiProperty({ description: 'Demo machine driven by the in-app simulator' })
+  simulated: boolean;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  revokedAt: string | null;
 }

@@ -4,6 +4,8 @@ import { useEffect, useRef } from 'react';
 import { Icon, type IconName } from '../../components/Icon';
 import { Who } from '../../components/Who';
 import { useUi } from '../../stores/ui';
+import { MANAGER_ONLY_HINT } from '../people/agent-form.logic';
+import { useCanManage } from '../people/people.api';
 import { usePeople, useSession } from '../workspace/workspace.api';
 import { AgentStrip } from './AgentStrip';
 import { BoardView } from './BoardView';
@@ -31,6 +33,7 @@ export function TasksPage() {
   const tasksQuery = useTasks();
   const tasks = tasksQuery.data;
   const scheduler = useScheduler();
+  const canManage = useCanManage();
   const actions = useTaskActions();
   const filters = useUi((s) => s.taskFilters);
   const setFilters = useUi((s) => s.setTaskFilters);
@@ -80,11 +83,14 @@ export function TasksPage() {
             <button
               className={`live-tg ${live ? '' : 'off'}`}
               title={
-                live
-                  ? 'Tạm dừng: agent ngừng chạy và không nhận việc mới'
-                  : 'Tiếp tục cho agent chạy'
+                !canManage
+                  ? MANAGER_ONLY_HINT
+                  : live
+                    ? 'Tạm dừng: agent ngừng chạy và không nhận việc mới'
+                    : 'Tiếp tục cho agent chạy'
               }
               aria-pressed={live}
+              disabled={!canManage}
               onClick={() => actions.setPaused.mutate(live)}
             >
               <span className="pulse" />

@@ -37,3 +37,10 @@ export const DEFAULT_SKILL_NAMES = [
   'memory',
 ];
 export const DEFAULT_ENABLED_SKILLS = 18;
+
+/** Variants of the generated avatar art (the FE `AgentArt` palette); new agents cycle through them. */
+export const AGENT_AVATAR_VARIANTS = 3;
+
+/** The skill catalog: every known skill with its default enabled flag. */
+export const defaultSkills = (): AgentSkill[] =>
+  buildSkills(DEFAULT_SKILL_NAMES, DEFAULT_ENABLED_SKILLS);

@@ -1,6 +1,7 @@
 import {
   Column,
   CreateDateColumn,
+  DeleteDateColumn,
   Entity,
   Index,
   JoinColumn,
@@ -12,8 +13,17 @@ import type { AgentSkill } from '@repo/shared';
 import { Computer } from '../../computers/entities/computer.entity';
 import { Workspace } from '../../workspace/entities/workspace.entity';
 
-/** No status column: it is derived on read (computer online + open assignments). */
+/**
+ * No status column: it is derived on read (computer online + open assignments).
+ * Soft-deleted (`deleted_at`): TypeORM `find*` skips deleted rows, history rows keep the id.
+ * Names are unique among live agents; the case-insensitive part is checked by the service
+ * under the workspace lock (TypeORM cannot declare an expression index without drift).
+ */
 @Entity('agents')
+@Index('UQ_agents_workspace_name_live', ['workspaceId', 'name'], {
+  unique: true,
+  where: '"deleted_at" IS NULL',
+})
 export class Agent {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -60,4 +70,7 @@ export class Agent {
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
+
+  @DeleteDateColumn({ name: 'deleted_at', type: 'timestamptz', nullable: true })
+  deletedAt: Date | null;
 }

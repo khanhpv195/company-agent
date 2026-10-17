@@ -27,6 +27,14 @@ export class TasksController {
     return this.tasks.list(auth);
   }
 
+  @Get(':id')
+  @ResponseMessage('tasks.LISTED')
+  @ApiOperation({ summary: 'One task of the caller workspace by key (e.g. AG-15)' })
+  @ApiWrappedResponse(TaskDto)
+  get(@CurrentAuth() auth: AuthContext, @Param('id') id: string) {
+    return this.tasks.get(auth, id);
+  }
+
   @Post()
   @HttpCode(HttpStatus.OK)
   @ResponseMessage('tasks.CREATED')

@@ -29,6 +29,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { ComputersModule } from './modules/computers/computers.module';
 import { ConnectionsModule } from './modules/connections/connections.module';
+import { DaemonModule } from './modules/daemon/daemon.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { EventsModule } from './modules/events';
 import { GatewayModule } from './modules/gateway/gateway.module';
@@ -86,6 +87,7 @@ import { WorkspaceModule } from './modules/workspace/workspace.module';
     ComputersModule,
     AgentsModule,
     GatewayModule,
+    DaemonModule,
     OnboardingModule,
     TasksModule,
     ChatModule,

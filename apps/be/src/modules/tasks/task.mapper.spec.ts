@@ -40,6 +40,7 @@ describe('task mapper', () => {
       status: 'failed',
       durationSec: 0,
       toolCalls: 3,
+      costUsd: null,
       at: '2026-01-01T00:01:00.000Z',
       error: 'Bash exit 1',
     });

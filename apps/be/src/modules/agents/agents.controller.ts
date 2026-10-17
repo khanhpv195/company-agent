@@ -1,9 +1,25 @@
-import { Body, Controller, Get, HttpStatus, Param, Patch } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApiWrappedResponse, CurrentAuth, Roles, ResponseMessage } from '../../common/decorators';
 import { AuthContext } from '../../common/types';
 import { AgentsService } from './agents.service';
-import { AgentActivityDto, AgentDto, UpdateAgentDto } from './dto/agent.dto';
+import {
+  AgentActivityDto,
+  AgentDto,
+  AgentSkillDto,
+  CreateAgentDto,
+  UpdateAgentDto,
+} from './dto/agent.dto';
 
 // Ids are validated inside the service: a malformed id (the FE may still hold mock ids)
 // is a 404 on /agents/:id and an empty list on /agents/:id/activity, never a 400.
@@ -21,6 +37,25 @@ export class AgentsController {
     return this.agents.list(auth.workspaceId);
   }
 
+  // Declared before `:id` so the literal path is not taken as an agent id.
+  @Get('skill-catalog')
+  @ResponseMessage('agents.CATALOG_LOADED')
+  @ApiOperation({ summary: 'Every skill a new agent can have, with its default flag' })
+  @ApiWrappedResponse(AgentSkillDto, HttpStatus.OK, { isArray: true })
+  skillCatalog() {
+    return this.agents.skillCatalog();
+  }
+
+  @Post()
+  @Roles('owner', 'admin')
+  @HttpCode(HttpStatus.OK)
+  @ResponseMessage('agents.CREATED')
+  @ApiOperation({ summary: 'Create an agent on one of the workspace computers' })
+  @ApiWrappedResponse(AgentDto)
+  create(@CurrentAuth() auth: AuthContext, @Body() dto: CreateAgentDto) {
+    return this.agents.create(auth.workspaceId, dto);
+  }
+
   @Get(':id')
   @ResponseMessage('agents.LOADED')
   @ApiOperation({ summary: 'One agent' })
@@ -32,10 +67,23 @@ export class AgentsController {
   @Patch(':id')
   @Roles('owner', 'admin')
   @ResponseMessage('agents.UPDATED')
-  @ApiOperation({ summary: 'Update persona and toggle skills' })
+  @ApiOperation({ summary: 'Update an agent: name, computer, workdir, max turns, persona, skills' })
   @ApiWrappedResponse(AgentDto)
   update(@CurrentAuth() auth: AuthContext, @Param('id') id: string, @Body() dto: UpdateAgentDto) {
     return this.agents.update(auth.workspaceId, id, dto);
+  }
+
+  @Delete(':id')
+  @Roles('owner', 'admin')
+  @HttpCode(HttpStatus.OK)
+  @ResponseMessage('agents.DELETED')
+  @ApiOperation({
+    summary:
+      'Delete an agent (soft): cancels its run and chat replies, unassigns its tasks, hides its DMs',
+  })
+  @ApiWrappedResponse(null)
+  remove(@CurrentAuth() auth: AuthContext, @Param('id') id: string) {
+    return this.agents.remove(auth.workspaceId, auth.memberId, id);
   }
 
   @Get(':id/activity')

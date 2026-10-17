@@ -130,10 +130,14 @@ describe('Chat (e2e)', () => {
       }),
     );
     bob = await tokenFor(member.id, workspaceId);
-    const c1 = await createComputer(dataSource, workspaceId, { name: 'khanhpv-MacBook-Pro' });
+    const c1 = await createComputer(dataSource, workspaceId, {
+      name: 'khanhpv-MacBook-Pro',
+      simulated: true,
+    });
     const c2 = await createComputer(dataSource, workspaceId, {
       name: 'build-box',
       status: 'offline',
+      simulated: true,
     });
     a1 = await createAgent(dataSource, workspaceId, c1.id, { name: "khanhpv's Claude" });
     a2 = await createAgent(dataSource, workspaceId, c1.id, { name: 'Research Bot' });
@@ -584,10 +588,12 @@ describe('Chat (e2e)', () => {
   });
 
   it('fails the replies that were in flight when the server restarted', async () => {
+    // a real computer's reply is offered to its daemon right away; the simulator ignores it
+    await dataSource.query(`UPDATE computers SET simulated = false`);
     const mine = await dmOf(a1);
     await send(mine, 'hello');
     const [pending] = await replies(mine);
-    expect(pending.assignment!.status).toBe('pending');
+    expect(pending.assignment!.status).toBe('offered');
     // only assignments of simulated computers are cleaned up
     expect(await chat.failStaleReplies()).toBe(0);
     await dataSource.query(`UPDATE computers SET simulated = true`);

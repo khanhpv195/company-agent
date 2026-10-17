@@ -131,6 +131,9 @@ class AssignmentDto implements Assignment {
   @ApiProperty()
   turns: number;
 
+  @ApiProperty({ type: Number, nullable: true })
+  costUsd: number | null;
+
   @ApiProperty({ type: String, nullable: true })
   error: string | null;
 }

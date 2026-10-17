@@ -19,7 +19,8 @@ export interface World {
 /**
  * The FE mock's world in a fresh workspace: an online and an offline computer, three agents
  * (a1, a2 on c1; a3 on c2), three members, and the fixture tasks (AG-15..AG-31) with AG-31 and
- * AG-30 running. Built from the same data as the dev seed.
+ * AG-30 running. Built from the same data as the dev seed. Both computers are simulated, so
+ * their runs follow the scripted steps and chat replies wait for the simulator.
  */
 export const createWorld = async (
   dataSource: DataSource,
@@ -27,10 +28,14 @@ export const createWorld = async (
   now: number,
 ): Promise<World> => {
   const workspaceId = me.workspaceId;
-  const c1 = await createComputer(dataSource, workspaceId, { name: 'khanhpv-MacBook-Pro' });
+  const c1 = await createComputer(dataSource, workspaceId, {
+    name: 'khanhpv-MacBook-Pro',
+    simulated: true,
+  });
   const c2 = await createComputer(dataSource, workspaceId, {
     name: 'build-box',
     status: 'offline',
+    simulated: true,
   });
   const a1 = await createAgent(dataSource, workspaceId, c1.id, { name: "khanhpv's Claude" });
   const a2 = await createAgent(dataSource, workspaceId, c1.id, { name: 'Research Bot' });

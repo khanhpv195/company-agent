@@ -23,10 +23,14 @@ import { EventsService } from '../events';
 import { ASSIGNMENT_ENDED_EVENT, type AssignmentEndedPayload } from '../events/events.service';
 import { AgentGatewayService } from '../gateway/agent-gateway.service';
 import { Assignment } from '../gateway/entities/assignment.entity';
+import { AgentActivity } from '../agents/entities/agent-activity.entity';
 import {
   CHAT_REPLY_REQUESTED_EVENT,
+  CHAT_RUN_ENDED_EVENT,
+  MAX_MESSAGE_LENGTH,
   MESSAGES_PAGE_LIMIT,
   type ChatReplyRequestedPayload,
+  type ChatRunEndedPayload,
 } from './chat.constants';
 import { toMessage, toRoom, toThread, type LastMessage } from './chat.mapper';
 import { previewOf } from './chat.util';
@@ -134,8 +138,11 @@ export class ChatService implements OnApplicationBootstrap {
           { workspaceId, kind: 'channel' },
           { workspaceId, kind: 'dm', memberId },
         ],
+        // The join skips soft-deleted agents: a deleted agent's DM is hidden.
+        relations: { agent: true },
       })
     )
+      .filter((room) => room.kind === 'channel' || room.agent)
       // DMs first (newest first, like the mock's unshift), then channels in creation order.
       .sort((a, b) =>
         a.kind !== b.kind
@@ -273,16 +280,22 @@ export class ChatService implements OnApplicationBootstrap {
 
       if (target) {
         const replyId = randomUUID();
-        const assignment = await this.gateway.create(
+        const tx = { manager, effects };
+        let assignment = await this.gateway.create(
           {
             workspaceId: auth.workspaceId,
             agentId: target.id,
             sourceKind: 'chat',
             sourceId: replyId,
             activation: text,
+            requestedByMemberId: auth.memberId,
           },
-          { manager, effects },
+          tx,
         );
+        // A real daemon polls for offered work, so its reply is offered right away; only
+        // simulated computers stay `pending` for the in-process simulator to drive.
+        const simulated = target.computer.simulated;
+        if (!simulated) assignment = await this.gateway.offer(assignment.id, tx);
         const reply = await manager.save(
           manager.create(ChatMessage, {
             id: replyId,
@@ -301,7 +314,9 @@ export class ChatService implements OnApplicationBootstrap {
         reply.assignment = assignment;
         const replyMessage = toMessage(reply);
         effects.push(() => this.publishMessage(auth.workspaceId, replyMessage, audience));
-        effects.push(() => this.emitReplyRequested(auth.workspaceId, assignment.id));
+        if (simulated) {
+          effects.push(() => this.emitReplyRequested(auth.workspaceId, assignment.id));
+        }
       }
       effects.push(() => this.publishRoomsChanged(auth.workspaceId, audience));
       return humanMessage;
@@ -368,7 +383,100 @@ export class ChatService implements OnApplicationBootstrap {
     });
   }
 
+  /**
+   * A message an agent posts on its own (the `post_message` tool), visible exactly like the
+   * requester sees the chat: a DM of another member or a foreign chat is "not found". No reply
+   * is requested, so agents never trigger each other.
+   */
+  async postAgentMessage(
+    auth: AuthContext,
+    agentId: string,
+    chatId: string,
+    markdown: string,
+  ): Promise<Message> {
+    const text = markdown?.trim();
+    if (!text) throw new BadRequestException({ message: 'chat.MESSAGE_EMPTY' });
+    if (text.length > MAX_MESSAGE_LENGTH) {
+      throw new BadRequestException({ message: 'chat.MESSAGE_TOO_LONG' });
+    }
+    return transactionWithEffects(this.dataSource, async (manager, effects) => {
+      const chat = await this.requireChat(manager, auth, chatId);
+      if (chat.kind === 'dm' && chat.room.agentId !== agentId) {
+        throw new BadRequestException({ message: 'chat.UNKNOWN_AGENT' });
+      }
+      const row = await manager.save(
+        manager.create(ChatMessage, {
+          workspaceId: auth.workspaceId,
+          chatId: chat.id,
+          chatKind: chat.kind,
+          authorKind: 'agent',
+          authorAgentId: agentId,
+          status: 'complete',
+          markdown: text,
+          assignmentId: null,
+          draft: null,
+          createdAt: this.clock.now(),
+        }),
+      );
+      const message = toMessage(row);
+      const audience = audienceOf(chat);
+      effects.push(() => this.publishMessage(auth.workspaceId, message, audience));
+      effects.push(() => this.publishRoomsChanged(auth.workspaceId, audience));
+      return message;
+    });
+  }
+
+  /** The chat id (DM room or thread) of a chat reply assignment, or null. */
+  async chatIdOfReply(assignmentId: string): Promise<string | null> {
+    const rows = returnedRows<{ chat_id: string }>(
+      await this.dataSource.query(
+        `SELECT m.chat_id FROM messages m WHERE m.assignment_id = $1 LIMIT 1`,
+        [assignmentId],
+      ),
+    );
+    return rows[0]?.chat_id ?? null;
+  }
+
   // ---------- used by the runners ----------
+
+  /**
+   * Activity log entry (inside the run's final transaction), then after commit the domain event
+   * Phase 6 listens to and the "something changed" pings. Shared by the simulator and daemons.
+   */
+  async recordRun(
+    manager: EntityManager,
+    effects: Array<() => void>,
+    ctx: ReplyContext,
+    text: string,
+    ok: boolean,
+    durationSec: number,
+  ): Promise<void> {
+    const workspaceId = ctx.assignment.workspaceId;
+    // A DM is private to its member: the activity log and the feed get a neutral line only.
+    const dm = ctx.chat.kind === 'dm';
+    const preview = dm ? '' : previewOf(text);
+    await manager.getRepository(AgentActivity).insert({
+      workspaceId,
+      agentId: ctx.agent.id,
+      location: ctx.where,
+      request: dm ? 'Tin nhắn riêng (DM)' : preview,
+      status: ok ? 'completed' : 'failed',
+      at: this.clock.now(),
+    });
+    effects.push(() => {
+      const payload: ChatRunEndedPayload = {
+        workspaceId,
+        agentId: ctx.agent.id,
+        ok,
+        durationSec,
+        preview,
+        dm,
+      };
+      this.emitter.emit(CHAT_RUN_ENDED_EVENT, payload);
+      this.events.publish(workspaceId, { type: 'agents.changed' });
+      this.publishRoomsChanged(workspaceId, ctx.memberIds);
+    });
+  }
 
   /** The state of one chat reply, or null when it is gone or not a chat assignment. */
   async replyContext(assignmentId: string): Promise<ReplyContext | null> {
@@ -379,9 +487,11 @@ export class ChatService implements OnApplicationBootstrap {
       where: { id: assignment.sourceId },
       relations: { assignment: true },
     });
+    // A deleted agent's cancelled reply must still resolve (to publish its failed message).
     const agent = await manager.findOne(Agent, {
       where: { id: assignment.agentId },
       relations: { computer: true },
+      withDeleted: true,
     });
     if (!message || !agent) return null;
     const chat = await this.chatOfMessage(manager, message);
@@ -548,8 +658,10 @@ export class ChatService implements OnApplicationBootstrap {
     }
     const room = await manager.findOne(Room, {
       where: { id, workspaceId: auth.workspaceId, kind: 'dm', memberId: auth.memberId },
+      relations: { agent: true },
     });
-    return room ? { id: room.id, kind: 'dm', room, thread: null } : null;
+    // A deleted agent's DM is gone for clients (the join skips soft-deleted agents).
+    return room?.agent ? { id: room.id, kind: 'dm', room, thread: null } : null;
   }
 
   /** The agent of the connection behind an inbox thread (plain query: no module cycle). */

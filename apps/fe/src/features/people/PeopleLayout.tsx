@@ -2,11 +2,15 @@ import { Link, Outlet, useParams } from '@tanstack/react-router';
 import { AgentAvatar, Dot, MemberAvatar } from '../../components/Avatar';
 import { agentPresence } from '../../components/presence';
 import { Icon } from '../../components/Icon';
+import { useUi } from '../../stores/ui';
 import { usePeople, ROLE_NAME } from '../workspace/workspace.api';
+import { useCanManage } from './people.api';
 
 export function PeopleLayout() {
   const people = usePeople();
   const params = useParams({ strict: false });
+  const canManage = useCanManage();
+  const openNewAgent = useUi((s) => s.openNewAgent);
   return (
     <>
       <aside className="panel" aria-label="People & Agents">
@@ -45,6 +49,13 @@ export function PeopleLayout() {
               </div>
             </Link>
           ))}
+          {canManage && (
+            <div style={{ padding: '6px 12px 2px' }}>
+              <button className="btn sm" onClick={() => openNewAgent()}>
+                <Icon name="plus" size={14} /> Thêm agent
+              </button>
+            </div>
+          )}
           <div className="sec" style={{ marginTop: 8 }}>
             <Icon name="users" size={16} />
             <span>Members</span>

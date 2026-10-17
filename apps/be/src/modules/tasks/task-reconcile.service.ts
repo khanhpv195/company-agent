@@ -88,7 +88,7 @@ export class TaskReconcileService {
          FROM agents ag
          JOIN workspaces w ON w.id = ag.workspace_id AND w.scheduler_paused = false
          JOIN computers c ON c.id = ag.computer_id AND c.status = 'online'
-         WHERE NOT EXISTS (
+         WHERE ag.deleted_at IS NULL AND NOT EXISTS (
              SELECT 1 FROM assignments a
              WHERE a.agent_id = ag.id AND a.source_kind = 'task'
                AND a.status IN ('offered', 'claimed', 'running'))

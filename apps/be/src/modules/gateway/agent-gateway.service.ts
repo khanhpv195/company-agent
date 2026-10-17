@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
+import { isUUID } from 'class-validator';
 import { DataSource, EntityManager, QueryFailedError } from 'typeorm';
 import { ClockService } from '../../common/clock';
 import { LEASE_MS } from '../../contacts';
@@ -23,6 +24,8 @@ const CHAT_OPEN_STATUSES: readonly AssignmentStatus[] = [
   'running',
 ];
 const PG_UNIQUE_VIOLATION = '23505';
+/** The newest tool calls kept per assignment, so a row (and its events) stays bounded. */
+export const MAX_TOOL_LOG = 200;
 export const ONE_TASK_RUN_CONSTRAINT = 'UQ_assignments_one_task_run_per_agent';
 
 export interface CreateAssignmentInput {
@@ -31,6 +34,8 @@ export interface CreateAssignmentInput {
   sourceKind: AssignmentSourceKind;
   sourceId: string;
   activation?: string | null;
+  /** The member the run acts for (tools run with their permissions). */
+  requestedByMemberId?: string | null;
 }
 
 /**
@@ -52,6 +57,9 @@ const asToolCall = (payload: unknown): ToolCall | null => {
 export interface AssignmentResultInput {
   status: 'completed' | 'failed';
   error?: string | null;
+  /** Reported by real daemons; stored on the assignment (`turns` follows `numTurns`). */
+  numTurns?: number | null;
+  costUsd?: number | null;
 }
 
 export type Effect = () => void;
@@ -106,6 +114,7 @@ export class AgentGatewayService {
         sourceKind: input.sourceKind,
         sourceId: input.sourceId,
         activation: input.activation ?? null,
+        requestedByMemberId: input.requestedByMemberId ?? null,
         status: 'pending',
       }),
     );
@@ -161,6 +170,17 @@ export class AgentGatewayService {
             computerId,
             status: 'offered',
           });
+        // One reply per agent and chat at a time: they share a Claude session, so the next
+        // one stays offered until the running one ends.
+        query.andWhere(
+          `(a.source_kind <> 'chat' OR NOT EXISTS (
+             SELECT 1 FROM assignments o
+             JOIN messages om ON om.assignment_id = o.id
+             JOIN messages m ON m.assignment_id = a.id
+             WHERE o.agent_id = a.agent_id AND o.id <> a.id
+               AND o.source_kind = 'chat' AND o.status IN ('claimed', 'running')
+               AND om.chat_id = m.chat_id))`,
+        );
         if (agentId) query.andWhere('a.agent_id = :agentId', { agentId });
         if (sourceKind) query.andWhere('a.source_kind = :sourceKind', { sourceKind });
         if (skipped.length) query.andWhere('a.id NOT IN (:...skipped)', { skipped });
@@ -219,6 +239,21 @@ export class AgentGatewayService {
     );
   }
 
+  /** The assignment when it belongs to `computerId`; anything else reads as "not found". */
+  async findOwned(id: string, computerId: string, tx?: GatewayTx): Promise<Assignment> {
+    const manager = tx?.manager ?? this.dataSource.manager;
+    const row = isUUID(id) ? await manager.findOneBy(Assignment, { id }) : null;
+    if (!row || row.computerId !== computerId) {
+      throw new NotFoundException({ message: 'gateway.NOT_FOUND' });
+    }
+    return row;
+  }
+
+  /** Remembers the conversation key of a claimed assignment (resolved at claim time). */
+  async setSessionKey(id: string, key: string): Promise<void> {
+    await this.dataSource.getRepository(Assignment).update({ id }, { sessionKey: key });
+  }
+
   /** claimed -> running. */
   accept(id: string, attempt: number): Promise<Assignment> {
     return this.withLock(id, async (row, manager) => {
@@ -270,6 +305,7 @@ export class AgentGatewayService {
             }
           }
         }
+        if (row.toolLog.length > MAX_TOOL_LOG) row.toolLog = row.toolLog.slice(-MAX_TOOL_LOG);
         const saved = await manager.save(row);
         effects.push(() =>
           this.events.emitAssignmentProgress({
@@ -301,6 +337,11 @@ export class AgentGatewayService {
           throw invalidTransition();
         }
         if (!isBusy(row.status)) throw invalidTransition();
+        if (input.numTurns != null) {
+          row.numTurns = input.numTurns;
+          row.turns = input.numTurns;
+        }
+        if (input.costUsd != null) row.costUsd = input.costUsd;
         return this.finish(row, manager, effects, input.status, input.error ?? null);
       },
       tx,

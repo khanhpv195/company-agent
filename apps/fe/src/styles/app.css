@@ -2918,3 +2918,8 @@ button.notyou {
 .rail .me {
   text-decoration: none;
 }
+.live-tg:disabled,
+button.chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

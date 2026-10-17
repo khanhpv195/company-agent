@@ -508,6 +508,7 @@ describe('Agent gateway (e2e)', () => {
       const off = await createComputer(dataSource, me.workspaceId, {
         name: 'build-box',
         status: 'offline',
+        simulated: true,
       });
       const deployer = await createAgent(dataSource, me.workspaceId, off.id, { name: 'Deployer' });
       const chat = app.get(ChatService);

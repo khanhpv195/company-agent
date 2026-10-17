@@ -19,12 +19,15 @@ import {
   type TaskActivity,
   type TaskRunStatus,
   type TaskStatus,
+  type ToolCall,
   type UpdateTaskInput,
 } from '@repo/shared';
 import { EntityManager, In, IsNull, Not } from 'typeorm';
 import type { ClockService } from '../../common/clock';
 import { returnedRows } from '../../common/utils';
 import { Agent } from '../agents/entities/agent.entity';
+import { turnConnectionOff } from '../connections/connection-room';
+import { WorkspaceConnection } from '../connections/entities/workspace-connection.entity';
 import { ensureDmRoom } from '../chat/dm-room';
 import type { EventsService } from '../events';
 import type { AgentGatewayService, Effect, GatewayTx } from '../gateway/agent-gateway.service';
@@ -87,6 +90,19 @@ const isInvalidTransition = (error: unknown): boolean =>
   error instanceof ConflictException &&
   (error.getResponse() as { message?: string }).message === 'gateway.INVALID_TRANSITION';
 
+/** An agent acting for a member through a workspace tool: its writes are logged as the agent's. */
+export interface Via {
+  agentId: string;
+  memberName: string;
+}
+
+/** A progress event of a real daemon, as the task run needs it. */
+export type DaemonProgress = { kind: 'tool'; call: ToolCall } | { kind: 'turns'; turns: number };
+
+const MAX_RUN_STEPS = 500;
+const MAX_STEP_TOOL_CHARS = 100;
+const MAX_STEP_INPUT_CHARS = 500;
+
 const noAgent = () => new ConflictException({ message: 'tasks.NO_AGENT' });
 const notRunning = () => new ConflictException({ message: 'tasks.NOT_RUNNING' });
 
@@ -108,6 +124,8 @@ export class TaskCommand {
   private touched = false;
   /** Simulator steps: the "changed" pings go through the coalescer instead of straight out. */
   coalesceChanges = false;
+  /** Set when an agent performs the command for `by` (tool calls of a daemon run). */
+  via: Via | null = null;
 
   constructor(
     private readonly deps: CommandDeps,
@@ -324,6 +342,10 @@ export class TaskCommand {
     tone: TaskActivity['tone'] = 'normal',
     kind: TaskActivity['kind'] = 'event',
   ): Promise<void> {
+    if (this.via && by !== null && by === this.by) {
+      text = `(thay ${this.via.memberName}) ${text}`;
+      by = this.via.agentId;
+    }
     await this.manager.insert(TaskActivityRow, {
       workspaceId: this.workspaceId,
       taskId: t.id,
@@ -345,7 +367,14 @@ export class TaskCommand {
     t.blockedReason = null;
 
     const created = await this.deps.gateway.create(
-      { workspaceId: this.workspaceId, agentId: agent.id, sourceKind: 'task', sourceId: t.id },
+      {
+        workspaceId: this.workspaceId,
+        agentId: agent.id,
+        sourceKind: 'task',
+        sourceId: t.id,
+        // Whoever starts the run speaks for it; timers and the queue fall back to the creator.
+        requestedByMemberId: this.by ?? t.createdByMemberId,
+      },
       this.tx,
     );
     const assignment = await this.deps.gateway.offer(created.id, this.tx);
@@ -362,7 +391,8 @@ export class TaskCommand {
         assignmentId: assignment.id,
         n: Number(rows[0].n),
         step: 0,
-        steps: stepsFor(t.labels),
+        // Real daemons report their own tool calls; only simulated runs follow a script.
+        steps: agent.computer.simulated ? stepsFor(t.labels) : [],
         status: null,
         durationSec: null,
         toolCalls: null,
@@ -516,7 +546,8 @@ export class TaskCommand {
   async advance(taskId: string): Promise<void> {
     const t = this.tasks.find((x) => x.id === taskId);
     const run = t && this.activeRunOf(t);
-    if (!t || !run) return;
+    // A run without a script reports its own steps (real daemon): nothing to advance here.
+    if (!t || !run || !run.steps.length) return;
     const assignment = await this.manager.findOneBy(Assignment, { id: run.assignmentId });
     if (!assignment || assignment.status !== 'running') return;
     this.assignments.set(assignment.id, assignment);
@@ -547,6 +578,50 @@ export class TaskCommand {
   }
 
   /**
+   * Progress of a real daemon on a running task: every new tool call becomes a step of the
+   * run (`step` = steps so far), turns are recorded on the assignment. Calls are told apart by
+   * id, so the later "ok"/"error" report of a call only updates its log entry.
+   */
+  async recordProgress(
+    assignmentId: string,
+    attempt: number,
+    events: DaemonProgress[],
+  ): Promise<void> {
+    const run = [...this.activeRuns.values()].find((r) => r.assignmentId === assignmentId);
+    const assignment = this.assignments.get(assignmentId);
+    if (!run || !assignment) return;
+    const known = new Set(assignment.toolLog.map((call) => call.id));
+    const steps = [...run.steps];
+    const payloads: Array<{ kind: 'tool' | 'step'; payload: unknown }> = [];
+    for (const event of events) {
+      if (event.kind === 'turns') {
+        payloads.push({ kind: 'step', payload: { turns: event.turns } });
+        continue;
+      }
+      const call = event.call;
+      if (!known.has(call.id) && steps.length < MAX_RUN_STEPS) {
+        steps.push({
+          tool: call.name.slice(0, MAX_STEP_TOOL_CHARS),
+          input: call.input.slice(0, MAX_STEP_INPUT_CHARS),
+        });
+      }
+      known.add(call.id);
+      payloads.push({ kind: 'tool', payload: call });
+    }
+    if (!payloads.length) return;
+    this.assignments.set(
+      assignmentId,
+      await this.deps.gateway.progress(assignmentId, attempt, payloads, this.tx),
+    );
+    if (steps.length !== run.steps.length) {
+      run.steps = steps;
+      run.step = steps.length;
+      await this.manager.update(TaskRun, { id: run.id }, { step: run.step, steps: run.steps });
+    }
+    this.changed();
+  }
+
+  /**
    * One simulator step: a random running task of `computerIds` (any computer when omitted)
    * advances. Nothing moves while the scheduler is paused.
    */
@@ -568,6 +643,7 @@ export class TaskCommand {
   // ---------- commands ----------
   async moveTask(t: TaskEntity, to: TaskStatus, by: string | null = this.by): Promise<void> {
     if (t.status === to && !(to === 'doing' && !this.activeRunOf(t))) return;
+    if (t.status === 'done') this.dropDeletedAssignee(t);
     const agent = this.agent(t.assigneeAgentId);
     const wasRunning = !!this.activeRunOf(t);
     if (wasRunning && to !== 'doing') await this.cancelRun(t, by);
@@ -663,6 +739,7 @@ export class TaskCommand {
         output: null,
         blockedReason: null,
         error: null,
+        createdByMemberId: this.by,
         rank: firstRank(this.tasks),
         createdAt: this.now(),
       }),
@@ -681,8 +758,14 @@ export class TaskCommand {
     return t;
   }
 
+  /** A task that kept a since-deleted agent as assignee (finished work) becomes unassigned. */
+  private dropDeletedAssignee(t: TaskEntity): void {
+    if (t.assigneeAgentId && !this.agent(t.assigneeAgentId)) t.assigneeAgentId = null;
+  }
+
   async updateTask(t: TaskEntity, patch: UpdateTaskInput): Promise<void> {
     const me = this.by;
+    this.dropDeletedAssignee(t);
     if (patch.assigneeId !== undefined && patch.assigneeId !== assigneeIdOf(t)) {
       const to = patch.assigneeId || null;
       if (to && !this.agent(to) && !this.memberExists(to))
@@ -796,6 +879,48 @@ export class TaskCommand {
     const t = this.tasks.find((x) => x.id === taskId);
     if (!t) return;
     await this.log(t, agentId, 'Đã nhận, em sẽ cập nhật trong run tiếp theo.', 'normal', 'comment');
+    this.changed();
+  }
+
+  /**
+   * Soft-deletes an agent and releases everything it held: its active run is cancelled, its
+   * open tasks are unassigned (a `doing` task goes back to `todo`), its open chat replies are
+   * cancelled (their messages fail through the `assignment.ended` listener), and connections
+   * pointing at it lose their agent. Finished work keeps its agent id.
+   */
+  async removeAgent(agentId: string): Promise<void> {
+    const agent = this.agent(agentId);
+    if (!agent) throw new NotFoundException({ message: 'agents.NOT_FOUND' });
+    for (const t of this.tasks) {
+      if (t.assigneeAgentId !== agentId || t.status === 'done') continue;
+      if (this.activeRunOf(t)) await this.cancelRun(t, this.by);
+      t.assigneeAgentId = null;
+      if (t.status === 'doing') t.status = 'todo';
+      await this.log(t, this.by, `bỏ giao: agent **${agent.name}** đã bị xoá`);
+    }
+    const open = await this.manager.find(Assignment, {
+      where: { agentId, status: Not(In([...TERMINAL_STATUSES])) },
+    });
+    for (const assignment of open) {
+      try {
+        await this.deps.gateway.cancel(assignment.id, this.tx);
+      } catch (error) {
+        if (!isInvalidTransition(error)) throw error;
+      }
+    }
+    const connections = await this.manager.findBy(WorkspaceConnection, {
+      workspaceId: this.workspaceId,
+      agentId,
+    });
+    for (const connection of connections) {
+      if (connection.status === 'on') await turnConnectionOff(this.manager, connection);
+      connection.agentId = null;
+      await this.manager.save(connection);
+    }
+    if (connections.length) this.publish({ type: 'connections.changed' });
+    await this.manager.softDelete(Agent, { id: agentId, workspaceId: this.workspaceId });
+    this.agents = this.agents.filter((a) => a.id !== agentId);
+    this.publish({ type: 'rooms.changed' });
     this.changed();
   }
 

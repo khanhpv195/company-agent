@@ -93,7 +93,7 @@ export class DashboardService {
     const today = localDate(this.clock.now(), WORKSPACE_TIMEZONE);
     const dates = lastDays(today, DASHBOARD_DAYS);
     const manager = this.dataSource.manager;
-    const [finished, attention, feed] = await Promise.all([
+    const [finished, attention, feed, liveAgents] = await Promise.all([
       manager.query(FINISHED_SQL, [workspaceId, WORKSPACE_TIMEZONE, dates[0], today]),
       manager.find(AttentionItemRow, {
         where: { workspaceId, resolvedAt: IsNull() },
@@ -104,7 +104,9 @@ export class DashboardService {
         order: { at: 'DESC', id: 'ASC' },
         take: DASHBOARD_FEED_LIMIT,
       }),
+      manager.find(Agent, { where: { workspaceId }, select: { id: true } }),
     ]);
+    const liveAgentIds = new Set(liveAgents.map((agent) => agent.id));
 
     const days = new Map(dates.map((date) => [date, { date, completed: 0, failed: 0 }]));
     const byAgent = new Map<string, number>();
@@ -114,7 +116,10 @@ export class DashboardService {
       if (!day) continue;
       if (row.ok) day.completed += row.count;
       else day.failed += row.count;
-      byAgent.set(row.agent_id, (byAgent.get(row.agent_id) ?? 0) + row.count);
+      // Totals keep deleted agents' work; the per-agent breakdown lists live agents only.
+      if (liveAgentIds.has(row.agent_id)) {
+        byAgent.set(row.agent_id, (byAgent.get(row.agent_id) ?? 0) + row.count);
+      }
       if (row.day === today) minutesToday += row.minutes;
     }
     return {
@@ -243,7 +248,7 @@ export class DashboardService {
           await this.resolveOpen(manager, effects, workspaceId, { kind: 'error', taskId });
         } else if (status === 'failed' || status === 'expired') {
           await this.recordFeed(manager, effects, workspaceId, agentId, `thất bại ở **${title}**`);
-          const agent = await manager.findOneBy(Agent, { id: agentId });
+          const agent = await manager.findOne(Agent, { where: { id: agentId }, withDeleted: true });
           await this.openAttention(manager, effects, workspaceId, {
             kind: 'error',
             title: status === 'failed' ? `${title} thất bại` : `${title} hết hạn lease`,

@@ -17,6 +17,8 @@ import { Computer } from './entities/computer.entity';
 
 export const API_KEY_PREFIX = 'agk_';
 export const hashApiKey = (key: string): string => createHash('sha256').update(key).digest('hex');
+/** A fresh daemon API key (the plaintext is shown once, only its hash is stored). */
+export const newApiKey = (): string => `${API_KEY_PREFIX}${randomBytes(32).toString('base64url')}`;
 
 @Injectable()
 export class ComputersService {
@@ -36,8 +38,11 @@ export class ComputersService {
 
   /** Returns the plaintext once; only its sha256 is stored. */
   async issueApiKey(computerId: string): Promise<string> {
-    const key = `${API_KEY_PREFIX}${randomBytes(32).toString('base64url')}`;
-    const result = await this.computers.update({ id: computerId }, { apiKeyHash: hashApiKey(key) });
+    const key = newApiKey();
+    const result = await this.computers.update(
+      { id: computerId },
+      { apiKeyHash: hashApiKey(key), revokedAt: null },
+    );
     if (!result.affected) throw new NotFoundException({ message: 'computers.NOT_FOUND' });
     return key;
   }

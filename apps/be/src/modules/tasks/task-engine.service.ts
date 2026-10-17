@@ -6,7 +6,7 @@ import { ClockService } from '../../common/clock';
 import { EventsService } from '../events';
 import { ASSIGNMENT_ENDED_EVENT, type AssignmentEndedPayload } from '../events/events.service';
 import { AgentGatewayService, type Effect } from '../gateway/agent-gateway.service';
-import { TaskCommand, type CommandDeps } from './task-command';
+import { TaskCommand, type CommandDeps, type DaemonProgress, type Via } from './task-command';
 import { Random, TaskTimers } from './task-timers';
 import { WorkspaceLockService } from './workspace-lock.service';
 
@@ -89,11 +89,12 @@ export class TaskEngineService implements OnModuleDestroy {
     workspaceId: string,
     by: string | null,
     fn: (cmd: TaskCommand) => Promise<T>,
-    options: { skipDone?: boolean; coalesce?: boolean } = {},
+    options: { skipDone?: boolean; coalesce?: boolean; via?: Via } = {},
   ): Promise<T> {
     return this.lock.run(workspaceId, async (manager, effects) => {
       const cmd = new TaskCommand(this.deps, manager, effects, workspaceId, by);
       cmd.coalesceChanges = options.coalesce ?? false;
+      cmd.via = options.via ?? null;
       await cmd.load({ skipDone: options.skipDone });
       const result = await fn(cmd);
       await cmd.flush();
@@ -102,21 +103,37 @@ export class TaskEngineService implements OnModuleDestroy {
   }
 
   /** Returns the new task's id. */
-  createTask(workspaceId: string, by: string | null, input: CreateTaskInput): Promise<string> {
-    return this.exec(workspaceId, by, async (cmd) => (await cmd.createTask(input)).id);
+  createTask(
+    workspaceId: string,
+    by: string | null,
+    input: CreateTaskInput,
+    via?: Via,
+  ): Promise<string> {
+    return this.exec(workspaceId, by, async (cmd) => (await cmd.createTask(input)).id, { via });
   }
 
-  updateTask(workspaceId: string, by: string | null, id: string, patch: UpdateTaskInput) {
-    return this.exec(workspaceId, by, (cmd) => cmd.updateTask(cmd.task(id), patch));
+  updateTask(
+    workspaceId: string,
+    by: string | null,
+    id: string,
+    patch: UpdateTaskInput,
+    via?: Via,
+  ) {
+    return this.exec(workspaceId, by, (cmd) => cmd.updateTask(cmd.task(id), patch), { via });
   }
 
-  moveTask(workspaceId: string, by: string | null, id: string, input: MoveTaskInput) {
-    return this.exec(workspaceId, by, async (cmd) => {
-      const t = cmd.task(id);
-      if (input.beforeId !== undefined) await cmd.rerank(t, input.beforeId);
-      await cmd.moveTask(t, input.status);
-      cmd.changed();
-    });
+  moveTask(workspaceId: string, by: string | null, id: string, input: MoveTaskInput, via?: Via) {
+    return this.exec(
+      workspaceId,
+      by,
+      async (cmd) => {
+        const t = cmd.task(id);
+        if (input.beforeId !== undefined) await cmd.rerank(t, input.beforeId);
+        await cmd.moveTask(t, input.status);
+        cmd.changed();
+      },
+      { via },
+    );
   }
 
   approveTask(workspaceId: string, by: string | null, id: string) {
@@ -161,12 +178,19 @@ export class TaskEngineService implements OnModuleDestroy {
     });
   }
 
+  /** Soft-deletes an agent under the workspace lock; see `TaskCommand.removeAgent`. */
+  deleteAgent(workspaceId: string, by: string | null, agentId: string) {
+    return this.exec(workspaceId, by, (cmd) => cmd.removeAgent(agentId));
+  }
+
   runNow(workspaceId: string, by: string | null, id: string) {
     return this.exec(workspaceId, by, (cmd) => cmd.runNow(cmd.task(id)));
   }
 
-  comment(workspaceId: string, by: string | null, id: string, markdown: string) {
-    return this.exec(workspaceId, by, (cmd) => cmd.comment(cmd.task(id), markdown ?? ''));
+  comment(workspaceId: string, by: string | null, id: string, markdown: string, via?: Via) {
+    return this.exec(workspaceId, by, (cmd) => cmd.comment(cmd.task(id), markdown ?? ''), {
+      via,
+    });
   }
 
   setPaused(workspaceId: string, by: string | null, paused: boolean) {
@@ -190,6 +214,21 @@ export class TaskEngineService implements OnModuleDestroy {
       skipDone: true,
       coalesce: true,
     });
+  }
+
+  /** Tool calls and turns a real daemon reports for a running task (throttled change pings). */
+  recordProgress(
+    workspaceId: string,
+    assignmentId: string,
+    attempt: number,
+    events: DaemonProgress[],
+  ) {
+    return this.exec(
+      workspaceId,
+      null,
+      (cmd) => cmd.recordProgress(assignmentId, attempt, events),
+      { skipDone: true, coalesce: true },
+    );
   }
 
   /** One simulator step: a random running task (of `computerIds`) advances. */

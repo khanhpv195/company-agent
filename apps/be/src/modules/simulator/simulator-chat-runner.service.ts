@@ -8,14 +8,7 @@ import { DataSource, EntityManager } from 'typeorm';
 import { ClockService } from '../../common/clock';
 import { transactionWithEffects } from '../../common/utils';
 import { agentConfig } from '../../config';
-import { AgentActivity } from '../agents/entities/agent-activity.entity';
-import {
-  CHAT_REPLY_REQUESTED_EVENT,
-  CHAT_RUN_ENDED_EVENT,
-  type ChatReplyRequestedPayload,
-  type ChatRunEndedPayload,
-} from '../chat/chat.constants';
-import { previewOf } from '../chat/chat.util';
+import { CHAT_REPLY_REQUESTED_EVENT, type ChatReplyRequestedPayload } from '../chat/chat.constants';
 import { ChatService, type ReplyContext } from '../chat/chat.service';
 import { ChatMessage } from '../chat/entities/chat-message.entity';
 import { ASSIGNMENT_ENDED_EVENT, EventsService, type AssignmentEndedPayload } from '../events';
@@ -214,41 +207,13 @@ export class SimulatorChatRunner {
     });
   }
 
-  /**
-   * Activity log entry (inside the run's final transaction), then after commit the domain event
-   * Phase 6 listens to and the "something changed" pings.
-   */
-  private async recordRun(
+  private recordRun(
     manager: EntityManager,
     effects: Array<() => void>,
     ctx: ReplyContext,
     text: string,
     ok: boolean,
   ): Promise<void> {
-    const workspaceId = ctx.assignment.workspaceId;
-    // A DM is private to its member: the activity log and the feed get a neutral line only.
-    const dm = ctx.chat.kind === 'dm';
-    const preview = dm ? '' : previewOf(text);
-    await manager.getRepository(AgentActivity).insert({
-      workspaceId,
-      agentId: ctx.agent.id,
-      location: ctx.where,
-      request: dm ? 'Tin nhắn riêng (DM)' : preview,
-      status: ok ? 'completed' : 'failed',
-      at: this.clock.now(),
-    });
-    effects.push(() => {
-      const payload: ChatRunEndedPayload = {
-        workspaceId,
-        agentId: ctx.agent.id,
-        ok,
-        durationSec: CHAT_RUN_SECONDS,
-        preview,
-        dm,
-      };
-      this.emitter.emit(CHAT_RUN_ENDED_EVENT, payload);
-      this.events.publish(workspaceId, { type: 'agents.changed' });
-      this.chat.publishRoomsChanged(workspaceId, ctx.memberIds);
-    });
+    return this.chat.recordRun(manager, effects, ctx, text, ok, CHAT_RUN_SECONDS);
   }
 }

@@ -138,6 +138,66 @@ describe('MockBackend task rules', () => {
   });
 });
 
+describe('MockBackend agent management', () => {
+  it('creates an agent with defaults and rejects duplicate names and unknown computers', () => {
+    const { b } = setup();
+    const a = b.createAgent({ name: '  Ops Bot ', computerId: 'c1' });
+    expect(a).toMatchObject({
+      name: 'Ops Bot',
+      computerId: 'c1',
+      maxTurns: 40,
+      status: 'idle',
+      workdir: '~/.agent/agents/ops-bot',
+    });
+    expect(a.skills.filter((s) => s.enabled)).toHaveLength(18);
+    expect(b.db.agents).toHaveLength(4);
+    expect(() => b.createAgent({ name: 'ops BOT', computerId: 'c1' })).toThrow(/trùng tên/);
+    expect(() => b.createAgent({ name: 'X', computerId: 'zz' })).toThrow(/computer/);
+    expect(() => b.createAgent({ name: 'X', computerId: 'c1', maxTurns: 0 })).toThrow(/turns/);
+    expect(b.createAgent({ name: 'Off', computerId: 'c2' }).status).toBe('offline');
+  });
+
+  it('an explicit skill list switches the other skills off', () => {
+    const { b } = setup();
+    const a = b.createAgent({
+      name: 'Few',
+      computerId: 'c1',
+      skills: [{ id: 'git-ops', enabled: true }],
+    });
+    expect(a.skills.filter((s) => s.enabled).map((s) => s.id)).toEqual(['git-ops']);
+    expect(() =>
+      b.createAgent({ name: 'Bad', computerId: 'c1', skills: [{ id: 'nope', enabled: true }] }),
+    ).toThrow(/Skill/);
+  });
+
+  it('renames the DM too and blocks moving a busy agent to another computer', () => {
+    const { b } = setup();
+    b.updateAgent(b.agent('a1')!, { name: 'Scout' });
+    expect(b.db.rooms.find((r) => r.kind === 'dm' && r.agentId === 'a1')?.name).toBe('Scout');
+    expect(() => b.updateAgent(b.agent('a1')!, { computerId: 'c2' })).toThrow(/việc dở/);
+    expect(() => b.updateAgent(b.agent('a2')!, { name: 'deployer' })).toThrow(/trùng tên/);
+    const idle = b.createAgent({ name: 'Idle', computerId: 'c1' });
+    b.updateAgent(idle, { computerId: 'c2', maxTurns: 9 });
+    expect(idle).toMatchObject({ computerId: 'c2', maxTurns: 9, status: 'offline' });
+  });
+
+  it('deleting an agent cancels its run, unassigns its tasks and hides its DM', () => {
+    const { b, flush } = setup();
+    const t = b.task('AG-31');
+    const doneBefore = b.db.tasks.filter((x) => x.assigneeId === 'a1' && x.status === 'done');
+    b.deleteAgent('a1');
+    expect(t).toMatchObject({ status: 'todo', assigneeId: null, activeRun: null });
+    expect(t.runs[0].status).toBe('cancelled');
+    expect(b.db.tasks.some((x) => x.assigneeId === 'a1' && x.status !== 'done')).toBe(false);
+    for (const x of doneBefore) expect(x.assigneeId).toBe('a1');
+    expect(b.agent('a1')).toBeUndefined();
+    expect(b.db.rooms.some((r) => r.agentId === 'a1')).toBe(false);
+    expect(() => b.deleteAgent('a1')).toThrow(/not found/);
+    flush(); // pick-up timers of the deleted agent are no-ops
+    expect(b.db.tasks.some((x) => x.assigneeId === 'a1' && x.activeRun)).toBe(false);
+  });
+});
+
 describe('seed data', () => {
   it('does not share mutable arrays between tasks', () => {
     const b = new MockBackend({ later: () => {} });

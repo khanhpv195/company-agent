@@ -148,14 +148,26 @@ export async function runAssignment(b: MockBackend, chatId: string, agent: Agent
       status: 'pending',
       toolCalls: [],
       turns: 0,
+      costUsd: null,
       error: null,
     },
   });
   const a = m.assignment!;
   const update = () => b.emit({ type: 'message.upserted', message: structuredClone(m) });
+  /** The agent was deleted mid-reply: the open reply is cancelled and its message fails. */
+  const cancelled = () => {
+    if (b.agent(agent.id)) return false;
+    a.status = 'cancelled';
+    a.error = 'Agent đã bị xoá';
+    m.status = 'failed';
+    update();
+    b.chatBusy.delete(agent.id);
+    return true;
+  };
 
   if (!b.isOnline(agent)) {
     await sleep(b, 1200);
+    if (cancelled()) return;
     a.status = 'expired';
     a.error = `${b.computerOf(agent).name} offline, không có máy nhận việc`;
     m.status = 'failed';
@@ -165,6 +177,7 @@ export async function runAssignment(b: MockBackend, chatId: string, agent: Agent
 
   for (const s of ['offered', 'claimed', 'running'] as const) {
     await sleep(b, 450);
+    if (cancelled()) return;
     a.status = s;
     update();
   }
@@ -190,6 +203,7 @@ export async function runAssignment(b: MockBackend, chatId: string, agent: Agent
     a.toolCalls.push(call);
     update();
     await sleep(b, 900);
+    if (cancelled()) return;
     call.status = 'ok';
     update();
   }
@@ -207,6 +221,7 @@ export async function runAssignment(b: MockBackend, chatId: string, agent: Agent
       m.markdown = full.slice(0, shown);
       update();
       await sleep(b, 28);
+      if (cancelled()) return;
     }
     a.status = 'completed';
     a.turns = 2;

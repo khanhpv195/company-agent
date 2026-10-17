@@ -85,6 +85,21 @@ Dừng stack Docker:
 pnpm docker:down
 ```
 
+### Kết nối máy thật (agent chạy trên Claude Code)
+
+Máy giả lập (`AGENT_SIMULATOR=true`) chỉ để dev UI. Muốn agent chạy thật:
+
+1. Cài và đăng nhập Claude Code trên máy đó (`claude`), hoặc đặt `ANTHROPIC_API_KEY`.
+2. Trong app: trang **Computers** → tạo mã ghép đối (dạng `ABCD-EFGH`, hết hạn sau 10 phút, dùng một lần).
+3. Từ thư mục gốc repo:
+
+```bash
+pnpm --filter @agent/cli build
+pnpm agent connect --server http://localhost:3000 --code ABCD-EFGH --start
+```
+
+Lần sau chỉ cần `pnpm agent start`. Chi tiết quyền của agent: `packages/cli/README.md`.
+
 ## Biến môi trường
 
 ### Backend — `apps/be/.env`

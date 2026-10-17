@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { RunSpan, SchedulerState, Task } from '@repo/shared';
-import { In, IsNull, Not, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { Assignment } from '../gateway/entities/assignment.entity';
 import { Workspace } from '../workspace/entities/workspace.entity';
 import { TaskActivityRow } from './entities/task-activity.entity';
@@ -67,22 +67,38 @@ export class TasksQueryService {
     const taskIds = ids ? rows.map((row) => row.id) : undefined;
     const taskFilter = taskIds ? { taskId: In(taskIds) } : {};
 
+    const costById = new Map<string, number | null>();
     // Finalized runs never need their tool script; only the active run does.
     const [finished, active] = await Promise.all([
-      this.runs.find({
-        select: {
-          id: true,
-          taskId: true,
-          n: true,
-          status: true,
-          durationSec: true,
-          toolCalls: true,
-          error: true,
-          finalizedAt: true,
-        },
-        where: { workspaceId, ...taskFilter, finalizedAt: Not(IsNull()) },
-        order: { n: 'DESC' },
-      }),
+      (async () => {
+        // Cost comes from the assignment through a join, not a second query by id list.
+        const query = this.runs
+          .createQueryBuilder('r')
+          .leftJoin('r.assignment', 'a')
+          .select([
+            'r.id',
+            'r.taskId',
+            'r.assignmentId',
+            'r.n',
+            'r.status',
+            'r.durationSec',
+            'r.toolCalls',
+            'r.error',
+            'r.finalizedAt',
+          ])
+          .addSelect('a.cost_usd', 'cost_usd')
+          .where('r.workspace_id = :workspaceId', { workspaceId })
+          .andWhere('r.finalized_at IS NOT NULL')
+          .orderBy('r.n', 'DESC');
+        if (taskIds) query.andWhere('r.task_id IN (:...taskIds)', { taskIds });
+        const { entities, raw } = await query.getRawAndEntities<{
+          r_id: string;
+          cost_usd: string | null;
+        }>();
+        for (const row of raw)
+          costById.set(row.r_id, row.cost_usd === null ? null : Number(row.cost_usd));
+        return entities;
+      })(),
       this.runs.find({ where: { workspaceId, ...taskFilter, finalizedAt: IsNull() } }),
     ]);
     const assignments = active.length
@@ -111,7 +127,8 @@ export class TasksQueryService {
     const parts = new Map<string, TaskParts>(
       rows.map((row) => [row.id, { runs: [], activeRun: null, activity: [] }]),
     );
-    for (const run of finished) parts.get(run.taskId)?.runs.push(toTaskRun(run));
+    for (const run of finished)
+      parts.get(run.taskId)?.runs.push(toTaskRun(run, costById.get(run.id) ?? null));
     for (const run of active) {
       const assignment = assignmentById.get(run.assignmentId);
       const part = parts.get(run.taskId);

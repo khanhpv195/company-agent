@@ -89,6 +89,9 @@ class TaskRunDto implements TaskRun {
   @ApiProperty()
   toolCalls: number;
 
+  @ApiProperty({ type: Number, nullable: true })
+  costUsd: number | null;
+
   @ApiProperty({ format: 'date-time' })
   at: string;
 

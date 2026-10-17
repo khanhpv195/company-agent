@@ -62,7 +62,12 @@ export function usePeople(): People {
       computer,
       computerOf: (a: Agent) => computer(a.computerId),
       name: (id: string | null | undefined) =>
-        !id ? 'Chưa giao' : (agent(id)?.name ?? member(id)?.name ?? id),
+        !id
+          ? 'Chưa giao'
+          : (agent(id)?.name ??
+            member(id)?.name ??
+            // Once the lists are in, an unknown id is an agent that was deleted.
+            (agents.length || members.length ? 'Agent đã xoá' : id)),
       mentionNames: [...agents.map((a) => a.name), ...members.map((m) => m.name)].sort(
         (a, b) => b.length - a.length,
       ),

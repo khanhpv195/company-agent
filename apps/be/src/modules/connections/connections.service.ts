@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectDataSource } from '@nestjs/typeorm';
 import type { Connection, ConnectionProvider } from '@repo/shared';
 import { isUUID } from 'class-validator';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { ClockService } from '../../common/clock';
 import type { AuthContext } from '../../common/types';
 import { AUTHORIZE_DELAY_MS } from '../../contacts';
@@ -21,6 +21,7 @@ import {
   findDefinition,
   type ConnectionDefinition,
 } from './connection-catalog';
+import { turnConnectionOff } from './connection-room';
 import type { ConnectDto } from './dto/connection.dto';
 import { WorkspaceConnection } from './entities/workspace-connection.entity';
 
@@ -205,33 +206,10 @@ export class ConnectionsService {
         provider: definition.id,
       });
       if (!existing) return toConnection(definition, null);
-      if (existing.roomId) await this.deleteRoom(manager, workspaceId, existing.roomId);
-      existing.status = 'off';
-      existing.account = null;
-      existing.roomId = null;
-      existing.connectedAt = null;
-      const row = await manager.save(existing);
+      const row = await turnConnectionOff(manager, existing);
       effects.push(() => this.publishChanged(workspaceId));
       return toConnection(definition, row);
     });
-  }
-
-  /** Threads cascade with the room; their messages and read marks have no foreign key. */
-  private async deleteRoom(
-    manager: EntityManager,
-    workspaceId: string,
-    roomId: string,
-  ): Promise<void> {
-    const threads = await manager.findBy(Thread, { workspaceId, roomId });
-    const chatIds = threads.map((thread) => thread.id);
-    if (chatIds.length) {
-      await manager.query(
-        `DELETE FROM messages WHERE workspace_id = $1 AND chat_id = ANY($2::uuid[])`,
-        [workspaceId, chatIds],
-      );
-      await manager.query(`DELETE FROM thread_reads WHERE chat_id = ANY($1::uuid[])`, [chatIds]);
-    }
-    await manager.delete(Room, { id: roomId, workspaceId });
   }
 
   private publishChanged(workspaceId: string): void {

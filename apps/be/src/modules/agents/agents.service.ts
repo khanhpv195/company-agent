@@ -1,17 +1,39 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import type { Agent as AgentContract, AgentActivity as AgentActivityContract } from '@repo/shared';
+import type {
+  Agent as AgentContract,
+  AgentActivity as AgentActivityContract,
+  AgentSkill as AgentSkillContract,
+} from '@repo/shared';
 import { isUUID } from 'class-validator';
-import { Repository } from 'typeorm';
+import { In, Not, Repository, type EntityManager } from 'typeorm';
+import { randomUUID } from 'node:crypto';
 import { AGENT_ACTIVITY_LIMIT } from '../../contacts';
+import { Room } from '../chat/entities/room.entity';
+import { Computer } from '../computers/entities/computer.entity';
+import { TaskEngineService } from '../tasks/task-engine.service';
+import { WorkspaceLockService } from '../tasks/workspace-lock.service';
+import { slugify } from '../workspace/slug.util';
 import { EventsService } from '../events';
 import {
   Assignment,
   BUSY_STATUSES,
   TASK_WORKING_STATUSES,
+  TERMINAL_STATUSES,
 } from '../gateway/entities/assignment.entity';
 import { toAgent, toAgentActivity } from './agent.mapper';
-import { UpdateAgentDto } from './dto/agent.dto';
+import { CreateAgentDto, UpdateAgentDto } from './dto/agent.dto';
+import {
+  AGENT_AVATAR_VARIANTS,
+  DEFAULT_MAX_TURNS,
+  DEFAULT_PERSONA,
+  defaultSkills,
+} from './agent-defaults';
 import { AgentActivity } from './entities/agent-activity.entity';
 import { Agent } from './entities/agent.entity';
 
@@ -22,6 +44,8 @@ export class AgentsService {
     @InjectRepository(AgentActivity) private readonly activity: Repository<AgentActivity>,
     @InjectRepository(Assignment) private readonly assignments: Repository<Assignment>,
     private readonly events: EventsService,
+    private readonly lock: WorkspaceLockService,
+    private readonly engine: TaskEngineService,
   ) {}
 
   async list(workspaceId: string): Promise<AgentContract[]> {
@@ -39,28 +63,99 @@ export class AgentsService {
     return toAgent(row, (await this.busyAgentIds(workspaceId, [id])).has(id));
   }
 
+  /** Every skill the product knows, with its default flag (what a new agent starts with). */
+  skillCatalog(): AgentSkillContract[] {
+    return defaultSkills();
+  }
+
+  create(workspaceId: string, dto: CreateAgentDto): Promise<AgentContract> {
+    return this.lock.run(workspaceId, async (manager, effects) => {
+      const computer = await this.requireComputer(manager, workspaceId, dto.computerId);
+      await this.assertNameFree(manager, workspaceId, dto.name);
+      const catalog = defaultSkills();
+      const known = new Set(catalog.map((skill) => skill.id));
+      if (dto.skills?.some((skill) => !known.has(skill.id)))
+        throw new BadRequestException({ message: 'agents.UNKNOWN_SKILL' });
+      const enabledById = new Map(dto.skills?.map((skill) => [skill.id, skill.enabled]));
+      // With an explicit list, only the listed skills are on; otherwise the catalog defaults.
+      const skills = catalog.map((skill) => ({
+        ...skill,
+        enabled: dto.skills ? (enabledById.get(skill.id) ?? false) : skill.enabled,
+      }));
+      const existing = await manager.count(Agent, { where: { workspaceId }, withDeleted: true });
+      // Names get reused (delete + create): the id suffix keeps a new agent out of an old workdir.
+      const id = randomUUID();
+      const row = await manager.save(
+        manager.create(Agent, {
+          id,
+          workspaceId,
+          computerId: computer.id,
+          name: dto.name,
+          avatar: existing % AGENT_AVATAR_VARIANTS,
+          provider: 'claude-code',
+          persona: dto.persona?.trim() ? dto.persona : DEFAULT_PERSONA,
+          skills,
+          workdir: dto.workdir ?? `~/.agent/agents/${this.slugOf(dto.name)}-${id.slice(0, 6)}`,
+          maxTurns: dto.maxTurns ?? DEFAULT_MAX_TURNS,
+        }),
+      );
+      row.computer = computer;
+      effects.push(() => this.events.publish(workspaceId, { type: 'agents.changed' }));
+      return toAgent(row, false);
+    });
+  }
+
   async update(workspaceId: string, id: string, dto: UpdateAgentDto): Promise<AgentContract> {
-    // Row lock: two concurrent PATCHes of the skills jsonb must not overwrite each other.
-    await this.agents.manager.transaction(async (manager) => {
-      const locked = isUUID(id)
+    // Under the workspace lock: concurrent PATCHes (skills jsonb, name uniqueness) never interleave.
+    return this.lock.run(workspaceId, async (manager, effects) => {
+      const row = isUUID(id)
         ? await manager.findOne(Agent, {
             where: { id, workspaceId },
-            lock: { mode: 'pessimistic_write' },
+            relations: { computer: true },
           })
         : null;
-      if (!locked) throw new NotFoundException({ message: 'agents.NOT_FOUND' });
-      if (dto.persona !== undefined) locked.persona = dto.persona;
+      if (!row) throw new NotFoundException({ message: 'agents.NOT_FOUND' });
+      let renamed = false;
+      if (dto.name !== undefined && dto.name !== row.name) {
+        await this.assertNameFree(manager, workspaceId, dto.name, row.id);
+        row.name = dto.name;
+        renamed = true;
+      }
+      if (dto.computerId !== undefined && dto.computerId !== row.computerId) {
+        const computer = await this.requireComputer(manager, workspaceId, dto.computerId);
+        const open = await manager.exists(Assignment, {
+          where: { agentId: row.id, status: Not(In([...TERMINAL_STATUSES])) },
+        });
+        if (open) throw new ConflictException({ message: 'agents.BUSY' });
+        row.computerId = computer.id;
+        row.computer = computer;
+      }
+      if (dto.workdir !== undefined) row.workdir = dto.workdir;
+      if (dto.maxTurns !== undefined) row.maxTurns = dto.maxTurns;
+      if (dto.persona !== undefined) row.persona = dto.persona;
       if (dto.skills) {
         const enabledById = new Map(dto.skills.map((skill) => [skill.id, skill.enabled]));
-        locked.skills = locked.skills.map((skill) =>
+        row.skills = row.skills.map((skill) =>
           enabledById.has(skill.id) ? { ...skill, enabled: enabledById.get(skill.id)! } : skill,
         );
       }
-      await manager.save(locked);
+      await manager.save(row);
+      effects.push(() => this.events.publish(workspaceId, { type: 'agents.changed' }));
+      if (renamed) {
+        // The agent's DMs carry its name.
+        await manager.update(Room, { agentId: row.id, kind: 'dm' }, { name: row.name });
+        effects.push(() => this.events.publish(workspaceId, { type: 'rooms.changed' }));
+      }
+      const busy = (await this.busyAgentIds(workspaceId, [id], manager)).has(id);
+      return toAgent(row, busy);
     });
-    const row = await this.findOwned(workspaceId, id);
-    this.events.publish(workspaceId, { type: 'agents.changed' });
-    return toAgent(row, (await this.busyAgentIds(workspaceId, [id])).has(id));
+  }
+
+  /** Soft delete (see `TaskCommand.removeAgent`): history keeps the agent id. */
+  async remove(workspaceId: string, by: string | null, id: string): Promise<null> {
+    if (!isUUID(id)) throw new NotFoundException({ message: 'agents.NOT_FOUND' });
+    await this.engine.deleteAgent(workspaceId, by, id);
+    return null;
   }
 
   /** Newest first. An unknown (or foreign, or malformed) agent id yields an empty list. */
@@ -82,9 +177,47 @@ export class AgentsService {
     return row;
   }
 
+  private async requireComputer(
+    manager: EntityManager,
+    workspaceId: string,
+    computerId: string,
+  ): Promise<Computer> {
+    const computer = isUUID(computerId)
+      ? await manager.findOneBy(Computer, { id: computerId, workspaceId })
+      : null;
+    if (!computer) throw new BadRequestException({ message: 'agents.UNKNOWN_COMPUTER' });
+    return computer;
+  }
+
+  /** Case-insensitive among live agents; safe because callers hold the workspace lock. */
+  private async assertNameFree(
+    manager: EntityManager,
+    workspaceId: string,
+    name: string,
+    exceptId?: string,
+  ): Promise<void> {
+    const query = manager
+      .createQueryBuilder(Agent, 'a')
+      .where('a.workspace_id = :workspaceId AND lower(a.name) = lower(:name)', {
+        workspaceId,
+        name,
+      });
+    if (exceptId) query.andWhere('a.id != :exceptId', { exceptId });
+    if (await query.getExists()) throw new ConflictException({ message: 'agents.NAME_TAKEN' });
+  }
+
+  private slugOf(name: string): string {
+    const slug = slugify(name);
+    return slug === 'workspace' ? `agent-${randomUUID().slice(0, 8)}` : slug;
+  }
+
   /** One aggregate query for the whole list (no N+1). */
-  private async busyAgentIds(workspaceId: string, agentIds?: string[]): Promise<Set<string>> {
-    const query = this.assignments
+  private async busyAgentIds(
+    workspaceId: string,
+    agentIds?: string[],
+    manager?: EntityManager,
+  ): Promise<Set<string>> {
+    const query = (manager ? manager.getRepository(Assignment) : this.assignments)
       .createQueryBuilder('a')
       .select('a.agent_id', 'agentId')
       .distinct(true)

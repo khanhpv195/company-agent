@@ -45,3 +45,6 @@ export const dur = (sec: number) =>
 
 export const hhmm = (t: number) =>
   new Date(t).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
+/** "$0.012" for a run cost reported by a real daemon; small amounts keep three decimals. */
+export const usd = (amount: number) => `$${amount.toFixed(amount < 1 ? 3 : 2)}`;

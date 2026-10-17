@@ -2,6 +2,7 @@ import type { Message } from '@repo/shared';
 import { AgentAvatar, MemberAvatar } from '../../components/Avatar';
 import { Icon } from '../../components/Icon';
 import { Markdown } from '../../components/Markdown';
+import { usd } from '../../lib/format';
 import { usePeople } from '../workspace/workspace.api';
 import { useSendDraft } from './chat.api';
 
@@ -70,6 +71,7 @@ export function MessageItem({ message: m }: { message: Message }) {
             {as.status === 'completed' && (
               <span style={{ color: 'var(--muted)' }}>
                 · {as.toolCalls.length} tool calls · {as.turns} turns
+                {as.costUsd != null && ` · ${usd(as.costUsd)}`}
               </span>
             )}
           </div>

@@ -26,6 +26,8 @@ export interface TaskRun {
   status: TaskRunStatus;
   durationSec: number;
   toolCalls: number;
+  /** Cost reported by a real daemon; null for simulated runs. */
+  costUsd: number | null;
   at: string;
   error: string | null;
 }

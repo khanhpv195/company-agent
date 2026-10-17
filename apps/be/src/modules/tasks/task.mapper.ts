@@ -25,11 +25,12 @@ export const toActiveRun = (run: TaskRun, assignment: Assignment): TaskActiveRun
 });
 
 /** Only for finalized runs (status and times are set). */
-export const toTaskRun = (run: TaskRun): TaskRunContract => ({
+export const toTaskRun = (run: TaskRun, costUsd: number | null = null): TaskRunContract => ({
   n: run.n,
   status: run.status!,
   durationSec: run.durationSec ?? 0,
   toolCalls: run.toolCalls ?? 0,
+  costUsd,
   at: (run.finalizedAt ?? new Date(0)).toISOString(),
   error: run.error,
 });

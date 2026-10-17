@@ -71,8 +71,10 @@ describe('Computers and agents (e2e)', () => {
         lastHeartbeatAt: expect.any(String),
         keepAwake: false,
         cliVersion: '2.1.0',
+        simulated: false,
+        revokedAt: null,
       });
-      expect(JSON.stringify(computers)).not.toMatch(/apiKey|simulated|workspace/i);
+      expect(JSON.stringify(computers)).not.toMatch(/apiKey|apiKeyHash|workspace/i);
 
       const agents = await getAgents();
       expect(agents.map((a) => a.name)).toEqual(['A', 'B']);

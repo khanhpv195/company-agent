@@ -23,6 +23,10 @@ export class TasksService {
     return this.query.list(auth.workspaceId);
   }
 
+  get(auth: AuthContext, id: string): Promise<Task> {
+    return this.query.get(auth.workspaceId, id);
+  }
+
   async create(auth: AuthContext, dto: CreateTaskDto): Promise<Task> {
     const id = await this.engine.createTask(auth.workspaceId, auth.memberId, dto);
     return this.query.get(auth.workspaceId, id);
