@@ -195,6 +195,10 @@ export const vi = {
     noThreads: 'Chưa có cuộc trò chuyện nào.',
     allRead: 'Đã đọc hết.',
     noMentions: 'Chưa có ai nhắc đến bạn.',
+    newMessage: 'Tin nhắn mới',
+    startConversation: 'Bắt đầu trò chuyện',
+    noAgentsToChat: 'Chưa có agent nào để nhắn. Tạo agent trong Người & Agent trước.',
+    emptyHint: 'Chọn một agent để bắt đầu trò chuyện.',
     tabs: {
       home: 'Trang chủ',
       recent: 'Gần đây',

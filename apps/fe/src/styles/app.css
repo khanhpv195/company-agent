@@ -685,6 +685,15 @@ label {
   font-size: 15px;
   margin-top: 2px;
 }
+/* Agent replies stack chip, tool rows and bubble vertically (chip is inline-flex, bubble inline-block). */
+.msg.agent .msg-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.msg.agent .msg-body > .tool {
+  width: 100%;
+}
 .msg .who {
   font-size: 12.5px;
   font-weight: 500;
@@ -2943,6 +2952,35 @@ a.ri {
 a.item {
   color: inherit;
   text-decoration: none;
+}
+button.item {
+  width: 100%;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+button.item:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+.item.start-dm {
+  opacity: 0.75;
+}
+.sec-add {
+  margin-left: auto;
+  display: flex;
+  padding: 2px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.sec-add:hover {
+  background: var(--hover);
+  color: inherit;
 }
 .btn:disabled {
   opacity: 0.5;

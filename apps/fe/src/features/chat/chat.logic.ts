@@ -1,4 +1,4 @@
-import type { Room } from '@repo/shared';
+import type { Agent, Room } from '@repo/shared';
 import type { TFunction } from '../../i18n';
 
 /** "DM", "#all-members" or "#test › Hello" for a chat id. */
@@ -31,4 +31,10 @@ export function mentionQuery(text: string, caret: number): string | null {
 export function applyMention(text: string, caret: number, name: string) {
   const before = text.slice(0, caret).replace(/@([\p{L}\p{N}_' ]*)$/u, `@${name} `);
   return { text: before + text.slice(caret), caret: before.length };
+}
+
+/** Live agents that have no DM room yet, in the order given. Deleted agents are absent from the list. */
+export function agentsWithoutDm(agents: Agent[], rooms: Room[]): Agent[] {
+  const withDm = new Set(rooms.filter((r) => r.kind === 'dm').map((r) => r.agentId));
+  return agents.filter((a) => !withDm.has(a.id));
 }

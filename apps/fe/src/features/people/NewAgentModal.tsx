@@ -2,6 +2,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { Modal } from '../../components/Modal';
 import { useT } from '../../i18n';
+import { useOpenDm } from '../chat/chat.api';
 import { useUi } from '../../stores/ui';
 import { selectableComputers } from '../computers/computers.logic';
 import { usePeople } from '../workspace/workspace.api';
@@ -34,6 +35,7 @@ function NewAgentForm({
   const people = usePeople();
   const catalog = useSkillCatalog();
   const create = useCreateAgent();
+  const openDm = useOpenDm();
   const navigate = useNavigate();
   const [values, setValues] = useState<AgentFormValues>({
     name: '',
@@ -79,6 +81,8 @@ function NewAgentForm({
     );
     create.mutate(input, {
       onSuccess: (agent) => {
+        // Open the DM in the background so the agent shows up in Chat right away.
+        openDm.mutate(agent.id);
         onClose();
         void navigate({ to: '/people/agents/$agentId', params: { agentId: agent.id } });
       },

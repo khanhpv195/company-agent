@@ -10,6 +10,7 @@ import { useT, type MessageKey } from '../../i18n';
 import { useUi } from '../../stores/ui';
 import { usePeople } from '../workspace/workspace.api';
 import { useRooms } from './chat.api';
+import { StartDmList } from './StartDmList';
 
 const TABS = ['Home', 'Recent', 'Unread', '@me'] as const;
 type Tab = (typeof TABS)[number];
@@ -61,6 +62,14 @@ export function ChatPanel({ activeId }: { activeId: string | undefined }) {
   const people = usePeople();
   const now = useNow();
   const [tab, setTab] = useState<Tab>('Home');
+  const [focusTick, setFocusTick] = useState(0);
+  const dmClosed = useUi((s) => s.closedSections.includes('dm'));
+  const toggleSection = useUi((s) => s.toggleSection);
+  const startNew = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    if (dmClosed) toggleSection('dm');
+    setFocusTick((n) => n + 1);
+  };
 
   const dmItem = (r: Room) => {
     const agent = people.agent(r.agentId);
@@ -123,8 +132,25 @@ export function ChatPanel({ activeId }: { activeId: string | undefined }) {
   if (tab === 'Home')
     body = (
       <>
-        <Section id="dm" icon="user" title={t('chat.dms')}>
+        <Section
+          id="dm"
+          icon="user"
+          title={t('chat.dms')}
+          extra={
+            <button
+              type="button"
+              className="sec-add"
+              aria-label={t('chat.newMessage')}
+              title={t('chat.newMessage')}
+              onClick={startNew}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <Icon name="plus" size={14} />
+            </button>
+          }
+        >
           {dms.map(dmItem)}
+          <StartDmList focusTick={focusTick} />
         </Section>
         {channels.map((c) => (
           <Section

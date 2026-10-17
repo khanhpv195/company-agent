@@ -34,8 +34,11 @@ export const useSendDraft = () =>
 export const useMarkRead = () =>
   useMutation({ mutationFn: (chatId: string) => api.post(`/chats/${chatId}/read`) });
 
+/** Opens (or creates) the DM room with an agent. Rooms are refetched so the DM shows in the sidebar. */
 export function useOpenDm() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (agentId: string) => api.post<{ chatId: string }>(`/agents/${agentId}/dm`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.rooms }),
   });
 }

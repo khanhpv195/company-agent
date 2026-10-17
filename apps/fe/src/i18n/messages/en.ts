@@ -197,6 +197,10 @@ export const en: Widen<ViMessages> = {
     noThreads: 'No participating threads yet.',
     allRead: 'All caught up.',
     noMentions: 'No one has mentioned you yet.',
+    newMessage: 'New message',
+    startConversation: 'Start a conversation',
+    noAgentsToChat: 'No agents to message yet. Create one in People first.',
+    emptyHint: 'Pick an agent to start a conversation.',
     tabs: {
       home: 'Home',
       recent: 'Recent',

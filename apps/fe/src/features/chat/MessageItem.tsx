@@ -67,7 +67,7 @@ export function MessageItem({ message: m }: { message: Message }) {
   return (
     <div className={`msg ${agent ? 'agent' : 'human'}`}>
       {avatar}
-      <div style={{ minWidth: 0, flex: 1 }}>
+      <div className="msg-body" style={{ minWidth: 0, flex: 1 }}>
         <div className="who">
           {name}
           {agent && <span className="spark">✳</span>}

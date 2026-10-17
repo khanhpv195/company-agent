@@ -5,9 +5,10 @@ import { AgentAvatar } from '../../components/Avatar';
 import { Icon } from '../../components/Icon';
 import { useT } from '../../i18n';
 import { usePeople, useSession } from '../workspace/workspace.api';
-import { useChat, useMarkRead, useMessages, useSendMessage } from './chat.api';
+import { useChat, useMarkRead, useMessages, useRooms, useSendMessage } from './chat.api';
 import { Composer } from './Composer';
 import { MessageItem } from './MessageItem';
+import { StartDmList } from './StartDmList';
 
 /** How long a new message must sit before the open chat is marked read again. */
 const READ_DEBOUNCE_MS = 500;
@@ -118,6 +119,24 @@ export function RoomView() {
 }
 
 export function ChatEmpty() {
+  const t = useT();
+  const rooms = useRooms();
+  if (!rooms.length)
+    return (
+      <main className="main">
+        <div
+          className="empty-state"
+          style={{ alignContent: 'center', width: 360, margin: '0 auto' }}
+        >
+          <p style={{ color: 'var(--muted)', margin: '0 0 12px', textAlign: 'center' }}>
+            {t('chat.emptyHint')}
+          </p>
+          <div style={{ width: '100%' }}>
+            <StartDmList />
+          </div>
+        </div>
+      </main>
+    );
   return (
     <main className="main">
       <div className="empty-state">
