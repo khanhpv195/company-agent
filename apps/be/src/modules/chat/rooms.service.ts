@@ -36,6 +36,7 @@ import type {
 import { Room } from './entities/room.entity';
 import {
   assertRoomNameFree,
+  dropRoomState,
   lockRooms,
   mapRoomNameConflict,
   promoteRoomOwner,
@@ -630,6 +631,7 @@ export class RoomsService {
       ),
     );
     if (!removed.length) throw new NotFoundException({ message: 'chat.ROOM_MEMBER_NOT_FOUND' });
+    if (kind === 'member') await dropRoomState(manager, targetId, room.id);
     if (kind === 'member' && removed[0].role === 'owner') {
       // The oldest remaining human member takes over; none left = an ownerless room.
       await promoteRoomOwner(manager, room.id);

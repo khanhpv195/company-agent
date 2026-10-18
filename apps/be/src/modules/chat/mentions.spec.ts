@@ -1,4 +1,4 @@
-import { mentionedAgents } from './mentions';
+import { mentionedAgents, resolveMentions, type MentionCandidate } from './mentions';
 
 const agents = ['Bot', 'Bot Pro', "khanh's Claude", 'Hằng'].map((name) => ({ name }));
 const names = (text: string) => mentionedAgents(text, agents).map((a) => a.name);
@@ -38,5 +38,29 @@ describe('mentionedAgents', () => {
 
   it('ignores text without a mention', () => {
     expect(names('Bot Pro without at')).toEqual([]);
+  });
+});
+
+describe('resolveMentions', () => {
+  const candidates: MentionCandidate[] = [
+    { kind: 'agent', id: 'a1', name: 'Bot' },
+    { kind: 'member', id: 'm1', name: 'Hằng' },
+    { kind: 'member', id: 'm2', name: 'Bot Pro' },
+    { kind: 'member', id: 'm3', name: 'Here Kid' },
+  ];
+  const ids = (text: string) =>
+    resolveMentions(text, candidates).targets.map((t) => `${t.kind}:${t.id}`);
+
+  it('resolves members and agents by name in order, longest first', () => {
+    expect(ids('hi @hằng and @bot')).toEqual(['member:m1', 'agent:a1']);
+    expect(ids('@Bot Pro and @Bot')).toEqual(['member:m2', 'agent:a1']);
+  });
+
+  it('detects @here and @room outside of names and addresses', () => {
+    expect(resolveMentions('@here look', candidates).here).toBe(true);
+    expect(resolveMentions('ping @Room!', candidates).here).toBe(true);
+    expect(resolveMentions('mail me@here.com', candidates).here).toBe(false);
+    expect(resolveMentions('@hereby', candidates).here).toBe(false);
+    expect(resolveMentions('@Here Kid only', candidates)).toMatchObject({ here: false });
   });
 });

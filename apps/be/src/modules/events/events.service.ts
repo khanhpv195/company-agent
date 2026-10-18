@@ -1,6 +1,6 @@
 import { BeforeApplicationShutdown, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import type { RealtimeEvent } from '@repo/shared';
+import type { PresenceEntry, PresenceStatus, RealtimeEvent } from '@repo/shared';
 import type { AssignmentSourceKind, AssignmentStatus } from '../gateway/entities/assignment.entity';
 
 /** Client-facing events, consumed by the SSE endpoint (Phase 3). */
@@ -40,6 +40,16 @@ export interface AssignmentProgressPayload {
   events: { kind: 'tool' | 'text' | 'step'; payload?: unknown }[];
 }
 
+/** A member whose last stream closed stays "online" this long (reconnects, token refresh) before going offline. */
+export const PRESENCE_OFFLINE_DELAY_MS = 5000;
+
+interface PresenceState {
+  workspaceId: string;
+  /** What was last announced. */
+  published: PresenceStatus;
+  timer?: NodeJS.Timeout;
+}
+
 export interface StreamOwner {
   memberId?: string;
   workspaceId?: string;
@@ -50,14 +60,100 @@ export interface StreamOwner {
 export class EventsService implements BeforeApplicationShutdown {
   private readonly logger = new Logger(EventsService.name);
   /** Open SSE streams; each entry ends its stream and clears its heartbeat timer. */
-  private readonly streams = new Map<() => void, StreamOwner>();
+  private readonly streams = new Map<() => void, { owner: StreamOwner; idle: boolean }>();
+
+  /** Presence per member, derived from the open streams (`presence.update` on changes). */
+  private readonly presence = new Map<string, PresenceState>();
+  /** Tests lower this; see `PRESENCE_OFFLINE_DELAY_MS`. */
+  presenceOfflineDelayMs = PRESENCE_OFFLINE_DELAY_MS;
 
   constructor(private readonly emitter: EventEmitter2) {}
 
   /** Registers an open SSE stream so shutdown can end it; returns the unregister function. */
   registerStream(end: () => void, owner: StreamOwner = {}): () => void {
-    this.streams.set(end, owner);
-    return () => void this.streams.delete(end);
+    // A new stream starts active, also when the member reconnects while idle.
+    this.streams.set(end, { owner, idle: false });
+    this.syncPresence(owner);
+    return () => {
+      if (this.streams.delete(end)) this.syncPresence(owner);
+    };
+  }
+
+  /** Members with an open stream of this workspace: online, or idle when their client said so. */
+  presenceSnapshot(workspaceId: string): PresenceEntry[] {
+    const entries: PresenceEntry[] = [];
+    for (const [memberId, state] of this.presence) {
+      if (state.workspaceId === workspaceId && state.published !== 'offline') {
+        entries.push({ memberId, status: state.published });
+      }
+    }
+    return entries;
+  }
+
+  /**
+   * A client reports idle or active again. Idle is tracked per stream: it applies to the
+   * member's streams of that login (`sessionId`; all their streams when unknown), and the member
+   * is idle only when every open stream is. Ignored without an open stream.
+   */
+  setIdle(workspaceId: string, memberId: string, idle: boolean, sessionId?: string): void {
+    let matched = false;
+    for (const stream of this.streams.values()) {
+      const { owner } = stream;
+      if (owner.memberId !== memberId || owner.workspaceId !== workspaceId) continue;
+      if (sessionId && owner.sessionId && owner.sessionId !== sessionId) continue;
+      stream.idle = idle;
+      matched = true;
+    }
+    if (matched) this.syncPresence({ memberId, workspaceId });
+  }
+
+  /** The member has an open stream: `idle` when all of them are idle, else `online`. */
+  private streamStatus(memberId: string): PresenceStatus | null {
+    let open = false;
+    for (const { owner, idle } of this.streams.values()) {
+      if (owner.memberId !== memberId) continue;
+      if (!idle) return 'online';
+      open = true;
+    }
+    return open ? 'idle' : null;
+  }
+
+  private hasStream(memberId: string): boolean {
+    return this.streamStatus(memberId) !== null;
+  }
+
+  /** Announces a member's presence when it changed; going offline waits out the debounce. */
+  private syncPresence(owner: StreamOwner): void {
+    const { memberId, workspaceId } = owner;
+    if (!memberId || !workspaceId) return;
+    const state = this.presence.get(memberId) ?? {
+      workspaceId,
+      published: 'offline' as PresenceStatus,
+    };
+    this.presence.set(memberId, state);
+    const open = this.streamStatus(memberId);
+    if (open) {
+      if (state.timer) clearTimeout(state.timer);
+      state.timer = undefined;
+      const status: PresenceStatus = open;
+      if (state.published !== status) {
+        state.published = status;
+        this.publish(workspaceId, { type: 'presence.update', memberId, status });
+      }
+      return;
+    }
+    if (state.published === 'offline') {
+      this.presence.delete(memberId);
+      return;
+    }
+    if (state.timer) return;
+    state.timer = setTimeout(() => {
+      state.timer = undefined;
+      if (this.hasStream(memberId)) return;
+      this.presence.delete(memberId);
+      this.publish(workspaceId, { type: 'presence.update', memberId, status: 'offline' });
+    }, this.presenceOfflineDelayMs);
+    state.timer.unref();
   }
 
   /**
@@ -69,7 +165,7 @@ export class EventsService implements BeforeApplicationShutdown {
     memberId: string,
     filter: { exceptSessionId?: string; onlySessionId?: string } = {},
   ): void {
-    for (const [end, owner] of [...this.streams]) {
+    for (const [end, { owner }] of [...this.streams]) {
       if (owner.memberId !== memberId) continue;
       if (filter.exceptSessionId && owner.sessionId === filter.exceptSessionId) continue;
       if (filter.onlySessionId && owner.sessionId !== filter.onlySessionId) continue;
@@ -79,12 +175,13 @@ export class EventsService implements BeforeApplicationShutdown {
         this.logger.warn(`Failed to end SSE stream: ${String(error)}`);
       }
       this.streams.delete(end);
+      this.syncPresence(owner);
     }
   }
 
   /** Ends every open stream of a workspace (the workspace was deleted). */
   closeWorkspaceStreams(workspaceId: string): void {
-    for (const [end, owner] of [...this.streams]) {
+    for (const [end, { owner }] of [...this.streams]) {
       if (owner.workspaceId !== workspaceId) continue;
       try {
         end();
@@ -92,6 +189,7 @@ export class EventsService implements BeforeApplicationShutdown {
         this.logger.warn(`Failed to end SSE stream: ${String(error)}`);
       }
       this.streams.delete(end);
+      this.syncPresence(owner);
     }
   }
 
@@ -109,6 +207,8 @@ export class EventsService implements BeforeApplicationShutdown {
       }
     }
     this.streams.clear();
+    for (const state of this.presence.values()) if (state.timer) clearTimeout(state.timer);
+    this.presence.clear();
   }
 
   publish(workspaceId: string, event: RealtimeEvent, options: PublishOptions = {}): void {

@@ -175,8 +175,9 @@ describe('Chat (e2e)', () => {
     // Both members have read the thread already (unread starts at 0).
     for (const memberId of [me.memberId, member.id]) {
       await dataSource.query(
-        `INSERT INTO thread_reads (member_id, chat_id, last_read_at) VALUES ($1, $2, $3)`,
-        [memberId, threadId, new Date(clock.now().getTime() - 60_000)],
+        `INSERT INTO thread_reads (member_id, chat_id, last_read_seq)
+         SELECT $1, $2, max(seq) FROM messages WHERE id = $2 OR parent_id = $2`,
+        [memberId, threadId],
       );
     }
     realtime = [];

@@ -485,7 +485,7 @@ describe('Team (e2e)', () => {
           .expect(200),
       );
       await dataSource.query(
-        'INSERT INTO thread_reads (member_id, chat_id, last_read_at) SELECT $1, gen_random_uuid(), now()',
+        'INSERT INTO thread_reads (member_id, chat_id) SELECT $1, gen_random_uuid()',
         [memberId],
       );
       realtime = [];

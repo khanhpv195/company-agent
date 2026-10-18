@@ -19,6 +19,7 @@ import type {
   MessageAuthor,
   MessageDraft,
   MessageQuote,
+  MessageReaction,
   SkippedAgent,
   MessageThread,
   PostRoomMessageInput,
@@ -73,6 +74,27 @@ export class ThreadDto implements Thread {
 
   @ApiProperty({ type: String, nullable: true })
   connectionId: string | null;
+
+  @ApiPropertyOptional({ description: 'Unread messages of others that mention the caller' })
+  mentions?: number;
+
+  @ApiPropertyOptional({ description: 'The caller read cursor (message seq) of this thread' })
+  lastReadSeq?: number;
+
+  @ApiPropertyOptional({ description: 'Seq of the last message of the thread' })
+  lastSeq?: number;
+
+  @ApiPropertyOptional({ description: 'The caller muted the thread (unread is still counted)' })
+  muted?: boolean;
+
+  @ApiPropertyOptional()
+  replyCount?: number;
+
+  @ApiPropertyOptional({ type: String, format: 'date-time', nullable: true })
+  lastReplyAt?: string | null;
+
+  @ApiPropertyOptional({ type: [String] })
+  participantIds?: string[];
 }
 
 export class RoomDto implements Room {
@@ -118,6 +140,21 @@ export class RoomDto implements Room {
     description: 'The caller role in the channel',
   })
   myRole?: RoomMemberRole | null;
+
+  @ApiPropertyOptional({ description: 'Main-timeline messages of others after the caller cursor' })
+  unread?: number;
+
+  @ApiPropertyOptional({ description: 'Of those, the ones mentioning the caller (or @here)' })
+  mentions?: number;
+
+  @ApiPropertyOptional({ description: 'The caller read cursor (message seq)' })
+  lastReadSeq?: number;
+
+  @ApiPropertyOptional({ description: 'The caller muted the room (unread is still counted)' })
+  muted?: boolean;
+
+  @ApiPropertyOptional({ type: [String], description: 'Agents writing a reply in this room now' })
+  workingAgentIds?: string[];
 }
 
 export class ChatDto implements Chat {
@@ -221,6 +258,20 @@ export class SkippedAgentDto implements SkippedAgent {
   reason: 'offline' | 'not_in_room' | 'limit';
 }
 
+export class MessageReactionDto implements MessageReaction {
+  @ApiProperty({ description: 'The emoji' })
+  key: string;
+
+  @ApiProperty()
+  count: number;
+
+  @ApiPropertyOptional({ description: 'Whether the caller reacted (REST answers only)' })
+  mine?: boolean;
+
+  @ApiProperty({ type: [String], description: 'The first 10 reactors, oldest first' })
+  memberIds: string[];
+}
+
 export class MessageDto implements Message {
   @ApiProperty({ format: 'uuid' })
   id: string;
@@ -256,7 +307,7 @@ export class MessageDto implements Message {
   @ApiProperty({ format: 'date-time' })
   createdAt: string;
 
-  @ApiProperty({ enum: ['streaming', 'complete', 'failed'] })
+  @ApiProperty({ enum: ['streaming', 'complete', 'failed', 'stopped'] })
   status: Message['status'];
 
   @ApiProperty()
@@ -285,6 +336,31 @@ export class MessageDto implements Message {
 
   @ApiProperty({ type: String, nullable: true })
   clientMessageId: string | null;
+
+  @ApiPropertyOptional({
+    type: [MessageReactionDto],
+    description: 'Reactions grouped by emoji; `mine` only in REST answers, not in events',
+  })
+  reactions?: MessageReactionDto[];
+
+  @ApiPropertyOptional({
+    enum: ['queued', 'thinking', 'tool', 'writing', 'done', 'failed', 'stopped'],
+    description: 'Agent replies only: what the turn is doing',
+  })
+  phase?: Message['phase'];
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description: 'Phase `tool`: the tool in use',
+  })
+  activeTool?: string | null;
+
+  @ApiPropertyOptional({ type: String, format: 'date-time', nullable: true })
+  startedAt?: string | null;
+
+  @ApiPropertyOptional({ type: Number, nullable: true, description: 'Once the run ended, in ms' })
+  workedMs?: number | null;
 
   @ApiPropertyOptional({
     type: [SkippedAgentDto],

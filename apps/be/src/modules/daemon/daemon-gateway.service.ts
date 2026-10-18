@@ -336,8 +336,20 @@ export class DaemonGatewayService {
   async result(computer: ComputerContext, id: string, input: ResultDto): Promise<{ ok: true }> {
     const dto = input.text === undefined ? input : { ...input, text: clipResultText(input.text) };
     const row = await this.gateway.findOwned(id, computer.id);
-    if (row.sourceKind === 'chat') await this.finishChat(row, dto);
-    else await this.finishTask(row, dto);
+    // Cancelled or expired meanwhile (a stop): like progress, the late result is dropped.
+    if (isDropped(row)) return this.dropResult(row);
+    try {
+      if (row.sourceKind === 'chat') await this.finishChat(row, dto);
+      else await this.finishTask(row, dto);
+    } catch (error) {
+      if (await this.droppedMeanwhile(error, id, computer.id)) return this.dropResult(row);
+      throw error;
+    }
+    return { ok: true };
+  }
+
+  private dropResult(row: Assignment): { ok: true } {
+    this.streams.discard(row.id);
     return { ok: true };
   }
 
@@ -363,6 +375,7 @@ export class DaemonGatewayService {
         { id: context.message.id, deletedAt: IsNull() },
         { markdown: text, status: ok ? 'complete' : 'failed' },
       );
+      if (ok) await this.chat.recordAgentMentions(manager, context.message.id, text, context.chat);
       const message = await this.chat.loadMessage(context.message.id, manager);
       effects.push(() => this.chat.publishMessage(row.workspaceId, message, context.memberIds));
       await this.chat.recordRun(

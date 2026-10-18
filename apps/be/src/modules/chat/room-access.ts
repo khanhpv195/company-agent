@@ -84,6 +84,36 @@ export const promoteRoomOwner = async (manager: EntityManager, roomId: string): 
 };
 
 /**
+ * Forgets what a member kept per room once they are out of it (left, removed): the read cursors
+ * (room and threads), mutes and pins, so rejoining starts clean instead of showing a stale mute
+ * or the whole backlog as unread. Call in the transaction that deletes the membership.
+ */
+export const dropRoomState = async (
+  manager: EntityManager,
+  memberId: string,
+  roomId: string,
+): Promise<void> => {
+  const roots = `SELECT id FROM messages WHERE room_id = $2`;
+  await manager.query(`DELETE FROM room_reads WHERE member_id = $1 AND room_id = $2`, [
+    memberId,
+    roomId,
+  ]);
+  await manager.query(`DELETE FROM room_mutes WHERE member_id = $1 AND room_id = $2`, [
+    memberId,
+    roomId,
+  ]);
+  await manager.query(`DELETE FROM thread_mutes WHERE member_id = $1 AND root_id IN (${roots})`, [
+    memberId,
+    roomId,
+  ]);
+  await manager.query(`DELETE FROM thread_reads WHERE member_id = $1 AND chat_id IN (${roots})`, [
+    memberId,
+    roomId,
+  ]);
+  await manager.query(`DELETE FROM pins WHERE member_id = $1 AND room_id = $2`, [memberId, roomId]);
+};
+
+/**
  * Drops a (just removed) member from every room, promoting a new owner where they owned one.
  * Returns who must hear about it: undefined = the whole workspace (a public room changed),
  * else the members of the affected private rooms. Call under `lockRooms`.
@@ -104,6 +134,7 @@ export const leaveAllRooms = async (
   let anyPublic = false;
   const audience = new Set<string>();
   for (const room of rooms) {
+    await dropRoomState(manager, memberId, room.room_id);
     if (room.role === 'owner') await promoteRoomOwner(manager, room.room_id);
     if (!room.is_private) anyPublic = true;
     else for (const id of await roomMemberIds(manager, room.room_id)) audience.add(id);
@@ -154,3 +185,26 @@ export const joinDefaultRooms = async (
     [workspaceId, memberId],
   );
 };
+
+/**
+ * The rooms a member may open: their DMs (with a live agent), the channels they belong to and
+ * every connection inbox. Same set `GET /rooms` lists.
+ */
+export const accessibleRoomIds = async (
+  manager: EntityManager,
+  workspaceId: string,
+  memberId: string,
+): Promise<string[]> =>
+  returnedRows<{ id: string }>(
+    await manager.query(
+      `SELECT r.id FROM rooms r
+       WHERE r.workspace_id = $1 AND (
+         (r.kind = 'dm' AND r.member_id = $2
+            AND EXISTS (SELECT 1 FROM agents a WHERE a.id = r.agent_id AND a.deleted_at IS NULL))
+         OR (r.kind = 'channel' AND r.connection_id IS NOT NULL)
+         OR (r.kind = 'channel' AND r.connection_id IS NULL
+            AND EXISTS (SELECT 1 FROM room_members rm WHERE rm.room_id = r.id AND rm.member_id = $2))
+       )`,
+      [workspaceId, memberId],
+    ),
+  ).map((row) => row.id);

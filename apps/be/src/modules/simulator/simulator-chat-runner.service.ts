@@ -7,6 +7,7 @@ import { ClockService } from '../../common/clock';
 import { transactionWithEffects } from '../../common/utils';
 import { agentConfig, i18nConfig } from '../../config';
 import { CHAT_REPLY_REQUESTED_EVENT, type ChatReplyRequestedPayload } from '../chat/chat.constants';
+import { withStreamedText } from '../chat/chat.mapper';
 import { ChatService, type ReplyContext } from '../chat/chat.service';
 import { ChatMessage } from '../chat/entities/chat-message.entity';
 import { ASSIGNMENT_ENDED_EVENT, EventsService, type AssignmentEndedPayload } from '../events';
@@ -44,6 +45,8 @@ export class SimulatorChatRunner {
   private readonly inFlight = new Set<Promise<void>>();
   /** Chat assignments that ended behind the runner's back (expiry, cancel): stop streaming. */
   private readonly ended = new Set<string>();
+  /** The text shown so far per running reply: what a stopped reply keeps. */
+  private readonly shownText = new Map<string, string>();
 
   constructor(
     @Inject(agentConfig.KEY) private readonly config: ConfigType<typeof agentConfig>,
@@ -56,7 +59,9 @@ export class SimulatorChatRunner {
     private readonly timers: TaskTimers,
     private readonly random: Random,
     private readonly clock: ClockService,
-  ) {}
+  ) {
+    chat.registerPartialTextSource((assignmentId) => this.shownText.get(assignmentId));
+  }
 
   @OnEvent(CHAT_REPLY_REQUESTED_EVENT)
   onReplyRequested(payload: ChatReplyRequestedPayload): void {
@@ -80,6 +85,7 @@ export class SimulatorChatRunner {
       .finally(() => {
         this.inFlight.delete(run);
         this.ended.delete(assignmentId);
+        this.shownText.delete(assignmentId);
       });
     this.inFlight.add(run);
     return run;
@@ -145,7 +151,9 @@ export class SimulatorChatRunner {
       // The assignment ended meanwhile (offline expiry, cancel): its message is already failed.
       if (this.ended.has(id)) return;
       shown = Math.min(full.length, shown + 3 + Math.floor(this.random.next() * 6));
-      this.chat.publishMessage(workspaceId, { ...base, markdown: full.slice(0, shown) }, memberIds);
+      const visible = full.slice(0, shown);
+      this.shownText.set(id, visible);
+      this.chat.publishMessage(workspaceId, withStreamedText(base, visible), memberIds);
       await this.sleep(CHAT_CHUNK_MS);
     }
     await transactionWithEffects(this.dataSource, async (manager, effects) => {

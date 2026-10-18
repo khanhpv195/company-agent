@@ -37,3 +37,13 @@ export const ROOM_NAME_MAX = 80;
 export const THREAD_NAME_MAX = 120;
 /** Most members plus agents one request may add. */
 export const MAX_ROOM_ADDS = 200;
+
+/** Most pins one member may keep. */
+export const MAX_PINS = 50;
+/** Typing events of one member in one room (thread) go out at most this often. */
+export const TYPING_THROTTLE_MS = 2000;
+/** `GET /rooms/:id/threads` and `GET /mentions`: default and maximum page size. */
+export const THREAD_LIST_DEFAULT = 100;
+export const THREAD_LIST_MAX = 200;
+export const MENTIONS_PAGE_DEFAULT = 30;
+export const MENTIONS_PAGE_MAX = 100;

@@ -208,7 +208,8 @@ const seedChatFor = async (
     if (thread.fresh) {
       // As in the mock fixtures, khanhpv has already read the thread (unread 0).
       await manager.query(
-        `INSERT INTO thread_reads (member_id, chat_id, last_read_at) VALUES ($1, $2, $3)
+        `INSERT INTO thread_reads (member_id, chat_id, last_read_seq, updated_at)
+         SELECT $1, $2, coalesce(max(seq), 0), $3 FROM messages WHERE id = $2 OR parent_id = $2
          ON CONFLICT (member_id, chat_id) DO NOTHING`,
         [actor.u1, thread.id, new Date(now)],
       );

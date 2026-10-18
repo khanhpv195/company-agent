@@ -682,7 +682,7 @@ describe('Gateway over HTTP (e2e)', () => {
       });
     });
 
-    it('surfaces a stop on heartbeat and progress, and refuses the late result', async () => {
+    it('surfaces a stop on heartbeat and progress, and drops the late result', async () => {
       const id = await startTask();
       const claimed = (await gw<Claimed | null>('/claim', { maxChats: 0 }))!;
       await gw(`/assignments/${claimed.id}/accept`, { attempt: 1 });
@@ -702,7 +702,10 @@ describe('Gateway over HTTP (e2e)', () => {
           events: [{ kind: 'turns', turns: 1 }],
         }),
       ).toEqual({ ok: true, cancelled: true });
-      await gw(`/assignments/${claimed.id}/result`, { attempt: 1, status: 'completed' }, 409);
+      // a late result after a stop is acknowledged and dropped (no write)
+      expect(
+        await gw(`/assignments/${claimed.id}/result`, { attempt: 1, status: 'completed' }),
+      ).toEqual({ ok: true });
       expect(await taskOf(id)).toMatchObject({ status: 'todo', error: 'Đã dừng thủ công' });
       // the computer heartbeat names it too, filtered to the ids the daemon reports
       expect(await gw('/heartbeat', { running: [claimed.id] })).toMatchObject({
@@ -737,7 +740,9 @@ describe('Gateway over HTTP (e2e)', () => {
         ok: true,
         cancelled: true,
       });
-      await gw(`/assignments/${claimed.id}/result`, { attempt: 1, status: 'completed' }, 409);
+      expect(
+        await gw(`/assignments/${claimed.id}/result`, { attempt: 1, status: 'completed' }),
+      ).toEqual({ ok: true });
     });
 
     it('renews the lease on each heartbeat', async () => {

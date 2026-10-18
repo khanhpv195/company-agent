@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -23,6 +24,7 @@ import {
   ThreadQueryDto,
   TimelineQueryDto,
 } from './dto/chat.dto';
+import { MessageReactionsService } from './message-reactions.service';
 import { MessageStore } from './message-store.service';
 
 // Every action answers 200 (like the other chat routes and the desktop mock). Access follows the
@@ -31,7 +33,10 @@ import { MessageStore } from './message-store.service';
 @ApiBearerAuth()
 @Controller('rooms/:id/messages')
 export class RoomMessagesController {
-  constructor(private readonly store: MessageStore) {}
+  constructor(
+    private readonly store: MessageStore,
+    private readonly reactions: MessageReactionsService,
+  ) {}
 
   @Get()
   @ResponseMessage('chat.MESSAGES_LISTED')
@@ -109,5 +114,50 @@ export class RoomMessagesController {
     @Param('messageId') messageId: string,
   ) {
     return this.store.remove(auth, id, messageId);
+  }
+
+  @Put(':messageId/reactions/:key')
+  @ResponseMessage('chat.REACTION_ADDED')
+  @ApiOperation({
+    summary: 'React with an emoji (URL-encode it); idempotent; answers the message with `mine`',
+  })
+  @ApiWrappedResponse(MessageDto)
+  react(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Param('key') key: string,
+  ) {
+    return this.reactions.set(auth, id, messageId, key);
+  }
+
+  @Delete(':messageId/reactions/:key')
+  @HttpCode(HttpStatus.OK)
+  @ResponseMessage('chat.REACTION_REMOVED')
+  @ApiOperation({ summary: 'Remove your emoji reaction; idempotent; answers the message' })
+  @ApiWrappedResponse(MessageDto)
+  unreact(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Param('key') key: string,
+  ) {
+    return this.reactions.unset(auth, id, messageId, key);
+  }
+
+  @Post(':messageId/stop')
+  @HttpCode(HttpStatus.OK)
+  @ResponseMessage('chat.MESSAGE_STOPPED')
+  @ApiOperation({
+    summary:
+      'Stop an agent reply being written (the requester, the room owner, owner/admin); the message ends `stopped` with its partial text',
+  })
+  @ApiWrappedResponse(MessageDto)
+  stop(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.store.stop(auth, id, messageId);
   }
 }

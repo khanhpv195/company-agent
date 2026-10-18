@@ -15,7 +15,7 @@ import { Workspace } from '../../workspace/entities/workspace.entity';
 import { Room } from './room.entity';
 
 export type AuthorKind = 'human' | 'agent' | 'external';
-export type MessageStatus = 'streaming' | 'complete' | 'failed';
+export type MessageStatus = 'streaming' | 'complete' | 'failed' | 'stopped';
 
 /**
  * A message of a room (channel, DM or connection inbox). Every room has one main timeline
@@ -34,7 +34,7 @@ export type MessageStatus = 'streaming' | 'complete' | 'failed';
   where: `"client_message_id" IS NOT NULL`,
 })
 @Check('CHK_messages_author_kind', `"author_kind" IN ('human', 'agent', 'external')`)
-@Check('CHK_messages_status', `"status" IN ('streaming', 'complete', 'failed')`)
+@Check('CHK_messages_status', `"status" IN ('streaming', 'complete', 'failed', 'stopped')`)
 export class ChatMessage {
   @PrimaryGeneratedColumn('uuid')
   id: string;

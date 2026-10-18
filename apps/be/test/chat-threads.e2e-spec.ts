@@ -174,16 +174,18 @@ describe('Room timelines and threads (e2e)', () => {
         ids.f = await message(dm, 'dm', 'human', alice.memberId, 'hi', 15);
         ids.g = await message(dm, 'dm', 'agent', alpha.id, 'hello', 16);
         await message(randomUUID(), 'thread', 'human', alice.memberId, 'orphan', 17);
-        await dataSource.query(
-          `INSERT INTO thread_reads (member_id, chat_id, last_read_at) VALUES ($1, $2, $3)`,
-          [alice.memberId, t1, new Date(base + 20_000)],
-        );
         await migration.up(runner);
         legacy = false;
       } finally {
         if (legacy) await migration.up(runner);
       }
       await backfill();
+      // Alice has read the whole first thread (read marks are seq cursors now).
+      await dataSource.query(
+        `INSERT INTO thread_reads (member_id, chat_id, last_read_seq)
+         SELECT $1, $2, max(seq) FROM messages WHERE id = $2 OR parent_id = $2`,
+        [alice.memberId, t1],
+      );
 
       const rows = (await dataSource.query(
         `SELECT id, parent_id, room_id, thread_title, reply_count, author_kind, external_name, markdown

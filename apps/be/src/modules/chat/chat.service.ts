@@ -27,11 +27,12 @@ import {
   MESSAGES_PAGE_LIMIT,
   type ChatRunEndedPayload,
 } from './chat.constants';
-import { threadNameOf, toRoom, toThread, type LastMessage } from './chat.mapper';
+import { threadNameOf, toRoom, type LastMessage } from './chat.mapper';
 import { previewOf } from './chat.util';
 import { ensureDmRoom } from './dm-room';
 import { roomMemberIds } from './room-access';
 import { MessageStore, type RoomScope } from './message-store.service';
+import { ReadStateService } from './read-state.service';
 import type { SendMessageDto } from './dto/chat.dto';
 import { ChatMessage } from './entities/chat-message.entity';
 import { Room } from './entities/room.entity';
@@ -80,6 +81,7 @@ export class ChatService implements OnApplicationBootstrap {
     private readonly events: EventsService,
     private readonly emitter: EventEmitter2,
     private readonly store: MessageStore,
+    private readonly readState: ReadStateService,
     @Inject(agentConfig.KEY) private readonly config: ConfigType<typeof agentConfig>,
   ) {}
 
@@ -217,9 +219,7 @@ export class ChatService implements OnApplicationBootstrap {
     const connectionByRoom = new Map(rooms.map((room) => [room.id, room.connectionId]));
 
     const dmIds = rooms.filter((room) => room.kind === 'dm').map((room) => room.id);
-    const rootIds = roots.map((root) => root.id);
     const lastByChat = new Map<string, LastMessage>();
-    const unreadByChat = new Map<string, number>();
     if (dmIds.length) {
       const lasts = returnedRows<{ room_id: string; markdown: string; created_at: Date }>(
         await manager.query(
@@ -235,56 +235,22 @@ export class ChatService implements OnApplicationBootstrap {
         lastByChat.set(row.room_id, { markdown: row.markdown, createdAt: row.created_at });
       }
     }
-    if (rootIds.length) {
-      const lasts = returnedRows<{ chat_id: string; markdown: string; created_at: Date }>(
-        await manager.query(
-          `SELECT DISTINCT ON (chat_id) chat_id, markdown, created_at
-           FROM (
-             SELECT coalesce(parent_id, id) AS chat_id, markdown, created_at, seq, parent_id
-             FROM messages
-             WHERE workspace_id = $1 AND deleted_at IS NULL AND NOT system_root
-               AND (id = ANY($2::uuid[]) OR parent_id = ANY($2::uuid[]))
-           ) t
-           ORDER BY chat_id, seq DESC, (parent_id IS NOT NULL) DESC`,
-          [workspaceId, rootIds],
-        ),
-      );
-      for (const row of lasts) {
-        lastByChat.set(row.chat_id, { markdown: row.markdown, createdAt: row.created_at });
-      }
-      const unread = returnedRows<{ chat_id: string; unread: string }>(
-        await manager.query(
-          `SELECT t.chat_id, count(*) AS unread
-           FROM (
-             SELECT coalesce(parent_id, id) AS chat_id, created_at, author_kind, author_member_id
-             FROM messages
-             WHERE workspace_id = $1 AND deleted_at IS NULL AND NOT system_root
-               AND (id = ANY($2::uuid[]) OR parent_id = ANY($2::uuid[]))
-           ) t
-           LEFT JOIN thread_reads r ON r.chat_id = t.chat_id AND r.member_id = $3
-           WHERE t.created_at > coalesce(r.last_read_at, '-infinity'::timestamptz)
-             AND NOT (t.author_kind = 'human' AND t.author_member_id = $3)
-           GROUP BY t.chat_id`,
-          [workspaceId, rootIds, memberId],
-        ),
-      );
-      for (const row of unread) unreadByChat.set(row.chat_id, Number(row.unread));
-    }
-
+    const summaries = await this.readState.threadSummaries(
+      manager,
+      workspaceId,
+      memberId,
+      roots,
+      connectionByRoom,
+    );
     const threadsByRoom = new Map<string, ThreadContract[]>();
-    for (const root of roots) {
+    roots.forEach((root, i) => {
       const list = threadsByRoom.get(root.roomId) ?? [];
-      list.push(
-        toThread(
-          root,
-          lastByChat.get(root.id),
-          unreadByChat.get(root.id) ?? 0,
-          previewOf,
-          connectionByRoom.get(root.roomId) ?? null,
-        ),
-      );
+      list.push(summaries[i]);
       threadsByRoom.set(root.roomId, list);
-    }
+    });
+    const roomIds = rooms.map((room) => room.id);
+    const facets = await this.readState.roomFacets(manager, memberId, roomIds);
+    const working = await this.readState.workingAgents(manager, roomIds);
     return rooms.map((room) => ({
       ...toRoom(
         room,
@@ -292,6 +258,11 @@ export class ChatService implements OnApplicationBootstrap {
         room.kind === 'dm' ? lastByChat.get(room.id) : undefined,
         previewOf,
       ),
+      unread: facets.get(room.id)?.unread ?? 0,
+      mentions: facets.get(room.id)?.mentions ?? 0,
+      lastReadSeq: facets.get(room.id)?.lastReadSeq ?? 0,
+      muted: facets.get(room.id)?.muted ?? false,
+      workingAgentIds: working.get(room.id) ?? [],
       ...(room.kind === 'channel'
         ? {
             memberCount: counts.get(room.id)?.members ?? 0,
@@ -333,7 +304,7 @@ export class ChatService implements OnApplicationBootstrap {
       .addOrderBy('(m.parent_id IS NOT NULL)', 'DESC')
       .limit(MESSAGES_PAGE_LIMIT)
       .getMany();
-    return this.store.hydrate(manager, rows.reverse());
+    return this.store.hydrate(manager, rows.reverse(), auth.memberId);
   }
 
   // ---------- commands ----------
@@ -364,11 +335,11 @@ export class ChatService implements OnApplicationBootstrap {
     const manager = this.dataSource.manager;
     const chat = await this.findChat(manager, auth, id);
     if (!chat) return null;
-    await manager.query(
-      `INSERT INTO thread_reads (member_id, chat_id, last_read_at) VALUES ($1, $2, $3)
-       ON CONFLICT (member_id, chat_id) DO UPDATE SET last_read_at = EXCLUDED.last_read_at`,
-      [auth.memberId, chat.id, this.clock.now()],
-    );
+    await this.readState.advanceLegacyChat(manager, auth.memberId, {
+      kind: chat.kind,
+      id: chat.id,
+      roomId: chat.room.id,
+    });
     this.events.publish(
       auth.workspaceId,
       { type: 'rooms.changed' },
@@ -597,6 +568,21 @@ export class ChatService implements OnApplicationBootstrap {
     if (row.kind === 'dm') return { audience: row.member_id ? [row.member_id] : undefined };
     if (row.connection_id) return { audience: undefined };
     return { audience: await roomMemberIds(manager, roomId) };
+  }
+
+  /** Stores the @mentions of an agent's finished reply (members it addressed show it in their feed). */
+  recordAgentMentions(
+    manager: EntityManager,
+    messageId: string,
+    text: string,
+    scope: RoomScope,
+  ): Promise<void> {
+    return this.store.saveMentions(manager, messageId, text, 'agent', scope, undefined, true);
+  }
+
+  /** Runners that stream replies from memory register here (a stopped reply keeps that text). */
+  registerPartialTextSource(source: (assignmentId: string) => string | undefined): void {
+    this.store.registerPartialTextSource(source);
   }
 
   /** The message as clients see it, with its assignment's current state. */

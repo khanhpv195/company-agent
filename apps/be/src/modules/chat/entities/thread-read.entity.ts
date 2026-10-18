@@ -1,7 +1,11 @@
 import { Column, Entity, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
 import { Member } from '../../workspace/entities/member.entity';
 
-/** When a member last read a chat; unread = messages of others created after it. */
+/**
+ * How far a member has read a thread, by message `seq` (the root and its replies); unread =
+ * messages of others with a greater seq. `chatId` is the thread's root message id (the legacy
+ * "chat id"); it has no foreign key, rows of a deleted room are removed with it.
+ */
 @Entity('thread_reads')
 export class ThreadRead {
   @PrimaryColumn({ name: 'member_id', type: 'uuid' })
@@ -14,6 +18,9 @@ export class ThreadRead {
   @PrimaryColumn({ name: 'chat_id', type: 'uuid' })
   chatId: string;
 
-  @Column({ name: 'last_read_at', type: 'timestamptz' })
-  lastReadAt: Date;
+  @Column({ name: 'last_read_seq', type: 'bigint', default: 0 })
+  lastReadSeq: string;
+
+  @Column({ name: 'updated_at', type: 'timestamptz', default: () => 'now()' })
+  updatedAt: Date;
 }

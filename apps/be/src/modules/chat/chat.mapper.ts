@@ -1,6 +1,8 @@
 import type {
+  AgentTurnPhase,
   Message,
   MessageAuthor,
+  MessageReaction,
   MessageQuote,
   MessageThread,
   Room as RoomContract,
@@ -31,12 +33,55 @@ const authorOf = (row: ChatMessage): MessageAuthor => {
   };
 };
 
+const QUEUED_STATUSES = ['pending', 'offered', 'claimed'];
+
+/**
+ * What an agent reply is doing: from its message status, its run and whether text has arrived.
+ * A running reply is `tool` while its last tool call runs, `writing` once text exists, else
+ * `thinking`; a run that has not started yet is `queued`.
+ */
+export const turnPhaseOf = (
+  status: Message['status'],
+  assignment: Pick<NonNullable<Message['assignment']>, 'status' | 'toolCalls'> | null,
+  hasText: boolean,
+): { phase: AgentTurnPhase; activeTool: string | null } => {
+  if (status === 'stopped') return { phase: 'stopped', activeTool: null };
+  if (status === 'failed') return { phase: 'failed', activeTool: null };
+  if (status === 'complete') return { phase: 'done', activeTool: null };
+  if (!assignment || QUEUED_STATUSES.includes(assignment.status)) {
+    return { phase: 'queued', activeTool: null };
+  }
+  const active = [...assignment.toolCalls].reverse().find((call) => call.status === 'running');
+  if (assignment.status === 'running' && active) return { phase: 'tool', activeTool: active.name };
+  return { phase: hasText ? 'writing' : 'thinking', activeTool: null };
+};
+
+/** A streaming message with the text streamed so far (held in memory): its phase follows the text. */
+export const withStreamedText = (message: Message, text: string): Message =>
+  message.phase
+    ? {
+        ...message,
+        markdown: text,
+        ...turnPhaseOf(message.status, message.assignment, text.length > 0),
+      }
+    : { ...message, markdown: text };
+
+/** Realtime events are shared between viewers: no per-viewer `mine` on reactions. */
+export const withoutMine = (message: Message): Message =>
+  message.reactions?.some((reaction) => reaction.mine !== undefined)
+    ? {
+        ...message,
+        reactions: message.reactions.map(({ mine: _mine, ...reaction }) => reaction),
+      }
+    : message;
+
 /** What `toMessage` cannot read off the row itself. */
 export interface MessageExtras {
   /** DM main-timeline messages carry the DM room id as their legacy `chatId`. */
   roomKind: RoomKind;
   thread?: MessageThread;
   quote?: MessageQuote | null;
+  reactions?: MessageReaction[];
 }
 
 /** `row.assignment` must be loaded for agent replies. A soft-deleted message loses its content. */
@@ -45,6 +90,19 @@ export const toMessage = (
   extras: MessageExtras = { roomKind: 'channel' },
 ): Message => {
   const deleted = row.deletedAt != null;
+  const assignment = !deleted && row.assignment ? toAssignment(row.assignment) : null;
+  // Agent replies (a message with a run) carry the turn phase and timing.
+  const turn =
+    !deleted && row.authorKind === 'agent' && row.assignmentId
+      ? {
+          ...turnPhaseOf(row.status, assignment, row.markdown.length > 0),
+          startedAt: row.assignment?.startedAt ? row.assignment.startedAt.toISOString() : null,
+          workedMs:
+            row.assignment?.startedAt && row.assignment.endedAt
+              ? Math.max(0, row.assignment.endedAt.getTime() - row.assignment.startedAt.getTime())
+              : null,
+        }
+      : undefined;
   return {
     id: row.id,
     // A DM main message belongs to the DM; a reply to its thread root; any other main-timeline
@@ -57,7 +115,7 @@ export const toMessage = (
     createdAt: row.createdAt.toISOString(),
     status: row.status,
     markdown: deleted ? '' : row.markdown,
-    assignment: !deleted && row.assignment ? toAssignment(row.assignment) : null,
+    assignment,
     draft: deleted ? null : (row.draft ?? null),
     threadTitle: row.parentId ? null : (row.threadTitle ?? null),
     ...(!deleted && extras.thread ? { thread: extras.thread } : {}),
@@ -65,6 +123,8 @@ export const toMessage = (
     deleted,
     quote: deleted ? null : (extras.quote ?? null),
     clientMessageId: row.clientMessageId ?? null,
+    reactions: deleted ? [] : (extras.reactions ?? []),
+    ...turn,
   };
 };
 
@@ -91,6 +151,7 @@ export const toThread = (
   unread: number,
   preview: (markdown: string) => string,
   connectionId: string | null,
+  extra: Partial<ThreadContract> = {},
 ): ThreadContract => ({
   id: root.id,
   roomId: root.roomId,
@@ -99,6 +160,7 @@ export const toThread = (
   preview: preview((last ?? root).markdown),
   unread,
   connectionId,
+  ...extra,
 });
 
 export const toRoom = (

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import type { Message } from '@repo/shared';
+import { withStreamedText } from '../chat/chat.mapper';
 import { ChatService } from '../chat/chat.service';
 import { ASSIGNMENT_ENDED_EVENT, type AssignmentEndedPayload } from '../events';
 import type { Assignment } from '../gateway/entities/assignment.entity';
@@ -37,7 +38,10 @@ export class ChatStreamService {
   /** Assignments that ended recently: a slow, stale "streaming" publish must not follow them. */
   private readonly ended = new Set<string>();
 
-  constructor(private readonly chat: ChatService) {}
+  constructor(private readonly chat: ChatService) {
+    // A stopped reply keeps the text streamed so far.
+    chat.registerPartialTextSource((assignmentId) => this.streams.get(assignmentId)?.text);
+  }
 
   @OnEvent(ASSIGNMENT_ENDED_EVENT)
   onAssignmentEnded(payload: AssignmentEndedPayload): void {
@@ -109,7 +113,7 @@ export class ChatStreamService {
       this.chat.publishMessage(
         context.assignment.workspaceId,
         state && message.status === 'streaming' && !message.deleted
-          ? { ...message, markdown: state.text }
+          ? withStreamedText(message, state.text)
           : message,
         context.memberIds,
       );
@@ -140,7 +144,7 @@ export class ChatStreamService {
       state.memberIds = current.audience;
       this.chat.publishMessage(
         state.workspaceId,
-        { ...state.base, markdown: state.text },
+        withStreamedText(state.base, state.text),
         current.audience,
       );
     } catch (error) {

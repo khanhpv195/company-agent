@@ -1,18 +1,26 @@
 const WORD_CHAR = /[\p{L}\p{N}\p{M}_]/u;
 
+interface Hit<T> {
+  index: number;
+  end: number;
+  item: T;
+}
+
 /**
- * The agents `@name`-mentioned in a text, in order of first mention. Case-insensitive; names are
- * matched longest first so "@Bot Pro" wakes "Bot Pro" only (not "Bot"), and a name must end at a
- * word boundary ("@Bots" does not mention "Bot") and the "@" must not follow a word character
- * ("foo@Bot.com" is an address). Text and names are NFC-normalized before folding case.
+ * Finds the `@name` mentions of `items` in a text: case-insensitive, names matched longest first
+ * (so "@Bot Pro" does not also mention "Bot"), a name must end at a word boundary and the "@"
+ * must not follow a word character ("foo@Bot.com" is an address). Text and names are
+ * NFC-normalized before folding case. Earlier items win a span over later ones of equal length.
  */
-export const mentionedAgents = <T extends { name: string }>(text: string, agents: T[]): T[] => {
-  const lower = text.normalize('NFC').toLowerCase();
-  const byLength = [...agents].sort((a, b) => b.name.length - a.name.length);
+const scan = <T extends { name: string }>(
+  lower: string,
+  items: T[],
+): { hits: Hit<T>[]; claimed: Array<[number, number]> } => {
+  const byLength = [...items].sort((a, b) => b.name.length - a.name.length);
   const claimed: Array<[number, number]> = [];
-  const hits: Array<{ index: number; agent: T }> = [];
-  for (const agent of byLength) {
-    const needle = `@${agent.name.normalize('NFC').trim().toLowerCase()}`;
+  const hits: Hit<T>[] = [];
+  for (const item of byLength) {
+    const needle = `@${item.name.normalize('NFC').trim().toLowerCase()}`;
     if (needle.length < 2) continue;
     for (let from = 0; ;) {
       const index = lower.indexOf(needle, from);
@@ -26,16 +34,54 @@ export const mentionedAgents = <T extends { name: string }>(text: string, agents
       if (next !== undefined && WORD_CHAR.test(String.fromCodePoint(next))) continue;
       if (claimed.some(([s, e]) => index < e && end > s)) continue;
       claimed.push([index, end]);
-      hits.push({ index, agent });
+      hits.push({ index, end, item });
     }
   }
   hits.sort((a, b) => a.index - b.index);
+  return { hits, claimed };
+};
+
+const unique = <T>(hits: Hit<T>[]): T[] => {
   const seen = new Set<T>();
   const result: T[] = [];
-  for (const { agent } of hits) {
-    if (seen.has(agent)) continue;
-    seen.add(agent);
-    result.push(agent);
+  for (const { item } of hits) {
+    if (seen.has(item)) continue;
+    seen.add(item);
+    result.push(item);
   }
   return result;
+};
+
+/** The agents `@name`-mentioned in a text, in order of first mention (see `scan` for the rules). */
+export const mentionedAgents = <T extends { name: string }>(text: string, agents: T[]): T[] =>
+  unique(scan(text.normalize('NFC').toLowerCase(), agents).hits);
+
+export interface MentionCandidate {
+  kind: 'member' | 'agent';
+  id: string;
+  name: string;
+}
+
+export interface ResolvedMentions {
+  /** Members and agents, in order of first mention. Agents win a name shared with a member. */
+  targets: MentionCandidate[];
+  /** `@here` or `@room`: every human of the room. */
+  here: boolean;
+}
+
+const HERE = /(?<![\p{L}\p{N}\p{M}_])@(?:here|room)(?![\p{L}\p{N}\p{M}_])/gu;
+
+/** Resolves every kind of mention of a text: members and agents by name, plus `@here` / `@room`. */
+export const resolveMentions = (text: string, candidates: MentionCandidate[]): ResolvedMentions => {
+  const lower = text.normalize('NFC').toLowerCase();
+  const { hits, claimed } = scan(lower, candidates);
+  let here = false;
+  for (const match of lower.matchAll(HERE)) {
+    const index = match.index ?? 0;
+    const end = index + match[0].length;
+    if (claimed.some(([s, e]) => index < e && end > s)) continue;
+    here = true;
+    break;
+  }
+  return { targets: unique(hits), here };
 };

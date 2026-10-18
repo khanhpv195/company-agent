@@ -110,6 +110,9 @@ export class WorkspaceService {
     // Read cursors are per member and meaningless afterwards. There are no per-member drafts:
     // draft replies belong to a connection's room, so they stay.
     await manager.query('DELETE FROM thread_reads WHERE member_id = $1', [memberId]);
+    for (const table of ['room_reads', 'room_mutes', 'thread_mutes', 'pins']) {
+      await manager.query(`DELETE FROM ${table} WHERE member_id = $1`, [memberId]);
+    }
     const left = await leaveAllRooms(manager, memberId);
     await manager.update(
       Member,

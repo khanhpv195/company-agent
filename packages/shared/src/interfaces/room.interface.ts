@@ -12,10 +12,26 @@ export interface Thread {
   name: string;
   lastMessageAt: string;
   preview: string;
+  /** Counted up to 100 (show "99+"). */
   unread: number;
   /** Set when the thread mirrors an external conversation (Zalo, Facebook, Gmail). */
   connectionId: string | null;
+  /** Unread messages of others that mention the caller (or @here / @room). */
+  mentions?: number;
+  /** The caller's read cursor (message seq) of this thread. */
+  lastReadSeq?: number;
+  /** Seq of the thread's last message (what "mark read" passes). */
+  lastSeq?: number;
+  /** The caller muted the thread: unread is still counted, show only mentions. */
+  muted?: boolean;
+  /** Live replies. */
+  replyCount?: number;
+  lastReplyAt?: string | null;
+  /** The root author and the repliers, at most 5 (member or agent ids). */
+  participantIds?: string[];
 }
+
+export type ThreadFilter = 'all' | 'unread' | 'mentioned' | 'mine';
 
 export interface Room {
   id: string;
@@ -36,6 +52,16 @@ export interface Room {
   isDefault?: boolean;
   /** The caller's role in the channel; null for DMs and connection inboxes they were not added to. */
   myRole?: RoomMemberRole | null;
+  /** Main-timeline messages of others after the caller's read cursor (counted up to 100: show "99+"). */
+  unread?: number;
+  /** Of those, the ones mentioning the caller (or @here / @room); capped at 100 like `unread`. */
+  mentions?: number;
+  /** The caller's read cursor (message seq) of the main timeline. */
+  lastReadSeq?: number;
+  /** The caller muted the room: unread is still counted, show only mentions. */
+  muted?: boolean;
+  /** Agents with a reply being written in this room right now. */
+  workingAgentIds?: string[];
 }
 
 /** A place messages are posted to: a DM room (main timeline) or a thread (root message id). */

@@ -10,6 +10,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import type {
   Message,
   MessageQuote,
+  MessageReaction,
   MessageThread,
   RoomKind,
   SkippedAgent,
@@ -18,7 +19,7 @@ import type {
 } from '@repo/shared';
 import { isUUID } from 'class-validator';
 import { randomUUID } from 'node:crypto';
-import { DataSource, EntityManager, In, QueryFailedError } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, QueryFailedError } from 'typeorm';
 import { ClockService } from '../../common/clock';
 import type { AuthContext } from '../../common/types';
 import {
@@ -30,6 +31,7 @@ import {
 import { deriveAgentStatus } from '../agents/agent-status.util';
 import { Agent } from '../agents/entities/agent.entity';
 import { EventsService } from '../events';
+import { AuditService } from '../audit/audit.service';
 import { AgentGatewayService } from '../gateway/agent-gateway.service';
 import { Assignment } from '../gateway/entities/assignment.entity';
 import {
@@ -39,14 +41,21 @@ import {
   THREAD_NAME_MAX,
   type ChatReplyRequestedPayload,
 } from './chat.constants';
-import { toMessage } from './chat.mapper';
-import { mentionedAgents } from './mentions';
+import { toMessage, withoutMine } from './chat.mapper';
+import { mentionedAgents, resolveMentions, type MentionCandidate } from './mentions';
 import { roomAgentIds, roomMemberIds } from './room-access';
 import { ChatMessage } from './entities/chat-message.entity';
 import { Room } from './entities/room.entity';
 
+/** Returns the text a reply has streamed so far (held in memory by whoever runs it), if any. */
+export type PartialTextSource = (assignmentId: string) => string | undefined;
+
+/** The partial text kept when a reply is stopped. */
+const MAX_PARTIAL_CHARS = 400_000;
+
 const OPEN_STATUSES = ['pending', 'offered', 'claimed', 'running'];
 const PARTICIPANTS_MAX = 5;
+const REACTORS_SHOWN = 10;
 const QUOTE_EXCERPT = 140;
 const CLIENT_ID_INDEX = 'UQ_messages_client_id';
 const ROOM_FK = 'FK_1dda4fc8dbeeff2ee71f0088ba0';
@@ -120,7 +129,23 @@ export class MessageStore {
     private readonly events: EventsService,
     private readonly emitter: EventEmitter2,
     private readonly gateway: AgentGatewayService,
+    private readonly audit: AuditService,
   ) {}
+
+  private readonly partialSources: PartialTextSource[] = [];
+
+  /** Runners that stream replies from memory register here so a stopped reply keeps its partial text. */
+  registerPartialTextSource(source: PartialTextSource): void {
+    this.partialSources.push(source);
+  }
+
+  private partialText(assignmentId: string): string {
+    for (const source of this.partialSources) {
+      const text = source(assignmentId);
+      if (text !== undefined) return text.slice(0, MAX_PARTIAL_CHARS);
+    }
+    return '';
+  }
 
   // ---------- access ----------
 
@@ -216,8 +241,15 @@ export class MessageStore {
 
   // ---------- hydration ----------
 
-  /** Messages as clients see them: assignment, thread summary of roots, quote and chat id. */
-  async hydrate(manager: EntityManager, rows: ChatMessage[]): Promise<Message[]> {
+  /**
+   * Messages as clients see them: assignment, thread summary of roots, quote, reactions and chat
+   * id. With a `viewerId` reactions carry `mine` (REST answers); events pass none.
+   */
+  async hydrate(
+    manager: EntityManager,
+    rows: ChatMessage[],
+    viewerId?: string,
+  ): Promise<Message[]> {
     if (!rows.length) return [];
     const missing = rows.filter((row) => row.assignmentId && !row.assignment);
     const assignments = new Map<string, Assignment>();
@@ -242,6 +274,11 @@ export class MessageStore {
       manager,
       rows.filter((row) => row.quoteMessageId && !row.deletedAt),
     );
+    const reactions = await this.reactionsOf(
+      manager,
+      rows.filter((row) => !row.deletedAt).map((row) => row.id),
+      viewerId,
+    );
     return rows.map((row) => {
       const withAssignment =
         row.assignmentId && !row.assignment
@@ -259,23 +296,65 @@ export class MessageStore {
         roomKind: kinds.get(row.roomId) ?? 'channel',
         thread,
         quote: row.quoteMessageId ? (quotes.get(row.quoteMessageId) ?? null) : null,
+        reactions: reactions.get(row.id),
       });
     });
+  }
+
+  /** Reactions grouped by emoji and message, oldest first; reactors that left the workspace are skipped. */
+  async reactionsOf(
+    manager: EntityManager,
+    messageIds: string[],
+    viewerId?: string,
+  ): Promise<Map<string, MessageReaction[]>> {
+    const result = new Map<string, MessageReaction[]>();
+    if (!messageIds.length) return result;
+    const rows = returnedRows<{
+      message_id: string;
+      key: string;
+      count: string;
+      member_ids: string[];
+      mine: boolean | null;
+    }>(
+      await manager.query(
+        `SELECT r.message_id, r.key, count(*) AS count,
+                (array_agg(r.member_id ORDER BY r.created_at, r.id))[1:${REACTORS_SHOWN}] AS member_ids,
+                bool_or(r.member_id = $2::uuid) AS mine
+         FROM message_reactions r
+         JOIN members m ON m.id = r.member_id AND m.removed_at IS NULL
+         WHERE r.message_id = ANY($1::uuid[])
+         GROUP BY r.message_id, r.key
+         ORDER BY r.message_id, min(r.created_at), r.key`,
+        [messageIds, viewerId ?? null],
+      ),
+    );
+    for (const row of rows) {
+      const list = result.get(row.message_id) ?? [];
+      list.push({
+        key: row.key,
+        count: Number(row.count),
+        ...(viewerId ? { mine: row.mine === true } : {}),
+        memberIds: row.member_ids,
+      });
+      result.set(row.message_id, list);
+    }
+    return result;
   }
 
   async loadMessage(
     id: string,
     manager: EntityManager = this.dataSource.manager,
+    viewerId?: string,
   ): Promise<Message> {
     const row = await manager.findOneOrFail(ChatMessage, {
       where: { id },
       relations: { assignment: true },
     });
-    return (await this.hydrate(manager, [row]))[0];
+    return (await this.hydrate(manager, [row], viewerId))[0];
   }
 
   /** The root author and the repliers (humans and agents), in order of first appearance, at most 5. */
-  private async participantsOf(
+  async participantsOf(
     manager: EntityManager,
     roots: ChatMessage[],
   ): Promise<Map<string, string[]>> {
@@ -356,7 +435,11 @@ export class MessageStore {
     message: Message,
     memberIds: readonly string[] | undefined,
   ): void {
-    this.events.publish(workspaceId, { type: 'message.upserted', message }, { memberIds });
+    this.events.publish(
+      workspaceId,
+      { type: 'message.upserted', message: withoutMine(message) },
+      { memberIds },
+    );
   }
 
   publishRoomsChanged(workspaceId: string, memberIds: readonly string[] | undefined): void {
@@ -427,7 +510,7 @@ export class MessageStore {
       .getMany();
     const hasMore = rows.length > query.limit;
     const page = rows.slice(0, query.limit).reverse();
-    return { messages: await this.hydrate(manager, page), hasMore };
+    return { messages: await this.hydrate(manager, page, auth.memberId), hasMore };
   }
 
   /** A thread: its root and replies after `afterSeq`, oldest first. */
@@ -451,10 +534,11 @@ export class MessageStore {
       .limit(query.limit + 1)
       .getMany();
     const hasMore = rows.length > query.limit;
-    const [hydratedRoot, ...replies] = await this.hydrate(manager, [
-      root,
-      ...rows.slice(0, query.limit),
-    ]);
+    const [hydratedRoot, ...replies] = await this.hydrate(
+      manager,
+      [root, ...rows.slice(0, query.limit)],
+      auth.memberId,
+    );
     return { root: hydratedRoot, replies, hasMore };
   }
 
@@ -511,7 +595,7 @@ export class MessageStore {
       where: { roomId, authorMemberId: memberId, clientMessageId },
       relations: { assignment: true },
     });
-    return row ? (await this.hydrate(manager, [row]))[0] : null;
+    return row ? (await this.hydrate(manager, [row], memberId))[0] : null;
   }
 
   private async sendIn(
@@ -595,6 +679,7 @@ export class MessageStore {
         createdAt: now,
       }),
     );
+    await this.saveMentions(manager, human.id, mentionText, 'human', scope, agents, false);
     const saved: ChatMessage[] = [human];
     // Where the agents answer: under the root, or under the trigger itself in a channel.
     const replyParentId = !targets.length
@@ -789,6 +874,7 @@ export class MessageStore {
         [rootId, row.createdAt],
       );
     }
+    await this.saveMentions(manager, row.id, text, 'agent', scope, undefined, false);
     const message = (await this.hydrate(manager, [row]))[0];
     effects.push(() => this.publishMessage(auth.workspaceId, message, scope.audience));
     if (rootId) {
@@ -825,7 +911,8 @@ export class MessageStore {
         { id: row.id },
         { markdown: text, editedAt: this.clock.now() },
       );
-      const message = await this.loadMessage(row.id, manager);
+      await this.saveMentions(manager, row.id, text, 'human', scope, undefined, true);
+      const message = await this.loadMessage(row.id, manager, auth.memberId);
       effects.push(() => this.publishMessage(auth.workspaceId, message, scope.audience));
       return message;
     });
@@ -854,7 +941,7 @@ export class MessageStore {
       ) {
         throw new ForbiddenException({ message: 'chat.FORBIDDEN' });
       }
-      if (row.deletedAt) return this.loadMessage(row.id, manager);
+      if (row.deletedAt) return this.loadMessage(row.id, manager, auth.memberId);
 
       // Runners lock their assignment, then the message: same order here (cancel first).
       const open = returnedRows<{ id: string }>(
@@ -885,7 +972,7 @@ export class MessageStore {
           [row.id, this.clock.now()],
         ),
       );
-      if (!flipped.length) return this.loadMessage(row.id, manager);
+      if (!flipped.length) return this.loadMessage(row.id, manager, auth.memberId);
       if (row.parentId) {
         await manager.query(
           `UPDATE messages SET reply_count = GREATEST(reply_count - 1, 0) WHERE id = $1`,
@@ -899,11 +986,127 @@ export class MessageStore {
           scope.audience,
         );
       }
-      const message = await this.loadMessage(row.id, manager);
+      const message = await this.loadMessage(row.id, manager, auth.memberId);
       effects.push(() => this.publishMessage(auth.workspaceId, message, scope.audience));
       effects.push(() => this.publishRoomsChanged(auth.workspaceId, scope.audience));
       return message;
     });
+  }
+
+  /**
+   * Stops an agent reply that is still being written: its run is cancelled (a daemon learns it
+   * on its next heartbeat or progress call and aborts the Claude session) and the message ends
+   * `stopped`, keeping the text streamed so far. Allowed for the member whose message asked for
+   * the reply, the room owner and workspace owners/admins. Stopping an already stopped reply
+   * answers it unchanged; a finished one is 409 `chat.NOT_STREAMING`.
+   */
+  async stop(auth: AuthContext, roomId: string, messageId: string): Promise<Message> {
+    return transactionWithEffects(this.dataSource, async (manager, effects) => {
+      const scope = await this.resolveRoom(manager, auth, roomId);
+      const found = await this.requireMessage(manager, scope.room, messageId);
+      if (found.deletedAt || (await this.rootDeleted(manager, found))) {
+        throw new NotFoundException({ message: 'chat.MESSAGE_NOT_FOUND', args: { id: messageId } });
+      }
+      if (found.authorKind !== 'agent' || !found.assignmentId) {
+        throw new ConflictException({ message: 'chat.NOT_STREAMING' });
+      }
+      // Runners lock their assignment, then the message: same order here.
+      const assignment = await manager.findOne(Assignment, {
+        where: { id: found.assignmentId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      const requester = assignment?.requestedByMemberId === auth.memberId;
+      if (!requester && scope.role !== 'owner' && !isAdmin(auth)) {
+        throw new ForbiddenException({ message: 'chat.FORBIDDEN' });
+      }
+      const row = await manager.findOneByOrFail(ChatMessage, { id: found.id });
+      if (row.status === 'stopped') return this.loadMessage(row.id, manager, auth.memberId);
+      if (row.status !== 'streaming' || !assignment || !OPEN_STATUSES.includes(assignment.status)) {
+        throw new ConflictException({ message: 'chat.NOT_STREAMING' });
+      }
+      // Read before the cancel: the runners drop their buffer once the assignment ends.
+      const partial = this.partialText(assignment.id);
+      await this.gateway.cancel(assignment.id, { manager, effects });
+      await manager.update(
+        ChatMessage,
+        { id: row.id, deletedAt: IsNull() },
+        { status: 'stopped', markdown: partial || row.markdown },
+      );
+      if (!requester) {
+        await this.audit.record(
+          {
+            workspaceId: auth.workspaceId,
+            actorMemberId: auth.memberId,
+            action: 'chat.agent_stopped',
+            targetType: 'message',
+            targetId: row.id,
+            meta: {
+              roomId: scope.room.id,
+              agentId: row.authorAgentId,
+              requestedBy: assignment.requestedByMemberId,
+            },
+            ip: auth.ip,
+          },
+          manager,
+        );
+      }
+      const message = await this.loadMessage(row.id, manager, auth.memberId);
+      effects.push(() => this.publishMessage(auth.workspaceId, message, scope.audience));
+      effects.push(() => this.publishRoomsChanged(auth.workspaceId, scope.audience));
+      return message;
+    });
+  }
+
+  /**
+   * Stores the resolved @mentions of a message (members, agents, `@here`/`@room`), replacing the
+   * old ones when `replace` is set (an edit). Only members who can see the room are stored, and
+   * only humans can notify the whole room. `agents` may be passed when already loaded.
+   */
+  async saveMentions(
+    manager: EntityManager,
+    messageId: string,
+    text: string,
+    authorKind: 'human' | 'agent',
+    scope: Pick<RoomScope, 'audience'>,
+    agents: Agent[] | undefined,
+    replace: boolean,
+  ): Promise<void> {
+    if (replace)
+      await manager.query(`DELETE FROM message_mentions WHERE message_id = $1`, [messageId]);
+    if (!text.includes('@')) return;
+    const workspaceId = returnedRows<{ workspace_id: string }>(
+      await manager.query(`SELECT workspace_id FROM messages WHERE id = $1`, [messageId]),
+    )[0]?.workspace_id;
+    if (!workspaceId) return;
+    const known =
+      agents ??
+      (await manager.find(Agent, { where: { workspaceId }, select: { id: true, name: true } }));
+    const members = returnedRows<{ id: string; name: string }>(
+      await manager.query(
+        `SELECT id, name FROM members WHERE workspace_id = $1 AND removed_at IS NULL`,
+        [workspaceId],
+      ),
+    );
+    const candidates: MentionCandidate[] = [
+      ...known.map((agent) => ({ kind: 'agent' as const, id: agent.id, name: agent.name })),
+      ...members.map((member) => ({ kind: 'member' as const, id: member.id, name: member.name })),
+    ];
+    const { targets, here } = resolveMentions(text, candidates);
+    const rows: Array<[string, string | null, string | null]> = [];
+    for (const target of targets) {
+      if (target.kind === 'agent') rows.push(['agent', null, target.id]);
+      else if (!scope.audience || scope.audience.includes(target.id)) {
+        rows.push(['member', target.id, null]);
+      }
+    }
+    if (here && authorKind === 'human') rows.push(['here', null, null]);
+    if (!rows.length) return;
+    await manager.query(
+      `INSERT INTO message_mentions (message_id, kind, member_id, agent_id)
+       SELECT $1, kind, member_id, agent_id
+       FROM unnest($2::text[], $3::uuid[], $4::uuid[]) AS t(kind, member_id, agent_id)`,
+      [messageId, rows.map((r) => r[0]), rows.map((r) => r[1]), rows.map((r) => r[2])],
+    );
   }
 
   /** Author of the root, room owner, workspace owner/admin. Titles an untitled thread too. */
@@ -928,7 +1131,7 @@ export class MessageStore {
         throw new ForbiddenException({ message: 'chat.FORBIDDEN' });
       }
       await manager.update(ChatMessage, { id: root.id }, { threadTitle: clean });
-      const message = await this.loadMessage(root.id, manager);
+      const message = await this.loadMessage(root.id, manager, auth.memberId);
       effects.push(() => this.publishMessage(auth.workspaceId, message, scope.audience));
       await this.queueThreadUpdates(manager, effects, auth.workspaceId, [root.id], scope.audience);
       effects.push(() => this.publishRoomsChanged(auth.workspaceId, scope.audience));
@@ -937,7 +1140,7 @@ export class MessageStore {
   }
 
   /** A reply whose thread root is soft-deleted. */
-  private async rootDeleted(manager: EntityManager, row: ChatMessage): Promise<boolean> {
+  async rootDeleted(manager: EntityManager, row: ChatMessage): Promise<boolean> {
     if (!row.parentId) return false;
     const root = await manager.findOneBy(ChatMessage, { id: row.parentId });
     return !root || root.deletedAt != null;
@@ -954,11 +1157,7 @@ export class MessageStore {
     return assignment?.requestedByMemberId === memberId;
   }
 
-  private async requireMessage(
-    manager: EntityManager,
-    room: Room,
-    id: string,
-  ): Promise<ChatMessage> {
+  async requireMessage(manager: EntityManager, room: Room, id: string): Promise<ChatMessage> {
     const row = isUUID(id) ? await manager.findOneBy(ChatMessage, { id, roomId: room.id }) : null;
     if (!row) throw new NotFoundException({ message: 'chat.MESSAGE_NOT_FOUND', args: { id } });
     return row;
