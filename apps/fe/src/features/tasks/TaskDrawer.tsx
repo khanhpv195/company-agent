@@ -63,7 +63,7 @@ export function TaskDrawer({
   }, [run?.step]);
 
   const openRoom = () => {
-    if (task.chatId) void navigate({ to: '/chat/$chatId', params: { chatId: task.chatId } });
+    if (task.chatId) void navigate({ to: '/chat/$roomId', params: { roomId: task.chatId } });
   };
 
   let top = null;

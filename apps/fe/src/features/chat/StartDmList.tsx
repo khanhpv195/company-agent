@@ -26,10 +26,13 @@ export function StartDmList({ focusTick = 0 }: { focusTick?: number }) {
 
   const start = (agentId: string) =>
     openDm.mutate(agentId, {
-      onSuccess: ({ chatId }) => void navigate({ to: '/chat/$chatId', params: { chatId } }),
+      onSuccess: ({ chatId }) => void navigate({ to: '/chat/$roomId', params: { roomId: chatId } }),
     });
 
-  if (!candidates.length) return <div className="empty-line">{t('chat.noAgentsToChat')}</div>;
+  if (!candidates.length)
+    return people.agents.length ? null : (
+      <div className="empty-line">{t('chat.noAgentsToChat')}</div>
+    );
 
   return (
     <div ref={ref}>

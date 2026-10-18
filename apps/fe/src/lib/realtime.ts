@@ -93,6 +93,14 @@ export const RESYNC_EVENTS: RealtimeEvent[] = [
   { type: 'dashboard.changed' },
 ];
 
+const resyncListeners = new Set<() => void>();
+
+/** Called after an SSE reconnect, once the connection is healthy again (refetch what was missed). */
+export function onRealtimeResync(fn: () => void): () => void {
+  resyncListeners.add(fn);
+  return () => void resyncListeners.delete(fn);
+}
+
 export interface SseClientOptions {
   url: string;
   getToken: () => string | null;
@@ -230,8 +238,16 @@ export class SseRealtimeClient implements RealtimeClient {
           // The server sends `: connected` right away; only now is the connection healthy.
           gotBytes = true;
           reportApiReachable(true);
-          if (this.hasConnected || this.attempt > 0)
+          if (this.hasConnected || this.attempt > 0) {
             for (const event of RESYNC_EVENTS) this.emit(event);
+            for (const fn of [...resyncListeners]) {
+              try {
+                fn();
+              } catch {
+                /* a failing listener must not break the stream */
+              }
+            }
+          }
           this.hasConnected = true;
           this.attempt = 0;
         }

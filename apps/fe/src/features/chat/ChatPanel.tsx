@@ -1,41 +1,34 @@
-import { DemoBadge } from '../../components/DemoBadge';
-import type { Room, Thread } from '@repo/shared';
-import { Link } from '@tanstack/react-router';
-import { useState, type ReactNode } from 'react';
-import { AgentAvatar } from '../../components/Avatar';
+import type { Room } from '@repo/shared';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Icon, type IconName } from '../../components/Icon';
-import { short } from '../../lib/format';
+import { useT } from '../../i18n';
 import { useNow } from '../../lib/use-now';
-import { useT, type MessageKey } from '../../i18n';
-import { useUi } from '../../stores/ui';
-import { usePeople } from '../workspace/workspace.api';
-import { useRooms } from './chat.api';
+import { useChatStore } from '../../stores/chat';
+import { useMarkAllRead, usePins, useRooms } from './chat.api';
+import { buildSidebar, hasUnread, isJoinedChannel } from './chat.sidebar';
+import { MentionsFeed } from './MentionsFeed';
+import { NewMenu } from './NewMenu';
+import { Badges, ChannelRow, DmRow, PinRow, ThreadRow } from './SidebarRows';
 import { StartDmList } from './StartDmList';
-
-const TABS = ['Home', 'Recent', 'Unread', '@me'] as const;
-type Tab = (typeof TABS)[number];
-const TAB_KEY: Record<Tab, MessageKey> = {
-  Home: 'chat.tabs.home',
-  Recent: 'chat.tabs.recent',
-  Unread: 'chat.tabs.unread',
-  '@me': 'chat.tabs.mentions',
-};
 
 function Section({
   id,
   icon,
   title,
+  count,
   extra,
   children,
 }: {
   id: string;
   icon: IconName;
   title: string;
+  /** Unread and mentions inside, shown while the section is collapsed. */
+  count?: { unread: number; mentions: number };
   extra?: ReactNode;
   children: ReactNode;
 }) {
-  const closed = useUi((s) => s.closedSections.includes(id));
-  const toggle = useUi((s) => s.toggleSection);
+  const closed = useChatStore((s) => s.collapsed.includes(id));
+  const toggle = useChatStore((s) => s.toggleCollapsed);
   return (
     <>
       <div
@@ -44,11 +37,17 @@ function Section({
         tabIndex={0}
         aria-expanded={!closed}
         onClick={() => toggle(id)}
-        onKeyDown={(e) => e.key === 'Enter' && toggle(id)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggle(id);
+          }
+        }}
       >
         <Icon name="chev" className="chev" />
         <Icon name={icon} size={16} />
         <span>{title}</span>
+        {closed && count && <Badges unread={count.unread} mentions={count.mentions} />}
         {extra}
       </div>
       {!closed && children}
@@ -56,164 +55,188 @@ function Section({
   );
 }
 
-export function ChatPanel({ activeId }: { activeId: string | undefined }) {
+const sumCounts = (rooms: Room[]) => ({
+  unread: rooms.reduce((n, r) => n + (r.muted ? 0 : (r.unread ?? 0)), 0),
+  mentions: rooms.reduce((n, r) => n + (r.mentions ?? 0), 0),
+});
+
+export function ChatPanel({
+  activeId,
+  activeThread,
+}: {
+  activeId: string | undefined;
+  activeThread?: string;
+}) {
   const t = useT();
   const rooms = useRooms();
-  const people = usePeople();
+  const pins = usePins();
   const now = useNow();
-  const [tab, setTab] = useState<Tab>('Home');
+  const markAll = useMarkAllRead();
+  const lastOpened = useChatStore((s) => s.lastOpened);
+  const touchRoom = useChatStore((s) => s.touchRoom);
+  const collapsed = useChatStore((s) => s.collapsed);
+  const toggleCollapsed = useChatStore((s) => s.toggleCollapsed);
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [mentionsOnly, setMentionsOnly] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
-  const dmClosed = useUi((s) => s.closedSections.includes('dm'));
-  const toggleSection = useUi((s) => s.toggleSection);
+
+  // A channel seen for the first time starts "recently used" rather than "less used".
+  useEffect(() => {
+    for (const r of rooms)
+      if (isJoinedChannel(r) && lastOpened[r.id] === undefined) touchRoom(r.id);
+  }, [rooms, lastOpened, touchRoom]);
+
+  // `now` ticks every second; the 7-day rule only needs minute resolution.
+  const minute = Math.floor(now / 60_000);
+  const model = useMemo(
+    () => buildSidebar({ rooms, pins, lastOpened, now: minute * 60_000, unreadOnly, activeId }),
+    [rooms, pins, lastOpened, minute, unreadOnly, activeId],
+  );
+  const anyUnread = rooms.some(hasUnread) || rooms.some((r) => r.threads.some(hasUnread));
   const startNew = (e: { stopPropagation: () => void }) => {
     e.stopPropagation();
-    if (dmClosed) toggleSection('dm');
+    if (collapsed.includes('dm')) toggleCollapsed('dm');
     setFocusTick((n) => n + 1);
   };
-
-  const dmItem = (r: Room) => {
-    const agent = people.agent(r.agentId);
-    return (
-      <Link
-        key={r.id}
-        to="/chat/$chatId"
-        params={{ chatId: r.id }}
-        className={`item ${activeId === r.id ? 'on' : ''}`}
-      >
-        {agent ? <AgentAvatar agent={agent} /> : <span className="av human">{r.name[0]}</span>}
-        <div className="meta">
-          <div className="row">
-            <span className="name">
-              {agent?.name ?? r.name}
-              {agent?.simulated && <DemoBadge />}
-            </span>
-            <span className="time">{short(r.lastMessageAt, now)}</span>
-          </div>
-          <div className="prev">{r.preview}</div>
-        </div>
-      </Link>
-    );
-  };
-  const threadItem = (t: Thread) => (
-    <Link
-      key={t.id}
-      to="/chat/$chatId"
-      params={{ chatId: t.id }}
-      className={`item ${activeId === t.id ? 'on' : ''}`}
-    >
-      <div
-        className="av human"
-        style={t.connectionId ? { background: connectionColor(t.connectionId) } : undefined}
-      >
-        {t.name[0].toUpperCase()}
-      </div>
-      <div className="meta">
-        <div className="row">
-          <span className="name">{t.name}</span>
-          <span className="time">
-            {t.unread ? <span className="badge">{t.unread}</span> : short(t.lastMessageAt, now)}
-          </span>
-        </div>
-        <div className="prev">{t.preview}</div>
-      </div>
-    </Link>
-  );
-
-  const dms = rooms.filter((r) => r.kind === 'dm');
-  const channels = rooms.filter((r) => r.kind === 'channel');
-  const recent = [
-    ...dms.map((r) => ({ at: r.lastMessageAt, node: dmItem(r) })),
-    ...channels.flatMap((c) =>
-      c.threads.map((t) => ({ at: t.lastMessageAt, node: threadItem(t) })),
-    ),
-  ].sort((a, b) => b.at.localeCompare(a.at));
-
-  let body: ReactNode;
-  if (tab === 'Home')
-    body = (
-      <>
-        <Section
-          id="dm"
-          icon="user"
-          title={t('chat.dms')}
-          extra={
-            <button
-              type="button"
-              className="sec-add"
-              aria-label={t('chat.newMessage')}
-              title={t('chat.newMessage')}
-              onClick={startNew}
-              onKeyDown={(e) => e.stopPropagation()}
-            >
-              <Icon name="plus" size={14} />
-            </button>
-          }
-        >
-          {dms.map(dmItem)}
-          <StartDmList focusTick={focusTick} />
-        </Section>
-        {channels.map((c) => (
-          <Section
-            key={c.id}
-            id={c.id}
-            icon={c.icon}
-            title={c.name}
-            extra={
-              c.isPrivate ? (
-                <span style={{ color: 'var(--muted)', display: 'flex' }} title={t('chat.private')}>
-                  <Icon name="lock" size={13} />
-                </span>
-              ) : null
-            }
-          >
-            {c.threads.length ? (
-              c.threads.map(threadItem)
-            ) : (
-              <div className="empty-line">{t('chat.noThreads')}</div>
-            )}
-          </Section>
-        ))}
-      </>
-    );
-  else if (tab === 'Recent') body = recent.map((x) => x.node);
-  else if (tab === 'Unread') {
-    const unread = channels.flatMap((c) => c.threads.filter((t) => t.unread > 0)).map(threadItem);
-    body = unread.length ? (
-      unread
-    ) : (
-      <div className="empty-line" style={{ paddingLeft: 20 }}>
-        {t('chat.allRead')}
-      </div>
-    );
-  } else
-    body = (
-      <div className="empty-line" style={{ paddingLeft: 20 }}>
-        {t('chat.noMentions')}
-      </div>
-    );
+  const empty = (text: string) => <div className="empty-line">{text}</div>;
+  const nothing =
+    !model.pinned.length && !model.home.length && !model.lessUsed.length && !model.dms.length;
 
   return (
     <aside className="panel" aria-label={t('chat.title')}>
       <div className="panel-head drag" data-tauri-drag-region>
         <h3>{t('chat.title')}</h3>
+        <NewMenu />
       </div>
-      <div className="tabs" role="tablist">
-        {TABS.map((tabId) => (
-          <button
-            key={tabId}
-            role="tab"
-            aria-selected={tabId === tab}
-            className={tabId === tab ? 'on' : ''}
-            onClick={() => setTab(tabId)}
-          >
-            {t(TAB_KEY[tabId])}
-          </button>
-        ))}
+      <div className="sb-chips">
+        <button
+          type="button"
+          className={`sb-chip${unreadOnly ? ' on' : ''}`}
+          aria-pressed={unreadOnly}
+          disabled={mentionsOnly}
+          onClick={() => setUnreadOnly((v) => !v)}
+        >
+          {t('chat.tabs.unread')}
+        </button>
+        <button
+          type="button"
+          className={`sb-chip${mentionsOnly ? ' on' : ''}`}
+          aria-pressed={mentionsOnly}
+          onClick={() => setMentionsOnly((v) => !v)}
+        >
+          {t('chat.tabs.mentions')}
+        </button>
+        <span className="sp" />
+        <button
+          type="button"
+          className="sb-chip plain"
+          disabled={!anyUnread || markAll.isPending}
+          onClick={() => markAll.mutate()}
+        >
+          <Icon name="checkAll" size={14} />
+          {t('chat.markAllRead')}
+        </button>
       </div>
-      <div className="panel-body">{body}</div>
+      <div className="panel-body">
+        {mentionsOnly ? (
+          <MentionsFeed />
+        ) : (
+          <>
+            {model.pinned.length > 0 && !unreadOnly && (
+              <Section id="pinned" icon="pin" title={t('chat.sections.pinned')}>
+                {model.pinned.map((p) => (
+                  <PinRow
+                    key={p.id}
+                    pin={p}
+                    active={
+                      p.targetType === 'room'
+                        ? activeId === p.roomId && !activeThread
+                        : activeThread === (p.threadRootId ?? p.targetId)
+                    }
+                  />
+                ))}
+              </Section>
+            )}
+            <Section
+              id="home"
+              icon="hash"
+              title={t('chat.sections.home')}
+              count={sumCounts(model.home)}
+            >
+              {model.home.length
+                ? model.home.map((r) => (
+                    <ChannelRow key={r.id} room={r} active={activeId === r.id && !activeThread} />
+                  ))
+                : empty(unreadOnly ? t('chat.allRead') : t('chat.noRooms'))}
+            </Section>
+            {model.recent.length > 0 && (
+              <Section id="recent" icon="clock" title={t('chat.sections.recent')}>
+                {model.recent.map((e) =>
+                  e.kind === 'room' ? (
+                    e.room.kind === 'dm' ? (
+                      <DmRow
+                        key={`r-${e.room.id}`}
+                        room={e.room}
+                        now={now}
+                        active={activeId === e.room.id && !activeThread}
+                      />
+                    ) : (
+                      <ChannelRow
+                        key={`r-${e.room.id}`}
+                        room={e.room}
+                        active={activeId === e.room.id && !activeThread}
+                      />
+                    )
+                  ) : (
+                    <ThreadRow
+                      key={`t-${e.thread.id}`}
+                      room={e.room}
+                      thread={e.thread}
+                      active={activeThread === e.thread.id}
+                    />
+                  ),
+                )}
+              </Section>
+            )}
+            {model.lessUsed.length > 0 && (
+              <Section
+                id="less"
+                icon="hourglass"
+                title={t('chat.sections.lessUsed')}
+                count={sumCounts(model.lessUsed)}
+              >
+                {model.lessUsed.map((r) => (
+                  <ChannelRow key={r.id} room={r} active={activeId === r.id && !activeThread} />
+                ))}
+              </Section>
+            )}
+            <Section
+              id="dm"
+              icon="user"
+              title={t('chat.dms')}
+              count={sumCounts(model.dms)}
+              extra={
+                <button
+                  type="button"
+                  className="sec-add"
+                  aria-label={t('chat.newMessage')}
+                  title={t('chat.newMessage')}
+                  onClick={startNew}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  <Icon name="plus" size={14} />
+                </button>
+              }
+            >
+              {model.dms.map((r) => (
+                <DmRow key={r.id} room={r} now={now} active={activeId === r.id && !activeThread} />
+              ))}
+              {!unreadOnly && <StartDmList focusTick={focusTick} />}
+            </Section>
+            {unreadOnly && nothing && empty(t('chat.allRead'))}
+          </>
+        )}
+      </div>
     </aside>
   );
 }
-
-const COLORS: Record<string, string> = { zalo: '#0068ff', facebook: '#1877f2', gmail: '#ea4335' };
-const connectionColor = (id: string) => COLORS[id] ?? 'var(--avatar)';

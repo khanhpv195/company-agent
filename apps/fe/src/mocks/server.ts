@@ -4,15 +4,20 @@ import type {
   CommentInput,
   ConnectInput,
   CreateAgentInput,
+  AddRoomMembersInput,
+  CreatePinInput,
+  CreateRoomInput,
   CreateTaskInput,
   LoginInput,
   RegisterInput,
   MoveTaskInput,
   RealtimeEvent,
+  PostRoomMessageInput,
   SchedulerState,
-  SendMessageInput,
+  ThreadFilter,
   Session,
   UpdateAgentInput,
+  UpdateRoomInput,
   UpdateTaskInput,
 } from '@repo/shared';
 import { isStrongPassword, planById, type WorkspacePlan } from '@repo/shared';
@@ -30,14 +35,39 @@ import {
 import { createInvite, previewInvite, revokeInvite, seedTeam, takeInvite, team } from './team';
 import { skillCatalog } from './fixtures';
 import {
+  addRoomMembers,
+  browseRooms,
   connect,
+  createPin,
+  createRoom,
+  deleteMessage,
+  deletePin,
+  deleteRoom,
   disconnect,
+  editMessage,
+  editThreadTitle,
   ensureDm,
-  findChat,
+  joinRoom,
+  leaveRoom,
+  listPins,
   listRooms,
   markRead,
+  markUnread,
+  mentionsFeed,
+  presence,
+  react,
+  readAll,
+  removeRoomMember,
+  resolveChat,
+  roomMembers,
+  roomThreads,
   sendDraft,
-  sendMessage,
+  sendRoomMessage,
+  setMuted,
+  stopMessage,
+  threadPage,
+  timeline,
+  updateRoom,
 } from './chat';
 
 /**
@@ -444,17 +474,123 @@ on('POST', '/agents/:id/dm', ({ params }) => ensureDm(backend, params.id));
 
 // ----- chat -----
 on('GET', '/rooms', () => listRooms(backend));
-on('GET', '/chats/:id', ({ params }) => findChat(backend, params.id));
-on('GET', '/chats/:id/messages', ({ params }) => {
-  findChat(backend, params.id);
-  return db.messages[params.id] ?? [];
-});
-on('POST', '/chats/:id/messages', (ctx) =>
-  sendMessage(backend, ctx.params.id, body<SendMessageInput>(ctx)),
+on('GET', '/rooms/browse', () => browseRooms(backend));
+on('POST', '/rooms', (ctx) => createRoom(backend, body<CreateRoomInput>(ctx)));
+on('PATCH', '/rooms/:id', (ctx) => updateRoom(backend, ctx.params.id, body<UpdateRoomInput>(ctx)));
+on('DELETE', '/rooms/:id', ({ params }) => deleteRoom(backend, params.id));
+on('POST', '/rooms/:id/join', ({ params }) => joinRoom(backend, params.id));
+on('POST', '/rooms/:id/leave', ({ params }) => leaveRoom(backend, params.id));
+on('POST', '/rooms/:id/members', (ctx) =>
+  addRoomMembers(backend, ctx.params.id, body<AddRoomMembersInput>(ctx)),
 );
-on('POST', '/chats/:id/read', ({ params }) => {
-  markRead(backend, params.id);
-  return null;
+on('DELETE', '/rooms/:id/members/:kind/:targetId', ({ params }) =>
+  removeRoomMember(backend, params.id, params.kind, params.targetId),
+);
+on('POST', '/rooms/read-all', () => readAll(backend));
+on('GET', '/rooms/:id/messages', ({ params, query }) =>
+  timeline(
+    backend,
+    params.id,
+    query.get('beforeSeq') ? Number(query.get('beforeSeq')) : undefined,
+    Number(query.get('limit')) || 50,
+  ),
+);
+on('POST', '/rooms/:id/messages', (ctx) =>
+  sendRoomMessage(backend, ctx.params.id, body<PostRoomMessageInput>(ctx)),
+);
+on('GET', '/rooms/:id/messages/:rootId/thread', ({ params, query }) =>
+  threadPage(
+    backend,
+    params.id,
+    params.rootId,
+    query.get('afterSeq') ? Number(query.get('afterSeq')) : undefined,
+    Number(query.get('limit')) || 100,
+  ),
+);
+on('PATCH', '/rooms/:id/messages/:messageId', (ctx) =>
+  editMessage(
+    backend,
+    ctx.params.id,
+    ctx.params.messageId,
+    body<{ markdown: string }>(ctx).markdown ?? '',
+  ),
+);
+on('DELETE', '/rooms/:id/messages/:messageId', ({ params }) =>
+  deleteMessage(backend, params.id, params.messageId),
+);
+on('POST', '/rooms/:id/messages/:messageId/stop', ({ params }) =>
+  stopMessage(backend, params.id, params.messageId),
+);
+on('PATCH', '/rooms/:id/messages/:rootId/thread', (ctx) =>
+  editThreadTitle(
+    backend,
+    ctx.params.id,
+    ctx.params.rootId,
+    body<{ title: string }>(ctx).title ?? '',
+  ),
+);
+on('PUT', '/rooms/:id/messages/:mid/reactions/:key', ({ params }) =>
+  react(backend, params.id, params.mid, params.key, true),
+);
+on('DELETE', '/rooms/:id/messages/:mid/reactions/:key', ({ params }) =>
+  react(backend, params.id, params.mid, params.key, false),
+);
+on('GET', '/rooms/:id/members', ({ params }) => roomMembers(backend, params.id));
+on('GET', '/rooms/:id/threads', ({ params, query }) =>
+  roomThreads(backend, params.id, (query.get('filter') as ThreadFilter | null) ?? 'all'),
+);
+on('POST', '/rooms/:id/read', (ctx) =>
+  markRead(backend, ctx.params.id, null, Number(body<{ seq: number }>(ctx).seq) || 0),
+);
+on('POST', '/rooms/:id/unread', (ctx) =>
+  markUnread(
+    backend,
+    ctx.params.id,
+    null,
+    Number(body<{ throughSeq: number }>(ctx).throughSeq) || 1,
+  ),
+);
+on('POST', '/rooms/:id/threads/:rootId/unread', (ctx) =>
+  markUnread(
+    backend,
+    ctx.params.id,
+    ctx.params.rootId,
+    Number(body<{ throughSeq: number }>(ctx).throughSeq) || 1,
+  ),
+);
+on('POST', '/rooms/:id/threads/:rootId/read', (ctx) =>
+  markRead(backend, ctx.params.id, ctx.params.rootId, Number(body<{ seq: number }>(ctx).seq) || 0),
+);
+on('POST', '/rooms/:id/mute', ({ params }) => setMuted(backend, params.id, null, true));
+on('DELETE', '/rooms/:id/mute', ({ params }) => setMuted(backend, params.id, null, false));
+on('POST', '/rooms/:id/threads/:rootId/mute', ({ params }) =>
+  setMuted(backend, params.id, params.rootId, true),
+);
+on('DELETE', '/rooms/:id/threads/:rootId/mute', ({ params }) =>
+  setMuted(backend, params.id, params.rootId, false),
+);
+on('POST', '/rooms/:id/typing', () => null);
+on('GET', '/pins', () => listPins(backend));
+on('POST', '/pins', (ctx) => {
+  const { targetType, targetId } = body<CreatePinInput>(ctx);
+  return createPin(backend, targetType, targetId);
+});
+on('DELETE', '/pins/:id', ({ params }) => deletePin(backend, params.id));
+on('GET', '/mentions', ({ query }) =>
+  mentionsFeed(
+    backend,
+    query.get('before') ? Number(query.get('before')) : undefined,
+    Number(query.get('limit')) || 30,
+  ),
+);
+on('GET', '/presence', () => presence(backend));
+// Legacy chat route (a DM room id or a thread root id), still used by the dashboard quick box.
+on('POST', '/chats/:id/messages', (ctx) => {
+  const { roomId, parentId } = resolveChat(backend, ctx.params.id);
+  return sendRoomMessage(backend, roomId, {
+    ...body<PostRoomMessageInput>(ctx),
+    parentId: parentId ?? undefined,
+  });
 });
 on('POST', '/messages/:id/send-draft', ({ params }) => sendDraft(backend, params.id));
 

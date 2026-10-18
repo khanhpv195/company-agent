@@ -80,7 +80,7 @@ export function AgentPage() {
 
   const message = () =>
     openDm.mutate(agent.id, {
-      onSuccess: ({ chatId }) => void navigate({ to: '/chat/$chatId', params: { chatId } }),
+      onSuccess: ({ chatId }) => void navigate({ to: '/chat/$roomId', params: { roomId: chatId } }),
     });
 
   return (

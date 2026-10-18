@@ -126,9 +126,19 @@ const chatIndexRoute = createRoute({
   path: '/',
   component: ChatEmpty,
 });
+export interface ChatSearch {
+  /** Root message id of the thread shown in the side panel. */
+  thread?: string;
+  /** Message to scroll to and highlight. */
+  message?: string;
+}
 const chatRoomRoute = createRoute({
   getParentRoute: () => chatRoute,
-  path: '$chatId',
+  path: '$roomId',
+  validateSearch: (s: Record<string, unknown>): ChatSearch => ({
+    thread: typeof s.thread === 'string' && s.thread ? s.thread : undefined,
+    message: typeof s.message === 'string' && s.message ? s.message : undefined,
+  }),
   component: RoomView,
 });
 

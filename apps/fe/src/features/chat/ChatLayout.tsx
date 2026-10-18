@@ -1,11 +1,12 @@
-import { Outlet, useParams } from '@tanstack/react-router';
+import { Outlet, useParams, useSearch } from '@tanstack/react-router';
 import { ChatPanel } from './ChatPanel';
 
 export function ChatLayout() {
-  const { chatId } = useParams({ strict: false });
+  const { roomId } = useParams({ strict: false });
+  const { thread } = useSearch({ strict: false }) as { thread?: string };
   return (
     <>
-      <ChatPanel activeId={chatId} />
+      <ChatPanel activeId={roomId} activeThread={thread} />
       <Outlet />
     </>
   );

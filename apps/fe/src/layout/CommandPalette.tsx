@@ -73,7 +73,7 @@ function Palette({ onClose }: { onClose: () => void }) {
               label: r.name,
               hint: t('palette.dm'),
               icon: <Icon name="user" size={16} />,
-              go: run(() => void navigate({ to: '/chat/$chatId', params: { chatId: r.id } })),
+              go: run(() => void navigate({ to: '/chat/$roomId', params: { roomId: r.id } })),
             },
           ]
         : r.threads.map((th) => ({
@@ -82,7 +82,14 @@ function Palette({ onClose }: { onClose: () => void }) {
             label: th.name,
             hint: `#${r.name}`,
             icon: <Icon name="chat" size={16} />,
-            go: run(() => void navigate({ to: '/chat/$chatId', params: { chatId: th.id } })),
+            go: run(
+              () =>
+                void navigate({
+                  to: '/chat/$roomId',
+                  params: { roomId: r.id },
+                  search: { thread: th.id },
+                }),
+            ),
           })),
     ),
     ...people.agents.map((a) => ({

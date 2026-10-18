@@ -7,8 +7,15 @@ export const qk = {
   agent: (id: string) => ['agents', id] as const,
   agentActivity: (id: string) => ['agents', id, 'activity'] as const,
   rooms: ['rooms'] as const,
-  chat: (id: string) => ['chats', id] as const,
-  messages: (id: string) => ['chats', id, 'messages'] as const,
+  /** Main timeline of a room (infinite query, newest page first). */
+  timeline: (roomId: string) => ['room-timeline', roomId] as const,
+  /** Replies of one thread (infinite query, oldest page first). */
+  thread: (roomId: string, rootId: string) => ['room-thread', roomId, rootId] as const,
+  roomMembers: (roomId: string) => ['room-members', roomId] as const,
+  roomThreads: (roomId: string, filter: string) => ['room-threads', roomId, filter] as const,
+  pins: ['pins'] as const,
+  mentions: ['mentions'] as const,
+  presence: ['presence'] as const,
   tasks: ['tasks'] as const,
   runSpans: ['run-spans'] as const,
   scheduler: ['scheduler'] as const,

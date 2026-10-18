@@ -578,7 +578,7 @@ export class MockBackend {
       if (c.agentId !== id) continue;
       if (c.status === 'on') {
         this.db.rooms = this.db.rooms.filter((r) => r.id !== c.roomId);
-        delete this.db.messages[`t-${c.id}`];
+        delete this.db.messages[c.roomId ?? ''];
         c.status = 'off';
         c.roomId = null;
         c.account = null;

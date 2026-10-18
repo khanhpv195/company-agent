@@ -191,7 +191,7 @@ function ConnectionCard({ c }: { c: Connection }) {
         <dt>{t('connections.inboxRoom')}</dt>
         <dd>
           {inboxId ? (
-            <Link className="link" to="/chat/$chatId" params={{ chatId: inboxId }}>
+            <Link className="link" to="/chat/$roomId" params={{ roomId: inboxId }}>
               #{c.roomName}
             </Link>
           ) : (
@@ -205,7 +205,7 @@ function ConnectionCard({ c }: { c: Connection }) {
       </dl>
       <div className="foot">
         {inboxId && (
-          <Link className="btn" to="/chat/$chatId" params={{ chatId: inboxId }}>
+          <Link className="btn" to="/chat/$roomId" params={{ roomId: inboxId }}>
             <Icon name="inbox" size={15} /> {t('connections.openRoom')}
           </Link>
         )}

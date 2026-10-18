@@ -7,6 +7,7 @@ import type {
   Member,
   Message,
   MessageAuthor,
+  PinItem,
   Room,
   RunSpan,
   SchedulerState,
@@ -24,8 +25,17 @@ export interface MockDb {
   computers: Computer[];
   agents: Agent[];
   rooms: Room[];
-  /** Keyed by chat id (DM room id or thread id). */
+  /** Every message of a room (roots and thread replies), keyed by room id, in seq order. */
   messages: Record<string, Message[]>;
+  /** Read cursors (message seq): key `roomId` for the main timeline, `roomId:rootId` for a thread. */
+  reads: Record<string, number>;
+  /** Muted rooms (`roomId`) and threads (`roomId:rootId`). */
+  mutes: string[];
+  pins: PinItem[];
+  /** Channels the caller has left; they stay joinable when public. */
+  leftRoomIds: string[];
+  /** Per-room roster. Absent key = every workspace member and agent (the seeded rooms). */
+  roster: Record<string, { memberIds: string[]; agentIds: string[] }>;
   tasks: Task[];
   spans: RunSpan[];
   taskSeq: number;
@@ -197,7 +207,7 @@ export function seed(now: number = Date.now()): MockDb {
   });
   const rooms: Room[] = [
     room({ id: 'dm-a1', kind: 'dm', name: "khanhpv's Claude", icon: 'users', agentId: 'a1' }),
-    room({ id: 'all', kind: 'channel', name: 'all-members', icon: 'users' }),
+    room({ id: 'all', kind: 'channel', name: 'all-members', icon: 'users', isDefault: true }),
     room({
       id: 'welcome',
       kind: 'channel',
@@ -210,29 +220,31 @@ export function seed(now: number = Date.now()): MockDb {
       kind: 'channel',
       name: 'test',
       icon: 'hourglass',
-      threads: [
-        {
-          id: 't-hello',
-          roomId: 'test',
-          name: 'Hello',
-          lastMessageAt: iso(T0 - 23 * HOUR),
-          preview: '',
-          unread: 0,
-          connectionId: null,
-        },
-      ],
     }),
   ];
 
-  const msg = (chatId: string, author: MessageAuthor, markdown: string, at: number): Message => ({
-    id: id('m'),
-    chatId,
+  const seqs: Record<string, number> = {};
+  const msg = (
+    roomId: string,
+    author: MessageAuthor,
+    markdown: string,
+    at: number,
+    extra: Partial<Message> = {},
+    mid?: string,
+  ): Message => ({
+    id: mid ?? id('m'),
+    chatId: roomId,
+    roomId,
+    parentId: null,
+    seq: (seqs[roomId] = (seqs[roomId] ?? 0) + 1),
+    reactions: [],
     author,
     createdAt: iso(at),
     status: 'complete',
     markdown,
     assignment: null,
     draft: null,
+    ...extra,
   });
   const A = (aid: string): MessageAuthor => ({ kind: 'agent', id: aid });
   const U = (uid: string): MessageAuthor => ({ kind: 'human', id: uid });
@@ -260,16 +272,34 @@ export function seed(now: number = Date.now()): MockDb {
         t23,
       ),
     ],
-    't-hello': [
-      msg('t-hello', U('u1'), 'Hello @Research Bot', t23 - 1 * MIN),
+    test: [
       msg(
+        'test',
+        U('u1'),
+        'Hello @Research Bot',
+        t23 - 1 * MIN,
+        { threadTitle: 'Hello' },
         't-hello',
+      ),
+      msg(
+        'test',
         A('a2'),
         'Chào khanhpv! Research Bot đã sẵn sàng. Gửi em một chủ đề, em sẽ tìm và tóm tắt nguồn cho anh/chị.',
         t23,
+        { parentId: 't-hello' },
       ),
     ],
   };
+
+  // Everything starts read.
+  const reads: Record<string, number> = {};
+  for (const [roomId, list] of Object.entries(messages)) {
+    reads[roomId] = Math.max(0, ...list.filter((m) => !m.parentId).map((m) => m.seq ?? 0));
+    for (const root of list.filter((m) => list.some((x) => x.parentId === m.id)))
+      reads[`${roomId}:${root.id}`] = Math.max(
+        ...list.filter((m) => m.id === root.id || m.parentId === root.id).map((m) => m.seq ?? 0),
+      );
+  }
 
   const task = (
     t: Partial<Task> &
@@ -766,6 +796,11 @@ export function seed(now: number = Date.now()): MockDb {
     agents,
     rooms,
     messages,
+    reads,
+    mutes: [],
+    pins: [],
+    leftRoomIds: [],
+    roster: {},
     tasks,
     spans,
     taskSeq: 31,

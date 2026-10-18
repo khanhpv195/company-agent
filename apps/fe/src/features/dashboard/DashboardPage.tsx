@@ -73,8 +73,8 @@ export function DashboardPage() {
     openDm.mutate(qa.id, {
       onSuccess: async ({ chatId }) => {
         setQuick('');
-        await api.post(`/chats/${chatId}/messages`, { markdown: text });
-        await navigate({ to: '/chat/$chatId', params: { chatId } });
+        await api.post(`/rooms/${chatId}/messages`, { markdown: text });
+        await navigate({ to: '/chat/$roomId', params: { roomId: chatId } });
       },
     });
   };

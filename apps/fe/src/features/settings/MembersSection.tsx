@@ -202,7 +202,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function InviteModal({ onClose }: { onClose: () => void }) {
+export function InviteModal({ onClose }: { onClose: () => void }) {
   const t = useT();
   const role = useSession().data?.user.role;
   const create = useCreateInvite();

@@ -40,9 +40,6 @@ interface UiState {
 
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
-
-  closedSections: string[];
-  toggleSection: (id: string) => void;
 }
 
 let toastSeq = 0;
@@ -76,12 +73,4 @@ export const useUi = create<UiState>()((set) => ({
 
   paletteOpen: false,
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
-
-  closedSections: [],
-  toggleSection: (id) =>
-    set((s) => ({
-      closedSections: s.closedSections.includes(id)
-        ? s.closedSections.filter((x) => x !== id)
-        : [...s.closedSections, id],
-    })),
 }));

@@ -65,7 +65,7 @@ function Wizard({ c, onClose }: { c: Connection; onClose: () => void }) {
             })
             .then((rooms) => {
               const chatId = inboxThreadId(rooms, c.id);
-              if (chatId) void navigate({ to: '/chat/$chatId', params: { chatId } });
+              if (chatId) void navigate({ to: '/chat/$roomId', params: { roomId: chatId } });
             })
             .catch(() => undefined);
         },
