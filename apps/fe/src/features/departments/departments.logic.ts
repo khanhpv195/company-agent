@@ -73,14 +73,18 @@ export const isDepartmentNameValid = (name: string): boolean => {
   return n.length >= 1 && n.length <= MAX_DEPARTMENT_NAME;
 };
 
+/** Comparison key for department names: trimmed, inner whitespace runs as one space, lowercase. */
+export const normalizeDepartmentName = (name: string): string =>
+  name.trim().replace(/\s+/g, ' ').toLowerCase();
+
 /** Case- and space-insensitive duplicate check, like the API (`exceptId` = the one being edited). */
 export const isDepartmentNameTaken = (
   departments: readonly Pick<Department, 'id' | 'name'>[],
   name: string,
   exceptId?: string,
 ): boolean => {
-  const key = name.trim().toLowerCase();
-  return departments.some((d) => d.id !== exceptId && d.name.trim().toLowerCase() === key);
+  const key = normalizeDepartmentName(name);
+  return departments.some((d) => d.id !== exceptId && normalizeDepartmentName(d.name) === key);
 };
 
 export const isTitleValid = (title: string): boolean => title.trim().length <= MAX_TITLE;

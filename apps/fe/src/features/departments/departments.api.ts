@@ -72,7 +72,9 @@ export function useReorderDepartments() {
     mutationFn: (ids: string[]) =>
       api.put<Department[]>('/departments/order', { ids } satisfies ReorderDepartmentsInput),
     // Show the new order at once; the refetch settles it (and rolls it back on an error).
-    onMutate: (ids) => {
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: qk.departments });
+      const previous = qc.getQueryData<Department[]>(qk.departments);
       qc.setQueryData<Department[]>(qk.departments, (old) =>
         old
           ? ids
@@ -83,6 +85,10 @@ export function useReorderDepartments() {
               .filter((d): d is Department => d !== null)
           : old,
       );
+      return { previous };
+    },
+    onError: (_error, _ids, context) => {
+      if (context?.previous) qc.setQueryData(qk.departments, context.previous);
     },
     onSettled: () => qc.invalidateQueries({ queryKey: qk.departments }),
   });

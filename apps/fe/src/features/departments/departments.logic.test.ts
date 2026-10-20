@@ -79,6 +79,12 @@ describe('department helpers', () => {
     expect(isDepartmentNameTaken(D, 'kinh doanh', 'a')).toBe(false);
     expect(isDepartmentNameTaken(D, 'Nhân sự')).toBe(false);
   });
+  it('treats runs of spaces as one space when checking duplicates', () => {
+    expect(isDepartmentNameTaken(D, 'Kinh  doanh')).toBe(true);
+    expect(isDepartmentNameTaken(D, ' Kinh \t doanh ')).toBe(true);
+    expect(isDepartmentNameTaken([dep('x', 'Kinh  doanh', 0)], 'kinh doanh')).toBe(true);
+    expect(isDepartmentNameTaken(D, 'Kinh  doanh', 'a')).toBe(false);
+  });
 });
 
 describe('titles', () => {

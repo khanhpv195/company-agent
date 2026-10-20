@@ -6,6 +6,7 @@ import {
   type Department,
   type DepartmentIcon,
 } from '@repo/shared';
+import { normalizeDepartmentName } from '../features/departments/departments.logic';
 import { HttpError, type MockBackend } from './backend';
 import { createRoom } from './chat';
 
@@ -23,8 +24,9 @@ export const roomSlug = (name: string): string =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'phong-ban';
 
+/** Stored department name: trimmed, inner whitespace runs collapsed to one space (like the API). */
 const clean = (raw: unknown): string => {
-  const name = typeof raw === 'string' ? raw.trim() : '';
+  const name = typeof raw === 'string' ? normalizeDepartmentName(raw) : '';
   if (!name || name.length > MAX_DEPARTMENT_NAME)
     throw new HttpError(400, `Tên phòng ban cần từ 1 đến ${MAX_DEPARTMENT_NAME} ký tự`);
   return name;
@@ -57,7 +59,9 @@ export function assertDepartmentId(b: MockBackend, id: unknown): string | null {
 
 function assertNameFree(b: MockBackend, name: string, exceptId?: string) {
   if (
-    b.db.departments.some((d) => d.id !== exceptId && d.name.toLowerCase() === name.toLowerCase())
+    b.db.departments.some(
+      (d) => d.id !== exceptId && normalizeDepartmentName(d.name) === normalizeDepartmentName(name),
+    )
   )
     throw new HttpError(409, 'Đã có phòng ban trùng tên');
 }
