@@ -46,6 +46,12 @@ describe('atLimit', () => {
     expect(atLimit(b, 'computers')).toBe(true);
     expect(atLimit(undefined, 'seats')).toBe(false);
   });
+  it('is never true when the server runs without plan limits', () => {
+    const off = { ...b, limitsEnabled: false };
+    expect(atLimit(off, 'seats')).toBe(false);
+    expect(atLimit(off, 'computers')).toBe(false);
+    expect(atLimit({ ...b, limitsEnabled: true }, 'seats')).toBe(true);
+  });
 });
 
 describe('limitDetailsOf', () => {

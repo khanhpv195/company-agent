@@ -68,7 +68,8 @@ Set on the `be` container. "Prod" is what production requires or changes.
 | `SMTP_SECURE`            | `false`                                           | `true` for implicit TLS (port 465); `false` uses STARTTLS when offered.                                                                                                                                                                                              |
 | `SMTP_USER`              | empty                                             |                                                                                                                                                                                                                                                                      |
 | `SMTP_PASS`              | empty                                             |                                                                                                                                                                                                                                                                      |
-| `BILLING_PROVIDER`       | `none`                                            | `none` or `stripe`. Plan limits are enforced either way; with `none` checkout and portal answer 409.                                                                                                                                                                 |
+| `BILLING_LIMITS_ENABLED` | `false`                                           | `true` enforces plan limits (seats, agents, computers; 403 `billing.LIMIT_REACHED`) and shows the plan UI. `false`: every workspace gets full functionality, no limits, no plan UI.                                                                                  |
+| `BILLING_PROVIDER`       | `none`                                            | `none` or `stripe`. Plan limits follow `BILLING_LIMITS_ENABLED`; with `none` checkout and portal answer 409.                                                                                                                                                         |
 | `STRIPE_SECRET_KEY`      | empty; required with `stripe`                     | `sk_live_...`                                                                                                                                                                                                                                                        |
 | `STRIPE_WEBHOOK_SECRET`  | empty; required with `stripe`                     | `whsec_...` of the webhook endpoint.                                                                                                                                                                                                                                 |
 | `STRIPE_PRICE_PRO`       | empty; required with `stripe`                     | Price id of the Pro plan (monthly, flat).                                                                                                                                                                                                                            |
@@ -116,7 +117,7 @@ open. Mails triggered by a request are fire-and-forget: a failing relay is logge
 
 ## Billing with Stripe
 
-Billing is optional (`BILLING_PROVIDER=none` keeps plan limits but offers no checkout).
+Billing is optional (`BILLING_PROVIDER=none` offers no checkout).
 
 1. In Stripe create two recurring monthly prices: **Pro** (flat) and **Team** (per seat, the
    API sends the number of members as the quantity). Copy their price ids into `STRIPE_PRICE_PRO`

@@ -50,6 +50,13 @@ describe('envValidationSchema billing settings', () => {
     expect((value as { BILLING_PROVIDER: string }).BILLING_PROVIDER).toBe('none');
   });
 
+  it('turns plan limits off by default and accepts true', () => {
+    const off = envValidationSchema.validate(base);
+    expect((off.value as { BILLING_LIMITS_ENABLED: boolean }).BILLING_LIMITS_ENABLED).toBe(false);
+    const on = envValidationSchema.validate({ ...base, BILLING_LIMITS_ENABLED: 'true' });
+    expect((on.value as { BILLING_LIMITS_ENABLED: boolean }).BILLING_LIMITS_ENABLED).toBe(true);
+  });
+
   it('requires every Stripe setting once the stripe provider is on', () => {
     expect(envValidationSchema.validate({ ...base, ...stripe }).error).toBeUndefined();
     for (const key of Object.keys(stripe).filter((k) => k !== 'BILLING_PROVIDER')) {

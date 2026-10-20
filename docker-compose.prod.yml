@@ -4,7 +4,7 @@
 # Required: DB_PASSWORD and JWT_ACCESS_SECRET (>= 32 chars, e.g. `openssl rand -base64 48`).
 # Also required: APP_URL (public link base for mails) and, because production only sends real
 # mail, SMTP_HOST and MAIL_FROM (MAIL_TRANSPORT defaults to smtp; SMTP_PORT/SECURE/USER/PASS optional).
-# Billing: BILLING_PROVIDER=none|stripe (default none); stripe also needs STRIPE_SECRET_KEY,
+# Billing: BILLING_LIMITS_ENABLED=true|false (default false: no plan limits); BILLING_PROVIDER=none|stripe (default none); stripe also needs STRIPE_SECRET_KEY,
 # STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_PRO and STRIPE_PRICE_TEAM.
 # Behind a reverse proxy/load balancer set TRUST_PROXY=<number of proxies> (usually 1).
 # Optional: JWT_ACCESS_TTL, JWT_REFRESH_TTL, LOG_LEVEL, throttle limits, AUDIT_RETENTION_DAYS (defaults below).
@@ -68,6 +68,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:?MAIL_FROM is required in production (sender address of mails)}
+      BILLING_LIMITS_ENABLED: ${BILLING_LIMITS_ENABLED:-false}
       BILLING_PROVIDER: ${BILLING_PROVIDER:-none}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}

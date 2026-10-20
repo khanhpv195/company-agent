@@ -59,4 +59,6 @@ export class BillingSummaryDto {
   @ApiProperty({ type: [ByDayDto] }) byDay: ByDayDto[];
   @ApiProperty({ type: SubscriptionDto, nullable: true }) subscription: SubscriptionDto | null;
   @ApiProperty() checkoutAvailable: boolean;
+  @ApiProperty({ description: 'False when plan limits are off (BILLING_LIMITS_ENABLED).' })
+  limitsEnabled: boolean;
 }

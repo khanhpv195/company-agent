@@ -28,10 +28,14 @@ export function meterOf(used: number, limit: number): Meter {
   return { used, limit, pct, level };
 }
 
+/** Never true when the server runs without plan limits (`limitsEnabled` false). */
 export const atLimit = (
-  billing: Pick<BillingSummary, 'usage' | 'limits'> | undefined,
+  billing: (Pick<BillingSummary, 'usage' | 'limits'> & { limitsEnabled?: boolean }) | undefined,
   resource: PlanResource,
-): boolean => !!billing && billing.usage[resource] >= billing.limits[resource];
+): boolean =>
+  !!billing &&
+  billing.limitsEnabled !== false &&
+  billing.usage[resource] >= billing.limits[resource];
 
 const isResource = (v: unknown): v is PlanResource => RESOURCES.includes(v as PlanResource);
 

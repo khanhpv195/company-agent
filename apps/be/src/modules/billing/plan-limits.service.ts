@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import {
   BILLING_LIMIT_REACHED,
   planById,
@@ -7,6 +7,8 @@ import {
   type WorkspacePlan,
 } from '@repo/shared';
 import type { EntityManager } from 'typeorm';
+import { ConfigType } from '@nestjs/config';
+import { billingConfig } from '../../config/billing.config';
 import { ClockService } from '../../common/clock';
 import { WorkspaceGoneException } from '../tasks/workspace-lock.service';
 
@@ -30,14 +32,22 @@ export class LimitReachedException extends ForbiddenException {
 }
 
 /**
- * Plan limits. Every enforcement point calls `lockPlan` first inside its own transaction: the
+ * Plan limits (only enforced with `BILLING_LIMITS_ENABLED=true`). Every enforcement point calls `lockPlan` first inside its own transaction: the
  * workspace row lock serialises limit-checked writers (two invites, two pairings...), so the
  * count that follows cannot be outrun. Downgrades never delete anything: a workspace above its
  * limit just cannot add more.
  */
 @Injectable()
 export class PlanLimitsService {
-  constructor(private readonly clock: ClockService) {}
+  constructor(
+    private readonly clock: ClockService,
+    @Inject(billingConfig.KEY) private readonly config: ConfigType<typeof billingConfig>,
+  ) {}
+
+  /** `BILLING_LIMITS_ENABLED`: when false nothing is limited (`assertCanAdd` is a no-op). */
+  get limitsEnabled(): boolean {
+    return this.config.limitsEnabled;
+  }
 
   /** Locks the workspace row until the transaction ends and returns its plan. */
   async lockPlan(manager: EntityManager, workspaceId: string): Promise<WorkspacePlan> {
@@ -81,6 +91,7 @@ export class PlanLimitsService {
     resource: PlanResource,
     adding = 1,
   ): Promise<void> {
+    if (!this.config.limitsEnabled) return;
     const limit = planById(plan)[resource];
     const used = (await this.usage(manager, workspaceId))[resource];
     if (used + adding > limit) throw new LimitReachedException({ resource, limit, used, plan });

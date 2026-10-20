@@ -1,6 +1,7 @@
 import { getRouteApi, Link, Navigate } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { useT, type MessageKey } from '../../i18n';
+import { useBilling } from '../billing/billing.api';
 import { BillingSection } from '../billing/BillingSection';
 import { useSession } from '../workspace/workspace.api';
 import { AppearanceSection } from './AppearanceSection';
@@ -38,8 +39,11 @@ export function SettingsPage() {
   const t = useT();
   const { section } = route.useParams();
   const session = useSession().data;
+  const billing = useBilling();
   if (!session) return null;
-  const allowed = sectionsFor(session.user.role);
+  // Wait for the summary before deciding on /settings/billing (e.g. the return from Stripe).
+  if (section === 'billing' && billing.isPending) return null;
+  const allowed = sectionsFor(session.user.role, billing.data?.limitsEnabled === true);
   const current = allowed.find((s) => s.id === section);
   const body = current ? BODIES[current.id] : undefined;
   // Hand-typed or stale URLs (e.g. a member opening /settings/audit) land on the profile.

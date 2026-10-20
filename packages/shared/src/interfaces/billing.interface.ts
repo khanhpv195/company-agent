@@ -38,6 +38,8 @@ export interface BillingSummary {
   subscription: BillingSubscription | null;
   /** False when `BILLING_PROVIDER=none` (checkout and portal answer 409). */
   checkoutAvailable: boolean;
+  /** False when the server does not enforce plan limits (`BILLING_LIMITS_ENABLED=false`): clients hide the plan UI. */
+  limitsEnabled: boolean;
 }
 
 export interface CheckoutInput {
