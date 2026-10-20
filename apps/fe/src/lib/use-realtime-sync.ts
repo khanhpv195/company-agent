@@ -74,6 +74,14 @@ export function useRealtimeSync() {
             void qc.invalidateQueries({ queryKey: qk.mentions });
             void qc.invalidateQueries({ queryKey: ['room-members'] });
             break;
+          case 'departments.changed':
+            void qc.invalidateQueries({ queryKey: qk.departments });
+            // Who belongs to which department lives on the member and agent rows.
+            void qc.invalidateQueries({ queryKey: qk.members });
+            void qc.invalidateQueries({ queryKey: qk.agents });
+            void qc.invalidateQueries({ queryKey: qk.invites });
+            void qc.invalidateQueries({ queryKey: qk.rooms });
+            break;
           case 'tasks.changed':
             void qc.invalidateQueries({ queryKey: qk.tasks });
             void qc.invalidateQueries({ queryKey: qk.runSpans });

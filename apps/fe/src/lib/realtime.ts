@@ -86,6 +86,7 @@ export function backoffDelay(attempt: number, random: () => number = Math.random
 /** Events re-emitted after a reconnect so the UI refetches whatever it missed. */
 export const RESYNC_EVENTS: RealtimeEvent[] = [
   { type: 'rooms.changed' },
+  { type: 'departments.changed' },
   { type: 'tasks.changed' },
   { type: 'agents.changed' },
   { type: 'computers.changed' },

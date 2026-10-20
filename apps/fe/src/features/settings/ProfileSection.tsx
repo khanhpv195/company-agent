@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { MemberAvatar } from '../../components/Avatar';
 import { useT } from '../../i18n';
+import { MAX_TITLE } from '@repo/shared';
+import { isTitleValid } from '../departments/departments.logic';
 import { useSession } from '../workspace/workspace.api';
 import { isProfileNameValid, profilePatch, PROFILE_COLORS } from './settings.logic';
 import { useLogout, useNotify, useUpdateProfile } from './settings.api';
@@ -13,13 +15,15 @@ export function ProfileSection() {
   const logout = useLogout();
   const update = useUpdateProfile();
   // Edits live in a draft; `null` means "untouched", so the form follows the saved profile.
-  const [draft, setDraft] = useState<{ name?: string; color?: string | null }>({});
+  const [draft, setDraft] = useState<{ name?: string; color?: string | null; title?: string }>({});
   if (!user) return null;
 
   const name = draft.name ?? user.name;
   const color = draft.color === undefined ? user.color : draft.color;
-  const patch = profilePatch(user, { name, color });
-  const valid = isProfileNameValid(name);
+  const title = draft.title ?? user.title ?? '';
+  const patch = profilePatch(user, { name, color, title });
+  const titleOk = isTitleValid(title);
+  const valid = isProfileNameValid(name) && titleOk;
 
   return (
     <div className="set-stack">
@@ -57,13 +61,30 @@ export function ProfileSection() {
           className="field"
           maxLength={60}
           value={name}
-          aria-invalid={!valid || undefined}
-          aria-describedby={valid ? undefined : 'pf-name-msg'}
+          aria-invalid={!isProfileNameValid(name) || undefined}
+          aria-describedby={isProfileNameValid(name) ? undefined : 'pf-name-msg'}
           onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
         />
-        {!valid && (
+        {!isProfileNameValid(name) && (
           <div id="pf-name-msg" className="err-line" role="alert">
             {t('settings.profile.nameInvalid')}
+          </div>
+        )}
+        <label htmlFor="pf-title" style={{ marginTop: 14 }}>
+          {t('departments.title')}
+        </label>
+        <input
+          id="pf-title"
+          className="field"
+          placeholder={t('departments.titlePlaceholder')}
+          value={title}
+          aria-invalid={!titleOk || undefined}
+          aria-describedby={titleOk ? undefined : 'pf-title-msg'}
+          onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+        />
+        {!titleOk && (
+          <div id="pf-title-msg" className="err-line" role="alert">
+            {t('departments.titleTooLong', { max: MAX_TITLE })}
           </div>
         )}
         <label id="pf-color-label" style={{ marginTop: 14 }}>

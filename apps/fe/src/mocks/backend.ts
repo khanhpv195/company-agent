@@ -23,6 +23,7 @@ import {
   type UpdateAgentInput,
   type UpdateTaskInput,
 } from '@repo/shared';
+import { assertDepartmentId, cleanTitle, joinDepartmentRoom } from './departments';
 import { iso, PERSONA, seed, skillCatalog, type MockDb } from './fixtures';
 
 export class HttpError extends Error {
@@ -523,10 +524,11 @@ export class MockBackend {
       maxTurns: input.maxTurns ?? 40,
       status: 'idle',
       simulated: pc.simulated,
-      departmentId: null,
-      title: null,
+      departmentId: assertDepartmentId(this, input.departmentId),
+      title: cleanTitle(input.title),
     };
     this.db.agents.push(agent);
+    joinDepartmentRoom(this, agent.departmentId, 'agent', agent.id);
     this.syncAgents();
     this.emit({ type: 'agents.changed' });
     return agent;
@@ -537,6 +539,10 @@ export class MockBackend {
     const name = patch.name === undefined ? undefined : this.agentName(patch.name);
     if (name !== undefined) this.assertNameFree(name, a.id);
     this.assertMaxTurns(patch.maxTurns);
+    // Validate before anything changes, so a bad value leaves the agent untouched.
+    const departmentId =
+      patch.departmentId === undefined ? undefined : assertDepartmentId(this, patch.departmentId);
+    const title = patch.title === undefined ? undefined : cleanTitle(patch.title);
     let computerId: string | undefined;
     if (patch.computerId !== undefined && patch.computerId !== a.computerId) {
       computerId = this.assertComputer(patch.computerId).id;
@@ -552,6 +558,12 @@ export class MockBackend {
     if (patch.workdir?.trim()) a.workdir = patch.workdir.trim();
     if (patch.maxTurns !== undefined) a.maxTurns = patch.maxTurns;
     if (patch.persona !== undefined) a.persona = patch.persona;
+    if (departmentId !== undefined) {
+      a.departmentId = departmentId;
+      joinDepartmentRoom(this, departmentId, 'agent', a.id);
+      this.emit({ type: 'departments.changed' });
+    }
+    if (title !== undefined) a.title = title;
     for (const s of patch.skills ?? []) {
       const skill = a.skills.find((x) => x.id === s.id);
       if (skill) skill.enabled = s.enabled;

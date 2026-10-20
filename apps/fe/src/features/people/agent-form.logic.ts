@@ -23,7 +23,7 @@ export interface AgentFormValues {
 }
 
 export type AgentFormErrors = Partial<
-  Record<'name' | 'computerId' | 'workdir' | 'maxTurns', string>
+  Record<'name' | 'computerId' | 'workdir' | 'maxTurns' | 'title', string>
 >;
 
 /** Whole number in 1..200, or null. */

@@ -15,6 +15,9 @@ import {
   type AgentFormErrors,
   type AgentFormValues,
 } from './agent-form.logic';
+import { MAX_TITLE } from '@repo/shared';
+import { DepartmentSelect } from '../departments/DepartmentSelect';
+import { cleanTitle, isTitleValid } from '../departments/departments.logic';
 import { useCreateAgent, useSkillCatalog } from './people.api';
 
 export function NewAgentModal() {
@@ -47,6 +50,8 @@ function NewAgentForm({
     workdir: '',
     maxTurns: '',
   });
+  const [departmentId, setDepartmentId] = useState<string | null>(null);
+  const [title, setTitle] = useState('');
   const [skills, setSkills] = useState<Set<string> | null>(null);
   const [errors, setErrors] = useState<AgentFormErrors>({});
   const set = (patch: Partial<AgentFormValues>) => {
@@ -73,12 +78,14 @@ function NewAgentForm({
       people.agents.map((a) => a.name),
       people.computers.map((c) => c.id),
     );
+    if (!isTitleValid(title)) found.title = t('departments.titleTooLong', { max: MAX_TITLE });
     setErrors(found);
     if (Object.keys(found).length) return;
-    const input = toCreateInput(
-      values,
-      skills && catalog ? skillFlags(catalog, skills) : undefined,
-    );
+    const input = {
+      ...toCreateInput(values, skills && catalog ? skillFlags(catalog, skills) : undefined),
+      ...(departmentId ? { departmentId } : null),
+      ...(cleanTitle(title) ? { title: cleanTitle(title)! } : null),
+    };
     create.mutate(input, {
       onSuccess: (agent) => {
         // Open the DM in the background so the agent shows up in Chat right away.
@@ -141,6 +148,31 @@ function NewAgentForm({
       </div>
       {errors.computerId && <div className="err-line">{errors.computerId}</div>}
       {errors.maxTurns && <div className="err-line">{errors.maxTurns}</div>}
+      <div className="nt-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        <label>
+          {t('departments.department')}
+          <DepartmentSelect
+            label={t('departments.department')}
+            value={departmentId}
+            onChange={setDepartmentId}
+          />
+        </label>
+        <label>
+          {t('departments.title')}
+          <input
+            className="field"
+            style={{ height: 36, marginTop: 5, ...invalid('title') }}
+            placeholder={t('departments.titlePlaceholder')}
+            aria-label={t('departments.title')}
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              setErrors((x) => ({ ...x, title: undefined }));
+            }}
+          />
+        </label>
+      </div>
+      {errors.title && <div className="err-line">{errors.title}</div>}
       <input
         className="field"
         style={{ marginTop: 10 }}

@@ -1,6 +1,12 @@
 import { useLimitGuard } from '../billing/billing.api';
 import { LimitHint } from '../billing/LimitHint';
-import type { AssignableRole, CreateInviteResult, Member } from '@repo/shared';
+import {
+  MAX_TITLE,
+  type AssignableRole,
+  type CreateInviteInput,
+  type CreateInviteResult,
+  type Member,
+} from '@repo/shared';
 import { useRef, useState } from 'react';
 import { MemberAvatar } from '../../components/Avatar';
 import { Modal } from '../../components/Modal';
@@ -9,6 +15,9 @@ import { copyText } from '../../lib/clipboard';
 import { errorMessage } from '../../lib/error-message';
 import { useNow } from '../../lib/use-now';
 import { isEmail } from '../auth/auth.logic';
+import { DepartmentSelect } from '../departments/DepartmentSelect';
+import { useDepartments } from '../departments/departments.api';
+import { cleanTitle, isTitleValid, withTitle } from '../departments/departments.logic';
 import { ROLE_NAME, useMembers, useSession } from '../workspace/workspace.api';
 import { useNotify } from './settings.api';
 import {
@@ -36,6 +45,7 @@ export function MembersSection() {
   const actor = { id: me?.id ?? '', role: me?.role };
   const manager = canInvite(me?.role);
   const seatLimit = useLimitGuard('seats');
+  const departments = useDepartments();
   const [inviting, setInviting] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [removing, setRemoving] = useState<Member | null>(null);
@@ -72,7 +82,11 @@ export function MembersSection() {
                     {m.name}
                     {isMe && <span className="pill this">{t('settings.members.you')}</span>}
                   </div>
-                  <div className="when">{m.email}</div>
+                  <div className="when">
+                    {[withTitle(m.title, ''), departments.byId(m.departmentId)?.name, m.email]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </div>
                 </div>
                 {canChangeRole(actor, m) ? (
                   <select
@@ -133,6 +147,7 @@ function InvitesBox() {
   const revoke = useRevokeInvite();
   const notify = useNotify();
   const now = useNow();
+  const departments = useDepartments();
   const list = invites.data ?? [];
   return (
     <div className="box set-box wide">
@@ -154,6 +169,10 @@ function InvitesBox() {
                 })}
                 {inv.invitedByName
                   ? ` · ${t('settings.members.invitedBy', { name: inv.invitedByName })}`
+                  : ''}
+                {inv.title ? ` · ${inv.title}` : ''}
+                {departments.byId(inv.departmentId)
+                  ? ` · ${departments.byId(inv.departmentId)?.name}`
                   : ''}
               </div>
             </div>
@@ -208,8 +227,11 @@ export function InviteModal({ onClose }: { onClose: () => void }) {
   const create = useCreateInvite();
   const [email, setEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<AssignableRole>('member');
+  const [departmentId, setDepartmentId] = useState<string | null>(null);
+  const [title, setTitle] = useState('');
   const [result, setResult] = useState<CreateInviteResult | null>(null);
-  const ready = isEmail(email);
+  const titleOk = isTitleValid(title);
+  const ready = isEmail(email) && titleOk;
 
   if (result)
     return (
@@ -235,8 +257,14 @@ export function InviteModal({ onClose }: { onClose: () => void }) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (ready)
-            create.mutate({ email: email.trim(), role: inviteRole }, { onSuccess: setResult });
+          if (!ready) return;
+          const input: CreateInviteInput = {
+            email: email.trim(),
+            role: inviteRole,
+            ...(departmentId ? { departmentId } : null),
+            ...(cleanTitle(title) ? { title: cleanTitle(title)! } : null),
+          };
+          create.mutate(input, { onSuccess: setResult });
         }}
       >
         <h3>{t('settings.members.inviteTitle')}</h3>
@@ -262,6 +290,22 @@ export function InviteModal({ onClose }: { onClose: () => void }) {
           {canInviteAdmin(role) && <option value="admin">{ROLE_NAME.admin}</option>}
           <option value="member">{ROLE_NAME.member}</option>
         </select>
+        <label htmlFor="inv-department">{t('departments.department')}</label>
+        <DepartmentSelect id="inv-department" value={departmentId} onChange={setDepartmentId} />
+        <label htmlFor="inv-title">{t('departments.title')}</label>
+        <input
+          id="inv-title"
+          className="field"
+          placeholder={t('departments.titlePlaceholder')}
+          value={title}
+          aria-invalid={!titleOk || undefined}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+        {!titleOk && (
+          <div className="err-line" role="alert">
+            {t('departments.titleTooLong', { max: MAX_TITLE })}
+          </div>
+        )}
         {create.error && (
           <div id="inv-error" className="err-line" role="alert">
             {errorMessage(create.error, t, 'settings.members.inviteFailed')}

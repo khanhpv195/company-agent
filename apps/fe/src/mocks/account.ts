@@ -1,6 +1,7 @@
 import type { AuditEvent, AuthSessionInfo, Member } from '@repo/shared';
 import { isStrongPassword } from '@repo/shared';
 import { HttpError } from './backend';
+import { cleanTitle } from './departments';
 
 /** In-memory account state for the mock API (resets on reload, like the rest of the mock). */
 export const account = {
@@ -43,12 +44,16 @@ export function seedAccount(): void {
 }
 seedAccount();
 
-export function updateProfile(me: Member, input: { name?: unknown; color?: unknown }): void {
+export function updateProfile(
+  me: Member,
+  input: { name?: unknown; color?: unknown; title?: unknown },
+): void {
   if (input.name !== undefined) {
     const name = typeof input.name === 'string' ? input.name.trim() : '';
     if (!name || name.length > 60) throw new HttpError(400, 'Tên cần từ 1 đến 60 ký tự');
     me.name = name;
   }
+  if (input.title !== undefined) me.title = cleanTitle(input.title);
   if (input.color !== undefined) {
     if (
       input.color !== null &&
