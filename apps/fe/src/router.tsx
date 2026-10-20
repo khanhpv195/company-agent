@@ -23,6 +23,8 @@ import { DashboardPage } from './features/dashboard/DashboardPage';
 import { AgentPage } from './features/people/AgentPage';
 import { MemberPage } from './features/people/MemberPage';
 import { PeopleLayout } from './features/people/PeopleLayout';
+import { SkillPage } from './features/skills/SkillPage';
+import { SkillsPage } from './features/skills/SkillsPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { TasksPage, type TasksView } from './features/tasks/TasksPage';
 import { agentsQuery, sessionQuery } from './features/workspace/workspace.api';
@@ -179,6 +181,17 @@ const memberRoute = createRoute({
   component: MemberPage,
 });
 
+const skillsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/skills',
+  component: SkillsPage,
+});
+const skillRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/skills/$skillId',
+  component: SkillPage,
+});
+
 const computersRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/computers',
@@ -224,6 +237,8 @@ const routeTree = rootRoute.addChildren([
     tasksRoute,
     chatRoute.addChildren([chatIndexRoute, chatRoomRoute]),
     peopleRoute.addChildren([peopleIndexRoute, agentRoute, memberRoute]),
+    skillsRoute,
+    skillRoute,
     computersRoute,
     settingsRoute.addChildren([settingsSectionRoute]),
     connectionsRoute,

@@ -9,16 +9,17 @@ import { usePeople } from '../workspace/workspace.api';
 import {
   DEFAULT_MAX_TURNS,
   MAX_NAME,
-  skillFlags,
   toCreateInput,
   validateAgentForm,
   type AgentFormErrors,
   type AgentFormValues,
 } from './agent-form.logic';
-import { MAX_TITLE } from '@repo/shared';
+import { MAX_AGENT_SKILLS, MAX_TITLE } from '@repo/shared';
 import { DepartmentSelect } from '../departments/DepartmentSelect';
 import { cleanTitle, isTitleValid } from '../departments/departments.logic';
-import { useCreateAgent, useSkillCatalog } from './people.api';
+import { useCreateAgent } from './people.api';
+import { useSkills } from '../skills/skills.api';
+import { atSkillLimit } from '../skills/skills.logic';
 
 export function NewAgentModal() {
   const open = useUi((s) => s.newAgent);
@@ -36,7 +37,7 @@ function NewAgentForm({
 }) {
   const t = useT();
   const people = usePeople();
-  const catalog = useSkillCatalog();
+  const library = useSkills();
   const create = useCreateAgent();
   const openDm = useOpenDm();
   const navigate = useNavigate();
@@ -52,7 +53,7 @@ function NewAgentForm({
   });
   const [departmentId, setDepartmentId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
-  const [skills, setSkills] = useState<Set<string> | null>(null);
+  const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
   const [errors, setErrors] = useState<AgentFormErrors>({});
   const set = (patch: Partial<AgentFormValues>) => {
     setValues((v) => ({ ...v, ...patch }));
@@ -62,12 +63,10 @@ function NewAgentForm({
     }));
   };
 
-  // Until the user touches a skill, the catalog's own defaults apply.
-  const checked = skills ?? new Set((catalog ?? []).filter((s) => s.enabled).map((s) => s.id));
   const toggle = (id: string) => {
     const next = new Set(checked);
     if (!next.delete(id)) next.add(id);
-    setSkills(next);
+    setChecked(next);
   };
 
   const submit = () => {
@@ -82,7 +81,10 @@ function NewAgentForm({
     setErrors(found);
     if (Object.keys(found).length) return;
     const input = {
-      ...toCreateInput(values, skills && catalog ? skillFlags(catalog, skills) : undefined),
+      ...toCreateInput(
+        values,
+        library.filter((s) => checked.has(s.id)).map((s) => s.id),
+      ),
       ...(departmentId ? { departmentId } : null),
       ...(cleanTitle(title) ? { title: cleanTitle(title)! } : null),
     };
@@ -191,21 +193,32 @@ function NewAgentForm({
         onChange={(e) => set({ persona: e.target.value })}
       />
       <div className="nt-chk" style={{ marginBottom: 6 }}>
-        {t('people.newAgent.skillsOn', { on: checked.size, total: catalog?.length ?? 0 })}
+        {t('people.newAgent.skillsOn', { on: checked.size, max: MAX_AGENT_SKILLS })}
       </div>
-      <div className="chips" style={{ maxHeight: 110, overflowY: 'auto' }}>
-        {(catalog ?? []).map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            className={`chip ${checked.has(s.id) ? 'on' : ''}`}
-            aria-pressed={checked.has(s.id)}
-            onClick={() => toggle(s.id)}
-          >
-            {s.name}
-          </button>
-        ))}
-      </div>
+      {library.length === 0 ? (
+        <p style={{ color: 'var(--muted)', fontSize: 12.5, margin: 0 }}>
+          {t('people.newAgent.noSkills')}
+        </p>
+      ) : (
+        <div className="chips" style={{ maxHeight: 110, overflowY: 'auto' }}>
+          {library.map((s) => {
+            const on = checked.has(s.id);
+            return (
+              <button
+                key={s.id}
+                type="button"
+                className={`chip ${on ? 'on' : ''}`}
+                aria-pressed={on}
+                disabled={!on && atSkillLimit(checked.size)}
+                title={s.description}
+                onClick={() => toggle(s.id)}
+              >
+                {s.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
       {create.error && <div className="err-line">{create.error.message}</div>}
       <div className="wz-foot">
         <button className="btn" onClick={onClose}>

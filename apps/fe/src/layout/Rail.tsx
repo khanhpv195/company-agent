@@ -60,6 +60,7 @@ export function Rail() {
       <NavIcon to="/tasks" icon="kanban" label={t('rail.tasks')} />
       <NavIcon to="/chat" icon="chat" label={t('rail.chat')} />
       <NavIcon to="/people" icon="users" label={t('rail.people')} />
+      <NavIcon to="/skills" icon="sparkles" label={t('rail.skills')} />
       <div className="spacer drag" data-tauri-drag-region />
       <NavIcon to="/connections" icon="plug" label={t('rail.connections')} />
       <NavIcon to="/computers" icon="monitor" label={t('rail.computers')} />

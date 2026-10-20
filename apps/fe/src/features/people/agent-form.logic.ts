@@ -1,4 +1,4 @@
-import type { AgentSkill, CreateAgentInput, MemberRole } from '@repo/shared';
+import type { CreateAgentInput, MemberRole } from '@repo/shared';
 import type { MessageKey, TFunction } from '../../i18n';
 
 export const MAX_NAME = 60;
@@ -59,17 +59,11 @@ export function validateAgentForm(
   return errors;
 }
 
-/** Skills as the API takes them: the checked ones on, the rest off. */
-export const skillFlags = (
-  catalog: readonly AgentSkill[],
-  enabled: ReadonlySet<string>,
-): Pick<AgentSkill, 'id' | 'enabled'>[] =>
-  catalog.map((s) => ({ id: s.id, enabled: enabled.has(s.id) }));
-
 /** Empty optional fields are left out so the API applies its defaults. */
 export function toCreateInput(
   values: AgentFormValues,
-  skills: Pick<AgentSkill, 'id' | 'enabled'>[] | undefined,
+  /** Library skill ids to switch on; left out means none. */
+  skillIds: readonly string[] | undefined,
 ): CreateAgentInput {
   const persona = values.persona.trim() ? values.persona : undefined;
   const workdir = values.workdir.trim() || undefined;
@@ -78,7 +72,7 @@ export function toCreateInput(
     name: values.name.trim(),
     computerId: values.computerId,
     ...(persona ? { persona } : null),
-    ...(skills ? { skills } : null),
+    ...(skillIds?.length ? { skills: skillIds.map((id) => ({ id, enabled: true })) } : null),
     ...(workdir ? { workdir } : null),
     ...(maxTurns ? { maxTurns } : null),
   };

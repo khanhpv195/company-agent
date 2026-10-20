@@ -43,7 +43,16 @@ import {
   updateDepartment,
 } from './departments';
 import { createInvite, previewInvite, revokeInvite, seedTeam, takeInvite, team } from './team';
-import { skillCatalog } from './fixtures';
+import {
+  createSkill,
+  deleteSkill,
+  getSkill,
+  listSkills,
+  restoreSkill,
+  setAgentSkills,
+  skillVersions,
+  updateSkill,
+} from './skills';
 import {
   addRoomMembers,
   browseRooms,
@@ -519,7 +528,25 @@ on('PUT', '/agents/:id/department', ({ params, body: raw }) => {
   return a;
 });
 on('GET', '/agents', () => db.agents);
-on('GET', '/agents/skill-catalog', () => skillCatalog());
+
+// ----- skills -----
+on('GET', '/skills', () => listSkills(backend));
+on('POST', '/skills', (ctx) => createSkill(backend, body(ctx)));
+on('GET', '/skills/:id', ({ params }) => getSkill(backend, params.id));
+on('GET', '/skills/:id/versions', ({ params }) => skillVersions(backend, params.id));
+on('PATCH', '/skills/:id', (ctx) => updateSkill(backend, ctx.params.id, body(ctx)));
+on('POST', '/skills/:id/restore', (ctx) =>
+  restoreSkill(backend, ctx.params.id, body<{ version?: unknown }>(ctx).version),
+);
+on('DELETE', '/skills/:id', ({ params }) => {
+  deleteSkill(backend, params.id);
+  return null;
+});
+on('PUT', '/agents/:id/skills', (ctx) => {
+  const agent = backend.agent(ctx.params.id);
+  if (!agent) throw new HttpError(404, 'Agent not found');
+  return setAgentSkills(backend, agent, body<{ skillIds?: unknown }>(ctx).skillIds);
+});
 on('POST', '/agents', (ctx) => backend.createAgent(body<CreateAgentInput>(ctx)));
 on('GET', '/agents/:id', ({ params }) => {
   const a = backend.agent(params.id);
@@ -781,7 +808,12 @@ export async function mockFetch(url: string, init: RequestInit = {}): Promise<Re
       success: false,
       data: null,
       message,
-      meta: { statusCode: status, path, timestamp: new Date().toISOString() },
+      meta: {
+        statusCode: status,
+        path,
+        timestamp: new Date().toISOString(),
+        ...(e instanceof HttpError && e.details ? { details: e.details } : null),
+      },
     });
   }
 }

@@ -1,6 +1,7 @@
 import { DemoBadge } from '../../components/DemoBadge';
-import { MAX_TITLE, type Agent, type UpdateAgentInput } from '@repo/shared';
-import { getRouteApi, useNavigate } from '@tanstack/react-router';
+import { MAX_AGENT_SKILLS, MAX_TITLE, type Agent, type UpdateAgentInput } from '@repo/shared';
+import { getRouteApi, Link, useNavigate } from '@tanstack/react-router';
+import { errorMessage } from '../../lib/error-message';
 import { useState } from 'react';
 import { AgentAvatar, Dot } from '../../components/Avatar';
 import { agentPresence } from '../../components/presence';
@@ -16,6 +17,9 @@ import { DepartmentSelect } from '../departments/DepartmentSelect';
 import { useDepartments } from '../departments/departments.api';
 import { cleanTitle, isTitleValid } from '../departments/departments.logic';
 import { usePeople } from '../workspace/workspace.api';
+import { useSession } from '../workspace/workspace.api';
+import { useSetAgentSkills } from '../skills/skills.api';
+import { atSkillLimit, canSetAgentSkills, enabledIdsOf, toggleId } from '../skills/skills.logic';
 import {
   MANAGER_ONLY_HINT,
   nextAgentAfterDelete,
@@ -77,7 +81,6 @@ export function AgentPage() {
       </div>
     );
   const pc = people.computerOf(agent);
-  const enabled = agent.skills.filter((s) => s.enabled).length;
   const mine = tasks.filter((task) => task.assigneeId === agent.id);
   const current = mine.find((task) => task.activeRun);
   const runs = mine.flatMap((task) => task.runs);
@@ -235,28 +238,7 @@ export function AgentPage() {
           onSave={(persona) => update.mutate({ persona })}
         />
       )}
-      {tab === 'Skills' && (
-        <>
-          <div className="chips">
-            {agent.skills.map((s) => (
-              <button
-                key={s.id}
-                className={`chip ${s.enabled ? 'on' : ''}`}
-                aria-pressed={s.enabled}
-                disabled={!canManage}
-                title={canManage ? undefined : t(MANAGER_ONLY_HINT)}
-                onClick={() => update.mutate({ skills: [{ id: s.id, enabled: !s.enabled }] })}
-              >
-                {s.name}
-              </button>
-            ))}
-          </div>
-          <p style={{ color: 'var(--muted)', fontSize: 12.5, marginTop: 14 }}>
-            {t('people.skillsOn', { on: enabled, total: agent.skills.length })}{' '}
-            {canManage ? t('people.toggleSkills') : t('people.skillsChangeHint')}
-          </p>
-        </>
-      )}
+      {tab === 'Skills' && <SkillsPanel agent={agent} />}
       {tab === 'Activity' && (
         <table>
           <thead>
@@ -503,6 +485,64 @@ function PersonaEditor({
           </button>
         )}
       </div>
+    </>
+  );
+}
+
+/** Turns library skills on or off for the agent; owner/admin, or a member of its department. */
+function SkillsPanel({ agent }: { agent: Agent }) {
+  const t = useT();
+  const me = useSession().data?.user;
+  const set = useSetAgentSkills(agent.id);
+  const canEdit = canSetAgentSkills(me, agent);
+  const on = enabledIdsOf(agent);
+  const full = atSkillLimit(on.length);
+  return (
+    <>
+      {agent.skills.length === 0 ? (
+        <p style={{ color: 'var(--muted)', fontSize: 13 }}>
+          {t('people.skillsEmpty')}{' '}
+          <Link to="/skills" className="link">
+            {t('people.skillsOpenLibrary')}
+          </Link>
+        </p>
+      ) : (
+        <div className="chips">
+          {agent.skills.map((s) => {
+            const blocked = !canEdit || (!s.enabled && full);
+            return (
+              <span key={s.id} className={`chip skill-chip ${s.enabled ? 'on' : ''}`}>
+                <button
+                  type="button"
+                  aria-pressed={s.enabled}
+                  disabled={blocked || set.isPending}
+                  title={canEdit ? undefined : t('people.skillsChangeHint')}
+                  onClick={() => set.mutate(toggleId(on, s.id))}
+                >
+                  {s.name}
+                </button>
+                <Link
+                  to="/skills/$skillId"
+                  params={{ skillId: s.id }}
+                  className="skill-chip-open"
+                  title={t('skills.open')}
+                  aria-label={t('skills.openNamed', { name: s.name })}
+                >
+                  <Icon name="arrow" size={11} />
+                </Link>
+              </span>
+            );
+          })}
+        </div>
+      )}
+      <p style={{ color: 'var(--muted)', fontSize: 12.5, marginTop: 14 }}>
+        {t('people.skillsOn', { on: on.length, max: MAX_AGENT_SKILLS })}{' '}
+        {canEdit ? t('people.toggleSkills') : t('people.skillsChangeHint')}
+        {canEdit && full ? ` ${t('people.skillsLimit', { max: MAX_AGENT_SKILLS })}` : ''}
+      </p>
+      {set.error && (
+        <div className="err-line">{errorMessage(set.error, t, 'skills.saveFailed')}</div>
+      )}
     </>
   );
 }

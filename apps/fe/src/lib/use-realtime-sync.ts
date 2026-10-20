@@ -93,6 +93,11 @@ export function useRealtimeSync() {
             // Agent and computer counts drive the plan meters.
             void qc.invalidateQueries({ queryKey: qk.billing });
             break;
+          case 'skills.changed':
+            void qc.invalidateQueries({ queryKey: qk.skills });
+            // Each agent lists the library with its own on/off flags.
+            void qc.invalidateQueries({ queryKey: qk.agents });
+            break;
           case 'computers.changed':
             void qc.invalidateQueries({ queryKey: qk.computers });
             void qc.invalidateQueries({ queryKey: qk.billing });
