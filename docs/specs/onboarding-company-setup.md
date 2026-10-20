@@ -14,12 +14,14 @@ khi chạy. Owner/admin xem, sửa, tạo skill riêng trong app.
 
 Đã chốt với product owner:
 
-- Kết nối máy trước, chat sau (agent chạy trên máy của user, server không gọi AI).
+- Kết nối máy trước, chat sau.
 - Skill sửa được, user tuỳ biến theo công ty.
 - Phòng ban gồm cả nhân viên người lẫn agent.
+- Trợ lý thiết lập dùng **Jev** (model ra quyết định của TypeSafe) để điều phối từng lượt chat;
+  chỉ gọi Claude khi Jev quyết định là cần (mục 5.7). Key Jev do product owner cung cấp.
 
 Không làm trong spec này: sơ đồ tổ chức nhiều cấp (phòng ban con), phân quyền theo phòng ban,
-marketplace skill công khai, server-side AI.
+marketplace skill công khai, LLM sinh văn bản phía server (server chỉ gọi Jev để ra quyết định).
 
 ## 2. Hiện trạng (đã kiểm tra trong code)
 
@@ -150,8 +152,10 @@ giống cũ trong một phiên bản chuyển tiếp.
 Khi `cli-status` báo máy đầu tiên đã kết nối và workspace chưa onboard, backend tạo (idempotent,
 dưới khoá workspace):
 
-- agent **Trợ lý thiết lập** trên máy đó, persona riêng (mục 5.4), không có skill, `system = true`
-  (cột mới trên `agents`; agent system không tính vào danh sách nhân viên, không có phòng ban);
+- agent **Trợ lý thiết lập** trên máy đó, persona riêng (mục 5.5), không có skill, `system = true`
+  (cột mới trên `agents`; agent system không tính vào danh sách nhân viên, không có phòng ban).
+  Tin nhắn gửi cho nó **không** tự đi thẳng xuống máy như agent thường: backend điều phối bằng Jev
+  trước (mục 5.7), và chỉ tạo assignment cho máy khi Jev chọn nhánh Claude;
 - phòng mặc định `all-members` (nếu chưa có), thêm owner vào;
 - DM giữa owner và Trợ lý thiết lập, kèm tin nhắn chào đầu tiên.
 
@@ -242,6 +246,87 @@ Tiếng Việt (theo ngôn ngữ user), ngắn:
   doanh + Marketing + Kế toán).
 - FE mock (`VITE_MOCK=1`): `mocks/server.ts` và `mocks/chat.ts` có cùng kịch bản và endpoint `setup`.
 
+### 5.7 Điều phối bằng Jev
+
+**Jev là gì.** Model ra quyết định của TypeSafe. Đầu vào là một `state` (văn bản ngữ cảnh) và một
+tập câu hỏi có kiểu; đầu ra là câu trả lời có kiểu: **Choice** (chọn một nhãn), **Score** (điểm) và
+**Noul** (có/không kèm xác suất). Jev không sinh văn bản. Gọi qua `POST /v1/decisions`, không
+stream, giá chỉ tính token đầu vào (vài cent cho một triệu token), độ trễ khoảng 70 đến 500 ms. Bên
+cung cấp có thể là TypeSafe trực tiếp hoặc một gateway (AI/ML API, Portkey, ZenMux).
+
+Các thông tin trên lấy từ tài liệu của bên thứ ba. Việc đầu tiên của PR C là một spike dùng key thật
+để chốt URL, tên trường của request/response và giới hạn token; spec chỉnh lại theo kết quả spike.
+
+**Vì sao dùng.** Phần lớn lượt chat onboarding là việc phân loại: user đang trả lời câu hỏi nào,
+công ty cần phòng ban nào, đã đủ thông tin để đề xuất chưa, có đang sửa đề xuất không. Jev làm việc
+đó nhanh, rẻ và cho kết quả có kiểu, nên backend dựng câu trả lời và thẻ đề xuất bằng code xác
+định. Claude (chạy trên máy user) chỉ được gọi cho phần cần viết tự do.
+
+**Module mới `modules/routing`.**
+
+- `DecisionClient` (interface) với hàm `decide(state, questions) → answers` có kiểu. Bản thật
+  `JevDecisionClient` gọi HTTP; e2e và unit test dùng bản giả (giống `StripeGateway`).
+- `SetupOrchestrator`: nhận tin nhắn mới trong DM với Trợ lý thiết lập, chạy dưới khoá workspace,
+  quyết định lượt trả lời. Toàn bộ logic chuyển trạng thái là hàm thuần trong
+  `packages/shared/src/rules/setup.rules.ts` để FE mock dùng chung.
+- Trạng thái hội thoại lưu trong bảng `setup_sessions` (`workspace_id`, `room_id`, `facts jsonb`,
+  `step`, `turns`, `claude_turns`, `updated_at`), không suy lại từ lịch sử mỗi lượt.
+
+**Mỗi lượt user nhắn**, backend gọi Jev một lần với `state` gồm: tin nhắn mới, 6 tin gần nhất, các
+`facts` đã thu được và danh sách template (tên + mô tả). Bộ câu hỏi:
+
+| Câu hỏi                         | Kiểu   | Nhãn / ý nghĩa                                                                     |
+| ------------------------------- | ------ | ---------------------------------------------------------------------------------- |
+| `intent`                        | Choice | `answer`, `edit_proposal`, `confirm`, `question_about_app`, `off_topic`, `other`   |
+| `industry`                      | Choice | danh mục ngành cố định (bán lẻ, F&B, dịch vụ, sản xuất, giáo dục, công nghệ, khác) |
+| `size`                          | Choice | `1-5`, `6-20`, `21-50`, `50+`, `unknown`                                           |
+| `dept:<template>`               | Noul   | mỗi phòng ban mẫu: công ty có cần không                                            |
+| `channel:<zalo/facebook/gmail>` | Noul   | user có nhắc dùng kênh này không                                                   |
+| `enough_info`                   | Noul   | đã đủ thông tin để đề xuất chưa                                                    |
+| `route`                         | Choice | `script` (code tự trả lời) hoặc `claude` (cần viết tự do)                          |
+
+**Bảng quyết định** (hàm thuần, ngưỡng là hằng số trong code):
+
+- `intent = answer`: gộp `facts` (chỉ nhận Noul có xác suất ≥ 0,7). Nếu `enough_info` ≥ 0,7 hoặc đã
+  hỏi đủ 4 lượt: dựng thẻ đề xuất từ template; ngược lại hỏi câu kịch bản tiếp theo còn thiếu (câu
+  hỏi là chuỗi i18n `vi`/`en`).
+- `intent = edit_proposal` hoặc `confirm`: nhắc user sửa trực tiếp trên thẻ hoặc bấm Tạo đội ngũ.
+  Trợ lý không tự áp dụng.
+- `route = claude`, hoặc `intent` là `question_about_app`/`other`: tạo assignment chat bình thường
+  cho Trợ lý thiết lập trên máy user, với brief có thêm `facts` hiện tại. Claude được dùng tool
+  `list_templates`, `list_setup`, `propose_setup` như mục 5.2.
+- `intent = off_topic`: câu kịch bản lái về việc thiết lập.
+
+**Giới hạn và dự phòng.**
+
+- Tối đa 20 lượt Jev và 5 lượt Claude cho một phiên thiết lập; vượt thì dừng hỏi, đưa thẻ đề xuất
+  theo `facts` hiện có.
+- Jev lỗi, quá 3 giây, hoặc chưa cấu hình key: chuyển sang nhánh Claude như mục 5.1 (hành vi cũ).
+  Không bao giờ chặn onboarding vì Jev.
+- Mỗi lần gọi ghi một dòng `routing_decisions` (workspace, phiên, câu hỏi, câu trả lời, độ trễ, số
+  token, nhánh đã chọn) để đo tỉ lệ dùng Claude và chỉnh ngưỡng. Không lưu key, xoá theo
+  `RETENTION_ENABLED` như audit.
+
+**Cấu hình** (`config/routing.config.ts`, kiểm tra trong `env.validation.ts`):
+
+| Biến              | Mặc định                              | Ghi chú                                                                    |
+| ----------------- | ------------------------------------- | -------------------------------------------------------------------------- |
+| `ROUTER_PROVIDER` | `none`                                | `none` hoặc `jev`; `none` = luôn đi nhánh Claude                           |
+| `JEV_API_KEY`     | trống                                 | bắt buộc khi `ROUTER_PROVIDER=jev`; secret, không log, không trả về client |
+| `JEV_BASE_URL`    | URL của nhà cung cấp chốt sau spike   |                                                                            |
+| `JEV_MODEL`       | phiên bản cố định, ví dụ `jev-1.13.0` | không dùng `jev-latest`, để kết quả ổn định                                |
+| `JEV_TIMEOUT_MS`  | `3000`                                |                                                                            |
+
+Thêm vào `.env.example`, `docker/be.dev.env`, `docker-compose.prod.yml`, `docs/deployment.md` và
+CLAUDE.md. e2e ép `ROUTER_PROVIDER=none` và test phần điều phối bằng `DecisionClient` giả.
+
+**Quyền riêng tư.** Nội dung chat thiết lập được gửi cho bên cung cấp Jev. Ghi rõ trong điều khoản và
+hiển thị một dòng nhỏ ở bước chat ("Tin nhắn thiết lập được xử lý bởi dịch vụ phân loại bên thứ
+ba"). Chỉ gửi tin nhắn trong DM thiết lập, không gửi tin nhắn phòng khác.
+
+**Mở rộng sau** (không thuộc spec này): dùng cùng `DecisionClient` để định tuyến tin nhắn trong
+phòng ban tới đúng agent, và quyết định một việc có cần chạy Claude hay trả lời bằng mẫu được.
+
 ## 6. Quản lý sau onboarding
 
 - **Settings → Đội ngũ** (owner/admin): danh sách phòng ban, thêm/đổi tên/xoá (xoá mềm; người và
@@ -280,11 +365,11 @@ Mọi thông báo lỗi mới có key i18n ở cả `en` và `vi`. Swagger dùng
 
 ## 9. Giai đoạn và PR
 
-| PR  | Nội dung                                                                                                                                     | Độ khó (CLAUDE.md)                              |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| A   | Phòng ban: bảng, API, gán người/agent, room phòng ban, invite có phòng ban, People/rail nhóm theo phòng ban, Settings → Đội ngũ              | khó (migration, shared contract)                |
-| B   | Thư viện skill: bảng, API, Settings → Skill, trang agent dùng thư viện, migration dữ liệu cũ, daemon cài `SKILL.md`, nội dung skill template | khó (migration, daemon, Claude Code)            |
-| C   | Onboarding: template, Trợ lý thiết lập, tool `propose_setup`, thẻ đề xuất, `POST /onboarding/setup`, simulator và mock                       | khó (auth/onboarding, realtime, agent tích hợp) |
+| PR  | Nội dung                                                                                                                                                                  | Độ khó (CLAUDE.md)                              |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| A   | Phòng ban: bảng, API, gán người/agent, room phòng ban, invite có phòng ban, People/rail nhóm theo phòng ban, Settings → Đội ngũ                                           | khó (migration, shared contract)                |
+| B   | Thư viện skill: bảng, API, Settings → Skill, trang agent dùng thư viện, migration dữ liệu cũ, daemon cài `SKILL.md`, nội dung skill template                              | khó (migration, daemon, Claude Code)            |
+| C   | Onboarding: spike Jev, module `routing` + `SetupOrchestrator`, template, Trợ lý thiết lập, tool `propose_setup`, thẻ đề xuất, `POST /onboarding/setup`, simulator và mock | khó (auth/onboarding, realtime, tích hợp ngoài) |
 
 Mỗi PR có: unit test cho rule thuần, e2e cho API (quyền, idempotent, trùng tên, workspace khác
 không thấy), test FE cho logic thẻ đề xuất, test CLI cho đồng bộ skill.
@@ -295,3 +380,7 @@ không thấy), test FE cho logic thẻ đề xuất, test CLI cho đồng bộ 
    lưu trữ sau onboarding không?
 2. Nhân viên người có cần thêm trường **chức danh** (ví dụ "Trưởng phòng Kinh doanh") không?
 3. Member thường có được tạo skill riêng không, hay chỉ owner/admin?
+4. Key Jev lấy từ nhà cung cấp nào (TypeSafe trực tiếp, AI/ML API, Portkey hay ZenMux)? URL và định
+   dạng request khác nhau theo nhà cung cấp.
+5. Có muốn cho chat thiết lập **trước** khi kết nối máy không? Với Jev, phần hỏi và đề xuất không cần
+   máy; chỉ bước Tạo đội ngũ và nhánh Claude mới cần máy.
