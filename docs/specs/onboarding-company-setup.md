@@ -18,7 +18,9 @@ khi chạy. Owner/admin xem, sửa, tạo skill riêng trong app.
 - Skill sửa được, user tuỳ biến theo công ty.
 - Phòng ban gồm cả nhân viên người lẫn agent.
 - Trợ lý thiết lập dùng **Jev** (model ra quyết định của TypeSafe) để điều phối từng lượt chat;
-  chỉ gọi Claude khi Jev quyết định là cần (mục 5.7). Key Jev do product owner cung cấp.
+  chỉ gọi Claude khi Jev quyết định là cần (mục 5.7). Product owner tự mua Jev và cấp key; URL
+  nhà cung cấp để trong cấu hình, không viết cứng.
+- Nhân viên (member) được tạo skill (quyền chi tiết ở mục 6).
 
 Không làm trong spec này: sơ đồ tổ chức nhiều cấp (phòng ban con), phân quyền theo phòng ban,
 marketplace skill công khai, LLM sinh văn bản phía server (server chỉ gọi Jev để ra quyết định).
@@ -74,6 +76,8 @@ Bảng mới `skills` (thư viện skill của workspace):
 | `content`                                | text, tối đa 20 000 ký tự | phần thân `SKILL.md` (markdown)                                      |
 | `template_id`                            | varchar nullable          | skill gốc từ catalog, null nếu user tự tạo                           |
 | `version`                                | int                       | tăng mỗi lần sửa                                                     |
+| `created_by_member_id`                   | uuid FK members, nullable | người tạo; null với skill tạo từ onboarding/migration                |
+| `updated_by_member_id`                   | uuid FK members, nullable | người sửa gần nhất, hiện trên UI cạnh `version`                      |
 | `created_at`, `updated_at`, `deleted_at` |                           |                                                                      |
 
 `agents.skills` (jsonb hiện có) đổi nghĩa: danh sách `{ id: <skill uuid>, enabled }` trỏ vào bảng
@@ -331,9 +335,25 @@ phòng ban tới đúng agent, và quyết định một việc có cần chạy
 
 - **Settings → Đội ngũ** (owner/admin): danh sách phòng ban, thêm/đổi tên/xoá (xoá mềm; người và
   agent về "Chưa phân phòng"), kéo thả thứ tự, gán người/agent.
-- **Settings → Skill** (owner/admin xem và sửa; member chỉ xem): danh sách skill, tạo mới, tạo từ
-  template, sửa `name`/`description`/`content` bằng editor markdown có xem trước, xoá (chặn nếu agent
-  đang bật skill đó, trả danh sách agent). Mỗi lần lưu tăng `version` và ghi audit.
+- **Skill** (mục riêng trên rail, mọi thành viên): danh sách skill kèm người tạo, phiên bản và các
+  agent đang dùng; tạo mới, tạo từ template, sửa `name`/`description`/`content` bằng editor markdown
+  có xem trước, xoá (chặn nếu agent đang bật skill đó, trả danh sách agent). Mỗi lần lưu tăng
+  `version` và ghi audit.
+- **Quyền với skill** (product owner chốt: nhân viên được tạo skill):
+
+  | Việc                     | Member                        | Owner/admin |
+  | ------------------------ | ----------------------------- | ----------- |
+  | Xem mọi skill            | có                            | có          |
+  | Tạo skill                | có                            | có          |
+  | Sửa, xoá skill           | chỉ skill mình tạo            | mọi skill   |
+  | Bật/tắt skill trên agent | agent cùng phòng ban với mình | mọi agent   |
+
+  Lý do giới hạn: skill là hướng dẫn chạy lâu dài trên máy của người khác, ảnh hưởng mọi lần chạy
+  sau của agent. Member vẫn chỉ làm được những gì họ đã có thể yêu cầu agent qua chat, nhưng thay
+  đổi được ghi lại: khi một skill đang bật trên agent bị sửa, gửi thông báo cho owner/admin và cho
+  người phụ trách máy chạy agent đó; lịch sử phiên bản xem được và khôi phục được (`skill_versions`:
+  `skill_id`, `version`, `content`, `edited_by`, `created_at`).
+
 - **Trang agent**: bật/tắt skill lấy từ thư viện workspace thay cho catalog cố định.
 - **People và rail**: nhóm agent và người theo phòng ban; trang người hiện phòng ban.
 - Tool hiện có `create_agent`/`update_agent` nhận thêm `departmentId`; `skills` nhận slug của
@@ -341,15 +361,18 @@ phòng ban tới đúng agent, và quyết định một việc có cần chạy
 
 ## 7. API mới (tóm tắt)
 
-| Method                | Path                                                | Quyền        |
-| --------------------- | --------------------------------------------------- | ------------ |
-| GET                   | `/departments`                                      | member       |
-| POST / PATCH / DELETE | `/departments`, `/departments/:id`                  | owner, admin |
-| PUT                   | `/members/:id/department`, `/agents/:id/department` | owner, admin |
-| GET                   | `/skills`, `/skills/:id`                            | member       |
-| POST / PATCH / DELETE | `/skills`, `/skills/:id`                            | owner, admin |
-| GET                   | `/templates`                                        | member       |
-| POST                  | `/onboarding/setup`                                 | owner, admin |
+| Method                | Path                                                | Quyền                                         |
+| --------------------- | --------------------------------------------------- | --------------------------------------------- |
+| GET                   | `/departments`                                      | member                                        |
+| POST / PATCH / DELETE | `/departments`, `/departments/:id`                  | owner, admin                                  |
+| PUT                   | `/members/:id/department`, `/agents/:id/department` | owner, admin                                  |
+| GET                   | `/skills`, `/skills/:id`                            | member                                        |
+| POST                  | `/skills`                                           | member                                        |
+| PATCH / DELETE        | `/skills/:id`                                       | người tạo, owner, admin                       |
+| GET / POST            | `/skills/:id/versions`, `/skills/:id/restore`       | member / người tạo, owner, admin              |
+| PUT                   | `/agents/:id/skills`                                | owner, admin; member với agent cùng phòng ban |
+| GET                   | `/templates`                                        | member                                        |
+| POST                  | `/onboarding/setup`                                 | owner, admin                                  |
 
 Mọi thông báo lỗi mới có key i18n ở cả `en` và `vi`. Swagger dùng `@ApiWrappedResponse`.
 
@@ -379,8 +402,5 @@ không thấy), test FE cho logic thẻ đề xuất, test CLI cho đồng bộ 
 1. Trợ lý thiết lập có nên **ở lại** làm "trợ lý quản trị" (thêm agent, sửa skill qua chat) thay vì
    lưu trữ sau onboarding không?
 2. Nhân viên người có cần thêm trường **chức danh** (ví dụ "Trưởng phòng Kinh doanh") không?
-3. Member thường có được tạo skill riêng không, hay chỉ owner/admin?
-4. Key Jev lấy từ nhà cung cấp nào (TypeSafe trực tiếp, AI/ML API, Portkey hay ZenMux)? URL và định
-   dạng request khác nhau theo nhà cung cấp.
-5. Có muốn cho chat thiết lập **trước** khi kết nối máy không? Với Jev, phần hỏi và đề xuất không cần
+3. Có muốn cho chat thiết lập **trước** khi kết nối máy không? Với Jev, phần hỏi và đề xuất không cần
    máy; chỉ bước Tạo đội ngũ và nhánh Claude mới cần máy.
