@@ -14,6 +14,7 @@ import {
 } from '@repo/shared';
 import {
   canEditSkill,
+  isManager,
   canSetAgentSkills,
   slugifySkill,
   SLUG_PATTERN,
@@ -23,8 +24,14 @@ import { iso } from './fixtures';
 
 const me = (b: MockBackend): Member => b.db.members.find((m) => m.id === b.db.meId)!;
 
+/** Like the API: no editor, or an editor who is an owner or admin, is trusted. */
+const isTrusted = (b: MockBackend, s: Skill): boolean =>
+  s.updatedById === null ||
+  b.db.members.some((m) => m.id === s.updatedById && (m.role === 'owner' || m.role === 'admin'));
+
 const view = (b: MockBackend, s: Skill): Skill => ({
   ...s,
+  trusted: isTrusted(b, s),
   agentIds: b.db.agents
     .filter((a) => a.skills.some((x) => x.id === s.id && x.enabled))
     .map((a) => a.id),
@@ -149,6 +156,7 @@ export function createSkill(b: MockBackend, input: Partial<CreateSkillInput>): S
     createdById: b.db.meId,
     updatedById: b.db.meId,
     updatedAt: now,
+    trusted: true,
     agentIds: [],
   };
   b.db.skills.push(skill);
@@ -207,6 +215,19 @@ export function restoreSkill(b: MockBackend, id: string, version: unknown): Skil
   assertAgentsFit(b, skill, old.content.length);
   newVersion(b, skill, { name: old.name, description: old.description, content: old.content });
   changed(b);
+  return view(b, skill);
+}
+
+/** Owner or admin: becomes the last editor without a new version. Idempotent. */
+export function approveSkill(b: MockBackend, id: string): Skill {
+  const skill = skillOr404(b, id);
+  if (!isManager(me(b).role))
+    throw new HttpError(403, 'Chỉ chủ sở hữu hoặc quản trị viên được duyệt skill');
+  if (skill.updatedById !== b.db.meId) {
+    skill.updatedById = b.db.meId;
+    skill.updatedAt = iso(b.now());
+    changed(b);
+  }
   return view(b, skill);
 }
 

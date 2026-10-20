@@ -5,6 +5,7 @@
   "CREATED": "Skill created",
   "UPDATED": "Skill updated",
   "RESTORED": "Skill version restored",
+  "APPROVED": "Skill approved",
   "DELETED": "Skill deleted",
   "AGENT_SKILLS_UPDATED": "Agent skills updated",
   "NOT_FOUND": "Skill not found",

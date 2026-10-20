@@ -109,6 +109,58 @@ describe('Skill library (e2e)', () => {
   const assign = (memberId: string, departmentId: string | null) =>
     call('put', `/members/${memberId}/department`, owner, { departmentId });
 
+  // ---------- approve ----------
+  describe('POST /skills/:id/approve', () => {
+    it('lets an owner or admin mark a member-edited skill as reviewed without a new version', async () => {
+      const made = await skill('Bao gia', alice);
+      expect(made.trusted).toBe(false);
+      expect((await list(bob)).find((s) => s.id === made.id)?.trusted).toBe(false);
+      realtime.length = 0;
+
+      const approved = await call<Skill>('post', `/skills/${made.id}/approve`, admin);
+      expect(approved).toMatchObject({
+        id: made.id,
+        trusted: true,
+        updatedById: admin.memberId,
+        version: 1,
+        content: made.content,
+      });
+      expect(eventTypes()).toContain('skills.changed');
+      expect(await audit()).toContain('skill.approved');
+      expect(await call<SkillVersion[]>('get', `/skills/${made.id}/versions`, owner)).toHaveLength(
+        1,
+      );
+
+      // idempotent: a second approve by the same admin changes nothing and audits nothing more
+      realtime.length = 0;
+      await call<Skill>('post', `/skills/${made.id}/approve`, admin);
+      expect(eventTypes()).not.toContain('skills.changed');
+      expect((await audit()).filter((a) => a === 'skill.approved')).toHaveLength(1);
+
+      // an edit by the member makes it untrusted again; a removed or demoted editor too
+      await call<Skill>('patch', `/skills/${made.id}`, alice, { content: '# changed' });
+      expect((await call<Skill>('get', `/skills/${made.id}`, owner)).trusted).toBe(false);
+      await call<Skill>('post', `/skills/${made.id}/approve`, owner);
+      expect((await call<Skill>('get', `/skills/${made.id}`, bob)).trusted).toBe(true);
+      await dataSource.query(`UPDATE members SET role = 'member' WHERE id = $1`, [owner.memberId]);
+      // the owner row was the editor: after demotion the skill is untrusted
+      expect((await call<Skill>('get', `/skills/${made.id}`, bob)).trusted).toBe(false);
+    });
+
+    it('is owner|admin only and 404s for foreign, deleted or malformed ids', async () => {
+      const made = await skill('Bao gia', alice);
+      await fail('post', `/skills/${made.id}/approve`, alice, 403);
+      await fail('post', `/skills/${made.id}/approve`, bob, 403);
+      await fail('post', `/skills/${made.id}/approve`, outsider, 404);
+      await fail('post', `/skills/${NIL}/approve`, admin, 404);
+      await fail('post', `/skills/nope/approve`, admin, 404);
+      const foreign = await skill('Foreign', outsider);
+      await fail('post', `/skills/${foreign.id}/approve`, admin, 404);
+      await call('delete', `/skills/${made.id}`, owner);
+      await fail('post', `/skills/${made.id}/approve`, admin, 404);
+    });
+  });
+
   // ---------- create / read ----------
   describe('POST /skills, GET /skills', () => {
     it('lets any member create a skill; the slug comes from the name without diacritics', async () => {

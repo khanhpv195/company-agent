@@ -2,6 +2,7 @@ import { MAX_AGENT_SKILLS, MAX_AGENT_SKILL_CONTENT } from '@repo/shared';
 import { describe, expect, it } from 'vitest';
 import { HttpError, MockBackend } from './backend';
 import {
+  approveSkill,
   createSkill,
   deleteSkill,
   getSkill,
@@ -75,6 +76,24 @@ describe('mock skill library', () => {
     expect(updateSkill(b, mine.id, { name: 'By admin' }).updatedById).toBe('u3');
     b.db.meId = 'u1'; // owner
     expect(() => deleteSkill(b, mine.id)).not.toThrow();
+  });
+
+  it('marks a member-edited skill untrusted until an owner or admin approves it', () => {
+    const b = setup('u2'); // a member
+    const mine = createSkill(b, { name: 'Mine', description: 'd', content: 'c' });
+    expect(getSkill(b, mine.id).trusted).toBe(false);
+    expect(getSkill(b, 'sk-git').trusted).toBe(true); // last saved by an admin
+    expect(() => approveSkill(b, mine.id)).toThrow(/Chỉ chủ sở hữu/);
+    b.db.meId = 'u3'; // admin
+    const approved = approveSkill(b, mine.id);
+    expect(approved).toMatchObject({ trusted: true, updatedById: 'u3', version: 1 });
+    expect(skillVersions(b, mine.id)).toHaveLength(1);
+    expect(approveSkill(b, mine.id).updatedById).toBe('u3'); // idempotent
+    expect(() => approveSkill(b, 'nope')).toThrow(/Không tìm thấy/);
+    // a member editing again makes it untrusted again
+    b.db.meId = 'u2';
+    updateSkill(b, mine.id, { content: 'd' });
+    expect(getSkill(b, mine.id).trusted).toBe(false);
   });
 
   it('refuses to delete a skill in use and names the agents', () => {

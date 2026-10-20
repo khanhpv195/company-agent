@@ -1728,6 +1728,16 @@ td {
   gap: 6px;
   flex: none;
 }
+.pill.warn {
+  background: var(--bg-fbf0e1, #fbf0e1);
+  color: var(--warn, #9a6200);
+}
+.pill.skill-approval {
+  margin-left: 8px;
+  display: inline-flex;
+  font-size: 11px;
+  padding: 1px 7px;
+}
 .pill.ok {
   background: var(--bg-e9f3ec);
   color: var(--ok);

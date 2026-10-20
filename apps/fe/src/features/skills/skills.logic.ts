@@ -23,13 +23,24 @@ export const slugifySkill = (name: string): string =>
 
 export const SLUG_PATTERN = /^[a-z0-9-]{1,64}$/;
 
-const isManager = (role: MemberRole | undefined) => role === 'owner' || role === 'admin';
+export const isManager = (role: MemberRole | undefined) => role === 'owner' || role === 'admin';
 
 /** Edit, restore and delete: the creator, an owner or an admin (like the API). */
 export const canEditSkill = (
   skill: Pick<Skill, 'createdById'>,
   me: { id: string; role: MemberRole } | undefined,
 ): boolean => !!me && (isManager(me.role) || (!!skill.createdById && skill.createdById === me.id));
+
+/** Approving a member-edited skill: owner or admin only (like the API). */
+export const canApproveSkill = (me: { role: MemberRole } | undefined): boolean =>
+  !!me && isManager(me.role);
+
+/** True when agents using the skill cannot use admin tools until an owner or admin approves it. */
+export const needsApproval = (skill: Pick<Skill, 'trusted'>): boolean => !skill.trusted;
+
+/** Skill ids (by the library) that need approval, for the agent skill chips. */
+export const unapprovedIds = (library: readonly Pick<Skill, 'id' | 'trusted'>[]): Set<string> =>
+  new Set(library.filter((s) => !s.trusted).map((s) => s.id));
 
 /** Owner/admin for any agent; a member only for an agent of their own department. */
 export const canSetAgentSkills = (

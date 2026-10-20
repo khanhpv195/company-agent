@@ -702,6 +702,12 @@ export const en: Widen<ViMessages> = {
     createdBy: 'Created by {name}',
     updatedAt: 'updated {when}',
     readOnly: 'Only the creator, an owner or an admin can edit this skill.',
+    needsApproval:
+      'Last edited by {name}. Agents using this skill cannot use admin tools until an owner or admin approves it.',
+    approve: 'Approve',
+    needsApprovalBadge: 'needs approval',
+    needsApprovalHint:
+      'Last edited by someone who is not an owner or admin: agents using this skill cannot use admin tools until it is approved',
     stale: 'Someone else just updated this skill. Your changes are based on the old version.',
     loadLatest: 'Load latest',
     overwrite: 'Overwrite v{version}',

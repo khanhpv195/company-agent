@@ -18,8 +18,13 @@ import { useDepartments } from '../departments/departments.api';
 import { cleanTitle, isTitleValid } from '../departments/departments.logic';
 import { usePeople } from '../workspace/workspace.api';
 import { useSession } from '../workspace/workspace.api';
-import { useToggleAgentSkill } from '../skills/skills.api';
-import { atSkillLimit, canSetAgentSkills, enabledIdsOf } from '../skills/skills.logic';
+import { useSkills, useToggleAgentSkill } from '../skills/skills.api';
+import {
+  atSkillLimit,
+  canSetAgentSkills,
+  enabledIdsOf,
+  unapprovedIds,
+} from '../skills/skills.logic';
 import {
   MANAGER_ONLY_HINT,
   nextAgentAfterDelete,
@@ -496,6 +501,7 @@ function SkillsPanel({ agent }: { agent: Agent }) {
   const set = useToggleAgentSkill(agent.id);
   const canEdit = canSetAgentSkills(me, agent);
   const on = enabledIdsOf(agent);
+  const unapproved = unapprovedIds(useSkills());
   const full = atSkillLimit(on.length);
   return (
     <>
@@ -524,6 +530,11 @@ function SkillsPanel({ agent }: { agent: Agent }) {
                 >
                   {s.name}
                 </button>
+                {unapproved.has(s.id) && (
+                  <span className="pill warn skill-approval" title={t('skills.needsApprovalHint')}>
+                    {t('skills.needsApprovalBadge')}
+                  </span>
+                )}
                 <Link
                   to="/skills/$skillId"
                   params={{ skillId: s.id }}

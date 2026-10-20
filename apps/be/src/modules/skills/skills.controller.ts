@@ -11,7 +11,7 @@ import {
   Put,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ApiWrappedResponse, CurrentAuth, ResponseMessage } from '../../common/decorators';
+import { ApiWrappedResponse, CurrentAuth, ResponseMessage, Roles } from '../../common/decorators';
 import type { AuthContext } from '../../common/types';
 import { AgentsService } from '../agents/agents.service';
 import { AgentDto } from '../agents/dto/agent.dto';
@@ -84,6 +84,20 @@ export class SkillsController {
   @ApiWrappedResponse(SkillDto)
   restore(@CurrentAuth() auth: AuthContext, @Param('id') id: string, @Body() dto: RestoreSkillDto) {
     return this.skills.restore(auth, id, dto);
+  }
+
+  @Post(':id/approve')
+  @Roles('owner', 'admin')
+  @HttpCode(HttpStatus.OK)
+  @ResponseMessage('skills.APPROVED')
+  @ApiOperation({
+    summary:
+      'Mark a skill as reviewed (owner|admin): the caller becomes its last editor without a new ' +
+      'version, so agents using it get admin tools again. Idempotent',
+  })
+  @ApiWrappedResponse(SkillDto)
+  approve(@CurrentAuth() auth: AuthContext, @Param('id') id: string) {
+    return this.skills.approve(auth, id);
   }
 
   @Delete(':id')

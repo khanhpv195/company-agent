@@ -3,14 +3,17 @@ import { describe, expect, it } from 'vitest';
 import { translate } from '../../i18n';
 import {
   atSkillLimit,
+  canApproveSkill,
   canEditSkill,
   canSetAgentSkills,
   filterSkills,
   inUseAgents,
   isSkillDirty,
+  needsApproval,
   normalizeSkillName,
   slugifySkill,
   toggleId,
+  unapprovedIds,
   validateSkillForm,
 } from './skills.logic';
 
@@ -25,6 +28,7 @@ const skill = (over: Partial<Skill>): Skill => ({
   createdById: 'u2',
   updatedById: null,
   updatedAt: '2026-01-01T00:00:00Z',
+  trusted: true,
   agentIds: [],
   ...over,
 });
@@ -116,5 +120,22 @@ describe('form', () => {
     expect(isSkillDirty({ ...s, name: 'Báo  giá' }, s)).toBe(false);
     expect(isSkillDirty(s, { ...s, name: 'Báo giá 2' })).toBe(true);
     expect(normalizeSkillName(' a \t b\n c ')).toBe('a b c');
+  });
+});
+
+describe('approval', () => {
+  it('only an owner or admin can approve', () => {
+    expect(canApproveSkill({ role: 'owner' })).toBe(true);
+    expect(canApproveSkill({ role: 'admin' })).toBe(true);
+    expect(canApproveSkill({ role: 'member' })).toBe(false);
+    expect(canApproveSkill(undefined)).toBe(false);
+  });
+
+  it('flags untrusted skills', () => {
+    const a = skill({ id: 'a', trusted: true });
+    const b = skill({ id: 'b', trusted: false });
+    expect(needsApproval(a)).toBe(false);
+    expect(needsApproval(b)).toBe(true);
+    expect([...unapprovedIds([a, b])]).toEqual(['b']);
   });
 });

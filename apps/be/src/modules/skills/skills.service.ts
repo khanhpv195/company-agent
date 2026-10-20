@@ -14,12 +14,13 @@ import {
   type Skill as SkillContract,
   type SkillVersion as SkillVersionContract,
 } from '@repo/shared';
-import { DataSource, In, QueryFailedError, type EntityManager } from 'typeorm';
+import { DataSource, In, IsNull, QueryFailedError, type EntityManager } from 'typeorm';
 import type { AuthContext } from '../../common/types';
 import { Agent } from '../agents/entities/agent.entity';
 import { AuditService } from '../audit/audit.service';
 import { EventsService } from '../events';
 import { WorkspaceLockService } from '../tasks/workspace-lock.service';
+import { Member } from '../workspace/entities/member.entity';
 import { slugify } from '../workspace/slug.util';
 import { CreateSkillDto, RestoreSkillDto, UpdateSkillDto } from './dto/skill.dto';
 import { SkillVersion } from './entities/skill-version.entity';
@@ -31,7 +32,20 @@ const SLUG_UNIQUE_INDEX = 'UQ_skills_workspace_slug_live';
 /** Used when a skill name has no ascii letter or digit left (e.g. only symbols). */
 const SLUG_FALLBACK = 'skill';
 
-const toSkill = (row: Skill, agentIds: string[]): SkillContract => ({
+/** Ids among the editors of `rows` that are an owner or admin now (one query). */
+const adminEditors = async (manager: EntityManager, rows: Skill[]): Promise<Set<string>> => {
+  const ids = [
+    ...new Set(rows.flatMap((row) => (row.updatedByMemberId ? [row.updatedByMemberId] : []))),
+  ];
+  if (!ids.length) return new Set();
+  const members = await manager.find(Member, {
+    where: { id: In(ids), role: In(['owner', 'admin']), removedAt: IsNull() },
+    select: { id: true },
+  });
+  return new Set(members.map((member) => member.id));
+};
+
+const toSkill = (row: Skill, agentIds: string[], admins: ReadonlySet<string>): SkillContract => ({
   id: row.id,
   slug: row.slug,
   name: row.name,
@@ -42,6 +56,7 @@ const toSkill = (row: Skill, agentIds: string[]): SkillContract => ({
   createdById: row.createdByMemberId,
   updatedById: row.updatedByMemberId,
   updatedAt: row.updatedAt.toISOString(),
+  trusted: row.updatedByMemberId === null || admins.has(row.updatedByMemberId),
   agentIds,
 });
 
@@ -82,14 +97,15 @@ export class SkillsService {
       order: { name: 'ASC', id: 'ASC' },
     });
     const usage = await this.usage(manager, workspaceId);
-    return rows.map((row) => toSkill(row, usage.get(row.id) ?? []));
+    const admins = await adminEditors(manager, rows);
+    return rows.map((row) => toSkill(row, usage.get(row.id) ?? [], admins));
   }
 
   async get(workspaceId: string, id: string): Promise<SkillContract> {
     const manager = this.dataSource.manager;
     const row = await findLiveSkill(manager, workspaceId, id);
     const usage = await this.usage(manager, workspaceId);
-    return toSkill(row, usage.get(row.id) ?? []);
+    return toSkill(row, usage.get(row.id) ?? [], await adminEditors(manager, [row]));
   }
 
   /** Newest first. */
@@ -153,7 +169,7 @@ export class SkillsService {
           manager,
         );
         effects.push(() => this.publish(auth.workspaceId));
-        return toSkill(row, []);
+        return toSkill(row, [], await adminEditors(manager, [row]));
       }),
     );
   }
@@ -196,7 +212,7 @@ export class SkillsService {
         );
         effects.push(() => this.publishChange(auth.workspaceId, agentIds.length > 0));
       }
-      return toSkill(row, agentIds);
+      return toSkill(row, agentIds, await adminEditors(manager, [row]));
     });
   }
 
@@ -246,7 +262,38 @@ export class SkillsService {
         manager,
       );
       effects.push(() => this.publishChange(auth.workspaceId, agentIds.length > 0));
-      return toSkill(row, agentIds);
+      return toSkill(row, agentIds, await adminEditors(manager, [row]));
+    });
+  }
+
+  /**
+   * Owner or admin (checked by the controller): marks the skill as reviewed by making the actor
+   * its last editor. The text and `version` stay as they are and no `skill_versions` row is
+   * written. Idempotent.
+   */
+  approve(auth: AuthContext, id: string): Promise<SkillContract> {
+    return this.lock.run(auth.workspaceId, async (manager, effects) => {
+      const row = await findLiveSkill(manager, auth.workspaceId, id);
+      const agentIds = (await this.usage(manager, auth.workspaceId, row.id)).get(row.id) ?? [];
+      if (row.updatedByMemberId !== auth.memberId) {
+        const previous = row.updatedByMemberId;
+        row.updatedByMemberId = auth.memberId;
+        await manager.save(row);
+        await this.audit.record(
+          {
+            workspaceId: auth.workspaceId,
+            actorMemberId: auth.memberId,
+            action: 'skill.approved',
+            targetType: 'skill',
+            targetId: row.id,
+            meta: { slug: row.slug, version: row.version, previousEditorId: previous },
+            ip: auth.ip,
+          },
+          manager,
+        );
+        effects.push(() => this.publishChange(auth.workspaceId, agentIds.length > 0));
+      }
+      return toSkill(row, agentIds, await adminEditors(manager, [row]));
     });
   }
 

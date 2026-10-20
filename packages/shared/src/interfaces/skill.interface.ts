@@ -16,6 +16,11 @@ export interface Skill {
   createdById: string | null;
   updatedById: string | null;
   updatedAt: string;
+  /**
+   * False when the last editor is a member who is not an owner or admin (any more, or removed):
+   * agents using the skill cannot use admin tools until an owner or admin approves it.
+   */
+  trusted: boolean;
   /** Live agents that have it enabled. */
   agentIds: string[];
 }

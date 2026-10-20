@@ -14,6 +14,7 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from '@repo/shared';
+import { isUUID } from 'class-validator';
 import { DataSource, IsNull } from 'typeorm';
 import { ClockService } from '../../common/clock';
 import { cleanTitle } from '../../common/utils/text.util';
@@ -309,7 +310,9 @@ export class GatewayToolsService {
    * are trusted.
    */
   private async hasUntrustedSkill(agent: Agent): Promise<boolean> {
-    if (!agent.skills?.length) return false;
+    // Uses the agent's current skill set, not the run's snapshot.
+    const ids = (agent.skills ?? []).filter((id) => isUUID(id));
+    if (!ids.length) return false;
     const count = await this.dataSource
       .getRepository(Skill)
       .createQueryBuilder('s')
@@ -318,7 +321,7 @@ export class GatewayToolsService {
         'm',
         'm.id = s.updated_by_member_id AND m.workspace_id = s.workspace_id AND m.removed_at IS NULL',
       )
-      .where('s.id IN (:...ids)', { ids: agent.skills })
+      .where('s.id IN (:...ids)', { ids })
       .andWhere('s.workspace_id = :workspaceId', { workspaceId: agent.workspaceId })
       .andWhere('s.updated_by_member_id IS NOT NULL')
       .andWhere("(m.id IS NULL OR m.role NOT IN ('owner', 'admin'))")

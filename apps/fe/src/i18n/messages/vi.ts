@@ -695,6 +695,12 @@ export const vi = {
     createdBy: 'Tạo bởi {name}',
     updatedAt: 'cập nhật {when}',
     readOnly: 'Chỉ người tạo, owner hoặc admin được sửa skill này.',
+    needsApproval:
+      'Được sửa lần cuối bởi {name}. Agent dùng skill này không dùng được công cụ quản trị cho đến khi owner hoặc admin duyệt.',
+    approve: 'Duyệt',
+    needsApprovalBadge: 'cần duyệt',
+    needsApprovalHint:
+      'Được sửa lần cuối bởi người không phải owner hoặc admin: agent dùng skill này không dùng được công cụ quản trị cho đến khi được duyệt',
     stale: 'Skill này vừa được người khác cập nhật. Thay đổi của bạn dựa trên bản cũ.',
     loadLatest: 'Tải bản mới',
     overwrite: 'Ghi đè v{version}',

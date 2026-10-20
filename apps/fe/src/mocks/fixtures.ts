@@ -235,6 +235,7 @@ export function seed(now: number = Date.now()): MockDb {
       createdById: d.by,
       updatedById: d.by,
       updatedAt: iso(T0 - (i + 2) * 26 * HOUR),
+      trusted: true,
       agentIds: [],
     };
   });

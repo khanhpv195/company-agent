@@ -1060,8 +1060,20 @@ describe('Gateway over HTTP (e2e)', () => {
       await tool('list_skills', first.claimed.id);
       expect(await dataSource.getRepository(Agent).count()).toBe(1);
 
-      // an owner/admin saves the skill again: the run is trusted
-      await call('patch', `/skills/${skill.id}`, { content: '# Summarize\n\nreviewed' });
+      // a member cannot approve; an owner/admin approves without changing the text
+      const listed = await call<Array<{ id: string; trusted: boolean }>>('get', '/skills');
+      expect(listed.find((x) => x.id === skill.id)?.trusted).toBe(false);
+      await call('post', `/skills/${skill.id}/approve`, undefined, member, 403);
+      await toolError('update_agent', first.claimed.id, { id: agent.id, persona: 'x' }, 403);
+      const approved = await call<{ trusted: boolean; version: number; content: string }>(
+        'post',
+        `/skills/${skill.id}/approve`,
+      );
+      expect(approved).toMatchObject({
+        trusted: true,
+        version: 2,
+        content: '# Summarize\n\nby member',
+      });
       await tool('update_agent', first.claimed.id, { id: agent.id, persona: 'Mới' });
 
       // an editor who is demoted (or removed) stops being trusted

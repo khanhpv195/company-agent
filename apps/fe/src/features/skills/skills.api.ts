@@ -67,6 +67,15 @@ export function useRestoreSkill(id: string) {
   });
 }
 
+export function useApproveSkill(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    meta: { silentError: true },
+    mutationFn: () => api.post<Skill>(`/skills/${encodeURIComponent(id)}/approve`),
+    onSuccess: () => refresh(qc),
+  });
+}
+
 export function useDeleteSkill() {
   const qc = useQueryClient();
   return useMutation({

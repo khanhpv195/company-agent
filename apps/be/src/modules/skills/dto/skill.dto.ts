@@ -89,6 +89,13 @@ export class SkillDto implements SkillContract {
   @ApiProperty({ format: 'date-time' })
   updatedAt: string;
 
+  @ApiProperty({
+    description:
+      'False when the last editor is a member who is not an owner or admin (any more): agents ' +
+      'using it cannot use admin tools until an owner or admin approves it',
+  })
+  trusted: boolean;
+
   @ApiProperty({ type: [String], description: 'Live agents that have it enabled' })
   agentIds: string[];
 }

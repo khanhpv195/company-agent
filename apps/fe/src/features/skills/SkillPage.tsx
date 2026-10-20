@@ -10,6 +10,7 @@ import { rel } from '../../lib/format';
 import { useNow } from '../../lib/use-now';
 import { useSession, usePeople } from '../workspace/workspace.api';
 import {
+  useApproveSkill,
   useDeleteSkill,
   useRestoreSkill,
   useSkillsQuery,
@@ -17,9 +18,11 @@ import {
   useUpdateSkill,
 } from './skills.api';
 import {
+  canApproveSkill,
   canEditSkill,
   inUseAgents,
   isSkillDirty,
+  needsApproval,
   normalizeSkillName,
   validateSkillForm,
   type SkillFormErrors,
@@ -83,6 +86,7 @@ function SkillDetail({ skill }: { skill: Skill }) {
   const me = useSession().data?.user;
   const canEdit = canEditSkill(skill, me);
   const update = useUpdateSkill(skill.id);
+  const approve = useApproveSkill(skill.id);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [errors, setErrors] = useState<SkillFormErrors>({});
   const [preview, setPreview] = useState(false);
@@ -153,6 +157,26 @@ function SkillDetail({ skill }: { skill: Skill }) {
       </div>
 
       {!canEdit && <div className="banner blk">{t('skills.readOnly')}</div>}
+      {needsApproval(skill) && (
+        <div className="banner err" style={{ marginBottom: 12 }} role="status">
+          <span className="sp">
+            {t('skills.needsApproval', {
+              name: skill.updatedById ? people.name(skill.updatedById) : '—',
+            })}
+            {approve.error && <> {errorMessage(approve.error, t, 'skills.saveFailed')}</>}
+          </span>
+          {canApproveSkill(me) && (
+            <button
+              className="btn sm"
+              type="button"
+              disabled={approve.isPending}
+              onClick={() => approve.mutate()}
+            >
+              {t('skills.approve')}
+            </button>
+          )}
+        </div>
+      )}
       {stale && (
         <div className="banner err" style={{ marginBottom: 12 }}>
           <span className="sp">{t('skills.stale')}</span>

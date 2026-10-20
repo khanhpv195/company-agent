@@ -256,6 +256,30 @@ describe('syncAgentSkills', () => {
     x!.release();
   });
 
+  it('never rewrites a tampered snapshot a running run still uses: builds a new dir instead', async () => {
+    const e = env();
+    const a = await syncAgentSkills('ag-1', [def()], e);
+    const file = path.join(a!.path, 'skills', 'bao-gia', 'SKILL.md');
+    await writeFile(file, 'tampered');
+    const b = await syncAgentSkills('ag-1', [def()], e);
+    // the in-use directory is left exactly as it was
+    expect(await readFile(file, 'utf8')).toBe('tampered');
+    expect(b!.path).not.toBe(a!.path);
+    expect(path.dirname(b!.path)).toBe(path.dirname(a!.path));
+    expect(await readFile(path.join(b!.path, 'skills', 'bao-gia', 'SKILL.md'), 'utf8')).toBe(
+      renderSkill(def()),
+    );
+    a!.release();
+    b!.release();
+    // once nothing uses them, the next sync restores the canonical dir and drops the rest
+    const c = await syncAgentSkills('ag-1', [def()], e);
+    expect(await readFile(path.join(c!.path, 'skills', 'bao-gia', 'SKILL.md'), 'utf8')).toBe(
+      renderSkill(def()),
+    );
+    expect(await readdir(path.join(skillsRootOf(e), 'ag-1'))).toEqual([path.basename(c!.path)]);
+    c!.release();
+  });
+
   it('serialises overlapping syncs of the same agent and survives a failing one', async () => {
     const e = env();
     const calls = await Promise.all([

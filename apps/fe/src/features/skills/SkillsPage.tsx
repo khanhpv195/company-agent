@@ -17,6 +17,7 @@ import { usePeople } from '../workspace/workspace.api';
 import { useCreateSkill, useSkillsQuery, type CreateSkillBody } from './skills.api';
 import {
   filterSkills,
+  needsApproval,
   slugifySkill,
   SLUG_PATTERN,
   validateSkillForm,
@@ -83,6 +84,14 @@ export function SkillsPage() {
                     {s.name}
                   </Link>
                   <code className="skill-slug">{s.slug}</code>
+                  {needsApproval(s) && (
+                    <span
+                      className="pill warn skill-approval"
+                      title={t('skills.needsApprovalHint')}
+                    >
+                      {t('skills.needsApprovalBadge')}
+                    </span>
+                  )}
                   <div className="skill-desc">{s.description}</div>
                 </td>
                 <td>{s.createdById ? people.name(s.createdById) : '—'}</td>

@@ -44,6 +44,7 @@ import {
 } from './departments';
 import { createInvite, previewInvite, revokeInvite, seedTeam, takeInvite, team } from './team';
 import {
+  approveSkill,
   createSkill,
   deleteSkill,
   getSkill,
@@ -538,6 +539,7 @@ on('PATCH', '/skills/:id', (ctx) => updateSkill(backend, ctx.params.id, body(ctx
 on('POST', '/skills/:id/restore', (ctx) =>
   restoreSkill(backend, ctx.params.id, body<{ version?: unknown }>(ctx).version),
 );
+on('POST', '/skills/:id/approve', ({ params }) => approveSkill(backend, params.id));
 on('DELETE', '/skills/:id', ({ params }) => {
   deleteSkill(backend, params.id);
   return null;

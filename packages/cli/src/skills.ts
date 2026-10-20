@@ -181,17 +181,22 @@ async function syncLocked(agentDir: string, list: SkillDef[]): Promise<SkillsPlu
     return null;
   }
 
-  const dir = path.join(agentDir, keep);
+  let dir = path.join(agentDir, keep);
   if (!(await snapshotIsValid(dir, list))) {
+    // A snapshot a running run still reads is never removed: build next to it under a unique
+    // name and let this run use that one instead.
+    const busy = (inUse.get(dir) ?? 0) > 0;
+    const target = busy ? path.join(agentDir, `${keep}-${randomUUID()}`) : dir;
     const tmp = path.join(agentDir, `.tmp-${randomUUID()}`);
     try {
       await writeSnapshot(tmp, list);
-      await rm(dir, { recursive: true, force: true });
-      await rename(tmp, dir);
+      if (!busy) await rm(dir, { recursive: true, force: true });
+      await rename(tmp, target);
     } catch (err) {
       await rm(tmp, { recursive: true, force: true });
       throw err;
     }
+    dir = target;
   }
 
   inUse.set(dir, (inUse.get(dir) ?? 0) + 1);
