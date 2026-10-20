@@ -73,3 +73,27 @@ describe('GFM tables', () => {
     expect(html('a | b\nc | d')).not.toContain('<table>');
   });
 });
+
+describe('headings option (skill preview)', () => {
+  const src = 'intro\n# One\n###### Six\n####### seven\n#nospace\ntext **b**';
+  it('renders # lines as h3-h6 with inline formatting and ends the paragraph', () => {
+    const out = html('para\n## Use `x`\nmore\n# Top', []);
+    expect(out).not.toContain('<h');
+    const withH = renderToStaticMarkup(<>{blocks('para\n## Use `x`\nmore\n# Top', [], true)}</>);
+    expect(withH).toContain('<p>para</p>');
+    expect(withH).toContain('<h4>Use <code>x</code></h4>');
+    expect(withH).toContain('<p>more</p>');
+    expect(withH).toContain('<h3>Top</h3>');
+  });
+  it('caps at h6 and needs a space and a title', () => {
+    const out = renderToStaticMarkup(<>{blocks(src, [], true)}</>);
+    expect(out).toContain('<h3>One</h3>');
+    expect(out).toContain('<h6>Six</h6>');
+    expect(out).not.toContain('<h6>seven');
+    expect(out).toContain('####### seven');
+    expect(out).toContain('#nospace');
+  });
+  it('leaves chat rendering unchanged', () => {
+    expect(html('# One\ntext')).toBe('<p># One<br/>text</p>');
+  });
+});

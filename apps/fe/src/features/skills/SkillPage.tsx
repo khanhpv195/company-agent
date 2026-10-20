@@ -20,12 +20,37 @@ import {
   canEditSkill,
   inUseAgents,
   isSkillDirty,
+  normalizeSkillName,
   validateSkillForm,
   type SkillFormErrors,
   type SkillFormValues,
 } from './skills.logic';
 
 const route = getRouteApi('/_app/skills/$skillId');
+
+/** A failed save/restore; a 400 `skills.TOO_LARGE` also names the agents it would overflow. */
+function SaveError({ error }: { error: unknown }) {
+  const t = useT();
+  if (!error) return null;
+  const agents =
+    error instanceof ApiError && error.status === 400 ? inUseAgents(error.body?.meta?.details) : [];
+  return (
+    <div className="err-line" role="alert">
+      {errorMessage(error, t, 'skills.saveFailed')}
+      {agents.length > 0 && (
+        <>
+          {' '}
+          {t('skills.tooLargeAgents')}
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+            {agents.map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function SkillPage() {
   const t = useT();
@@ -89,7 +114,11 @@ function SkillDetail({ skill }: { skill: Skill }) {
     setErrors(found);
     if (Object.keys(found).length) return;
     update.mutate(
-      { name: draft.name.trim(), description: draft.description.trim(), content: draft.content },
+      {
+        name: normalizeSkillName(draft.name),
+        description: draft.description.trim(),
+        content: draft.content,
+      },
       { onSuccess: () => setDraft(null) },
     );
   };
@@ -127,7 +156,7 @@ function SkillDetail({ skill }: { skill: Skill }) {
       {stale && (
         <div className="banner err" style={{ marginBottom: 12 }}>
           <span className="sp">{t('skills.stale')}</span>
-          <button className="btn sm" onClick={() => setDraft(null)}>
+          <button className="btn sm" type="button" onClick={() => setDraft(null)}>
             {t('skills.loadLatest')}
           </button>
         </div>
@@ -145,7 +174,11 @@ function SkillDetail({ skill }: { skill: Skill }) {
             onChange={(e) => set({ name: e.target.value })}
           />
         </label>
-        {errors.name && <div className="err-line">{errors.name}</div>}
+        {errors.name && (
+          <div className="err-line" role="alert">
+            {errors.name}
+          </div>
+        )}
         <label>
           {t('skills.slug')}
           <input
@@ -173,7 +206,11 @@ function SkillDetail({ skill }: { skill: Skill }) {
             onChange={(e) => set({ description: e.target.value })}
           />
         </label>
-        {errors.description && <div className="err-line">{errors.description}</div>}
+        {errors.description && (
+          <div className="err-line" role="alert">
+            {errors.description}
+          </div>
+        )}
         <div className="skill-editor-head">
           <span>{t('skills.content')}</span>
           <span className="skill-count" data-over={values.content.length > MAX_SKILL_CONTENT}>
@@ -181,10 +218,20 @@ function SkillDetail({ skill }: { skill: Skill }) {
           </span>
           {canEdit && (
             <div className="seg">
-              <button className={!preview ? 'on' : ''} onClick={() => setPreview(false)}>
+              <button
+                type="button"
+                className={!preview ? 'on' : ''}
+                aria-pressed={!preview}
+                onClick={() => setPreview(false)}
+              >
                 {t('skills.edit')}
               </button>
-              <button className={preview ? 'on' : ''} onClick={() => setPreview(true)}>
+              <button
+                type="button"
+                className={preview ? 'on' : ''}
+                aria-pressed={preview}
+                onClick={() => setPreview(true)}
+              >
                 {t('skills.preview')}
               </button>
             </div>
@@ -201,20 +248,33 @@ function SkillDetail({ skill }: { skill: Skill }) {
           />
         ) : (
           <div className="skill-preview">
-            <Markdown text={values.content} />
+            <Markdown text={values.content} headings />
           </div>
         )}
-        {errors.content && <div className="err-line">{errors.content}</div>}
-        {update.error && (
-          <div className="err-line">{errorMessage(update.error, t, 'skills.saveFailed')}</div>
+        {errors.content && (
+          <div className="err-line" role="alert">
+            {errors.content}
+          </div>
         )}
+        <SaveError error={update.error} />
         {canEdit && (
           <div className="skill-actions">
-            <button className="btn primary" disabled={!dirty || update.isPending} onClick={save}>
-              {t('people.save')}
+            <button
+              className="btn primary"
+              type="button"
+              disabled={!dirty || update.isPending}
+              onClick={save}
+            >
+              {stale ? t('skills.overwrite', { version: skill.version }) : t('people.save')}
             </button>
+            {stale && (
+              <button className="btn" type="button" onClick={() => setDraft(null)}>
+                {t('skills.loadLatest')}
+              </button>
+            )}
             <button
               className="btn"
+              type="button"
               disabled={!draft}
               onClick={() => {
                 setDraft(null);
@@ -250,13 +310,32 @@ function SkillDetail({ skill }: { skill: Skill }) {
         </div>
       </div>
 
-      <Versions skill={skill} canEdit={canEdit} />
+      <Versions
+        skill={skill}
+        canEdit={canEdit}
+        dirty={dirty}
+        onRestored={() => {
+          setDraft(null);
+          setErrors({});
+          update.reset();
+        }}
+      />
       {deleting && <DeleteSkillModal skill={skill} onClose={() => setDeleting(false)} />}
     </div>
   );
 }
 
-function Versions({ skill, canEdit }: { skill: Skill; canEdit: boolean }) {
+function Versions({
+  skill,
+  canEdit,
+  dirty,
+  onRestored,
+}: {
+  skill: Skill;
+  canEdit: boolean;
+  dirty: boolean;
+  onRestored: () => void;
+}) {
   const t = useT();
   const now = useNow();
   const people = usePeople();
@@ -264,6 +343,10 @@ function Versions({ skill, canEdit }: { skill: Skill; canEdit: boolean }) {
   const restore = useRestoreSkill(skill.id);
   const [viewing, setViewing] = useState<number | null>(null);
   const [confirm, setConfirm] = useState<number | null>(null);
+  const closeConfirm = () => {
+    setConfirm(null);
+    restore.reset();
+  };
   return (
     <section style={{ marginTop: 28 }}>
       <h3 style={{ fontSize: 15, margin: '0 0 10px' }}>{t('skills.history')}</h3>
@@ -288,19 +371,20 @@ function Versions({ skill, canEdit }: { skill: Skill; canEdit: boolean }) {
                   </span>
                   <button
                     className="btn sm"
+                    type="button"
                     onClick={() => setViewing(viewing === v.version ? null : v.version)}
                   >
                     {viewing === v.version ? t('skills.hide') : t('skills.view')}
                   </button>
                   {canEdit && !current && (
-                    <button className="btn sm" onClick={() => setConfirm(v.version)}>
+                    <button className="btn sm" type="button" onClick={() => setConfirm(v.version)}>
                       {t('skills.restore')}
                     </button>
                   )}
                 </div>
                 {viewing === v.version && (
                   <div className="skill-preview" style={{ marginTop: 8 }}>
-                    <Markdown text={v.content} />
+                    <Markdown text={v.content} headings />
                   </div>
                 )}
               </li>
@@ -309,21 +393,29 @@ function Versions({ skill, canEdit }: { skill: Skill; canEdit: boolean }) {
         </ul>
       )}
       {confirm !== null && (
-        <Modal onClose={() => setConfirm(null)} label={t('skills.restore')}>
+        <Modal onClose={closeConfirm} label={t('skills.restore')}>
           <h3>{t('skills.restoreTitle', { version: confirm })}</h3>
           <p>{t('skills.restoreBody', { version: confirm, next: skill.version + 1 })}</p>
-          {restore.error && (
-            <div className="err-line">{errorMessage(restore.error, t, 'skills.saveFailed')}</div>
-          )}
+          {dirty && <p>{t('skills.restoreDirty')}</p>}
+          <SaveError error={restore.error} />
           <div className="wz-foot">
-            <button className="btn" onClick={() => setConfirm(null)}>
+            <button className="btn" type="button" onClick={closeConfirm}>
               {t('people.cancel')}
             </button>
             <button
               className="btn primary"
+              type="button"
               disabled={restore.isPending}
               onClick={() =>
-                restore.mutate({ version: confirm }, { onSuccess: () => setConfirm(null) })
+                restore.mutate(
+                  { version: confirm },
+                  {
+                    onSuccess: () => {
+                      closeConfirm();
+                      onRestored();
+                    },
+                  },
+                )
               }
             >
               {t('skills.restore')}
@@ -348,7 +440,7 @@ function DeleteSkillModal({ skill, onClose }: { skill: Skill; onClose: () => voi
       <h3>{t('skills.deleteTitle', { name: skill.name })}</h3>
       <p>{t('skills.deleteBody')}</p>
       {inUse.length > 0 ? (
-        <div className="err-line">
+        <div className="err-line" role="alert">
           {t('skills.inUse')}
           <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
             {inUse.map((name) => (
@@ -358,7 +450,9 @@ function DeleteSkillModal({ skill, onClose }: { skill: Skill; onClose: () => voi
         </div>
       ) : (
         remove.error && (
-          <div className="err-line">{errorMessage(remove.error, t, 'skills.saveFailed')}</div>
+          <div className="err-line" role="alert">
+            {errorMessage(remove.error, t, 'skills.saveFailed')}
+          </div>
         )
       )}
       <div className="wz-foot">

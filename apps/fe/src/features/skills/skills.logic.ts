@@ -73,13 +73,16 @@ export function validateSkillForm(t: TFunction, values: SkillFormValues): SkillF
   return errors;
 }
 
-/** Whether the form differs from the saved skill (trimmed name and description). */
+/** A name the way the server stores it: trimmed, runs of whitespace collapsed to one space. */
+export const normalizeSkillName = (name: string): string => name.trim().replace(/\s+/g, ' ');
+
+/** Whether the form differs from the saved skill (normalized name, trimmed description). */
 export const isSkillDirty = (skill: SkillFormValues, values: SkillFormValues): boolean =>
-  skill.name !== values.name.trim() ||
-  skill.description !== values.description.trim() ||
+  normalizeSkillName(skill.name) !== normalizeSkillName(values.name) ||
+  skill.description.trim() !== values.description.trim() ||
   skill.content !== values.content;
 
-/** `[agent names]` from a `skills.IN_USE` error's `meta.details.agents`; empty when absent. */
+/** `[agent names]` from a `skills.IN_USE` or `skills.TOO_LARGE` error's `meta.details.agents`; empty when absent. */
 export function inUseAgents(details: unknown): string[] {
   const agents = (details as { agents?: unknown } | null | undefined)?.agents;
   return Array.isArray(agents) ? agents.filter((a): a is string => typeof a === 'string') : [];

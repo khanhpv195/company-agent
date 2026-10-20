@@ -10,6 +10,7 @@ import type {
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api-client';
 import { qk } from '../../lib/query-keys';
+import { enabledIdsOf, toggleId } from './skills.logic';
 
 export const useSkillsQuery = () =>
   useQuery({
@@ -75,20 +76,50 @@ export function useDeleteSkill() {
   });
 }
 
-/** `skillIds` is the full enabled set of the agent. */
-export function useSetAgentSkills(agentId: string) {
+/**
+ * Switches one skill of the agent on or off. The full enabled set is computed from the agent
+ * cache when the click is handled (after in-flight refetches are cancelled), applied
+ * optimistically, sent as the whole set, and rolled back on error.
+ */
+export function useToggleAgentSkill(agentId: string) {
   const qc = useQueryClient();
+  const find = () => qc.getQueryData<Agent[]>(qk.agents)?.find((a) => a.id === agentId);
   return useMutation({
     meta: { silentError: true },
-    mutationFn: (skillIds: string[]) =>
-      api.put<Agent>(`/agents/${encodeURIComponent(agentId)}/skills`, {
+    mutationFn: (_skillId: string) => {
+      // onMutate has already applied the toggle, so the cache holds the set to send.
+      const skillIds = enabledIdsOf(find() ?? { skills: [] });
+      return api.put<Agent>(`/agents/${encodeURIComponent(agentId)}/skills`, {
         skillIds,
-      } satisfies SetAgentSkillsInput),
+      } satisfies SetAgentSkillsInput);
+    },
+    onMutate: async (skillId: string) => {
+      await qc.cancelQueries({ queryKey: qk.agents });
+      const previous = find();
+      if (previous) {
+        const next = toggleId(enabledIdsOf(previous), skillId);
+        qc.setQueryData<Agent[]>(qk.agents, (old) =>
+          old?.map((a) =>
+            a.id === agentId
+              ? { ...a, skills: a.skills.map((s) => ({ ...s, enabled: next.includes(s.id) })) }
+              : a,
+          ),
+        );
+      }
+      return { previous };
+    },
+    onError: (_err, _skillId, ctx) => {
+      const previous = ctx?.previous;
+      if (previous)
+        qc.setQueryData<Agent[]>(qk.agents, (old) =>
+          old?.map((a) => (a.id === previous.id ? previous : a)),
+        );
+    },
     onSuccess: (agent) => {
       qc.setQueryData<Agent[]>(qk.agents, (old) =>
         old?.map((a) => (a.id === agent.id ? agent : a)),
       );
-      return refresh(qc);
     },
+    onSettled: () => refresh(qc),
   });
 }

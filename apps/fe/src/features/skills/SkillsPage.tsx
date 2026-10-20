@@ -57,7 +57,9 @@ export function SkillsPage() {
       {query.isPending ? (
         <div className="loading">{t('people.loading')}</div>
       ) : query.isError ? (
-        <div className="err-line">{errorMessage(query.error, t, 'skills.loadFailed')}</div>
+        <div className="err-line" role="alert">
+          {errorMessage(query.error, t, 'skills.loadFailed')}
+        </div>
       ) : skills.length === 0 ? (
         <p style={{ color: 'var(--muted)' }}>
           {query.data?.length ? t('skills.noMatch') : t('skills.empty')}
@@ -159,10 +161,20 @@ function NewSkillModal({ onClose }: { onClose: () => void }) {
       <h3>{t('skills.new')}</h3>
       <p>{t('skills.newLead')}</p>
       <div className="seg" style={{ marginBottom: 12 }}>
-        <button className={mode === 'blank' ? 'on' : ''} onClick={() => setMode('blank')}>
+        <button
+          type="button"
+          className={mode === 'blank' ? 'on' : ''}
+          aria-pressed={mode === 'blank'}
+          onClick={() => setMode('blank')}
+        >
           {t('skills.blank')}
         </button>
-        <button className={mode === 'template' ? 'on' : ''} onClick={() => setMode('template')}>
+        <button
+          type="button"
+          className={mode === 'template' ? 'on' : ''}
+          aria-pressed={mode === 'template'}
+          onClick={() => setMode('template')}
+        >
           {t('skills.fromTemplate')}
         </button>
       </div>
@@ -178,7 +190,11 @@ function NewSkillModal({ onClose }: { onClose: () => void }) {
             style={bad('name')}
             onChange={(e) => setName(e.target.value)}
           />
-          {errors.name && <div className="err-line">{errors.name}</div>}
+          {errors.name && (
+            <div className="err-line" role="alert">
+              {errors.name}
+            </div>
+          )}
           <input
             className="field"
             style={{ marginTop: 8, ...bad('slug') }}
@@ -188,7 +204,11 @@ function NewSkillModal({ onClose }: { onClose: () => void }) {
             value={slug}
             onChange={(e) => setSlug(e.target.value.toLowerCase())}
           />
-          {errors.slug && <div className="err-line">{errors.slug}</div>}
+          {errors.slug && (
+            <div className="err-line" role="alert">
+              {errors.slug}
+            </div>
+          )}
           <textarea
             className="field"
             style={{
@@ -204,7 +224,11 @@ function NewSkillModal({ onClose }: { onClose: () => void }) {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
-          {errors.description && <div className="err-line">{errors.description}</div>}
+          {errors.description && (
+            <div className="err-line" role="alert">
+              {errors.description}
+            </div>
+          )}
           <textarea
             className="field skill-code"
             style={{
@@ -219,17 +243,21 @@ function NewSkillModal({ onClose }: { onClose: () => void }) {
             value={content}
             onChange={(e) => setContent(e.target.value)}
           />
-          {errors.content && <div className="err-line">{errors.content}</div>}
+          {errors.content && (
+            <div className="err-line" role="alert">
+              {errors.content}
+            </div>
+          )}
         </>
       ) : (
         <>
-          <div className="skill-templates" role="listbox" aria-label={t('skills.fromTemplate')}>
+          <div className="skill-templates" role="radiogroup" aria-label={t('skills.fromTemplate')}>
             {SKILL_TEMPLATES.map((tpl) => (
               <button
                 key={tpl.id}
                 type="button"
-                role="option"
-                aria-selected={template?.id === tpl.id}
+                role="radio"
+                aria-checked={template?.id === tpl.id}
                 className={`skill-tpl ${template?.id === tpl.id ? 'on' : ''}`}
                 onClick={() => {
                   setTemplate(tpl);
@@ -241,11 +269,17 @@ function NewSkillModal({ onClose }: { onClose: () => void }) {
               </button>
             ))}
           </div>
-          {errors.template && <div className="err-line">{errors.template}</div>}
+          {errors.template && (
+            <div className="err-line" role="alert">
+              {errors.template}
+            </div>
+          )}
         </>
       )}
       {create.error && (
-        <div className="err-line">{errorMessage(create.error, t, 'skills.saveFailed')}</div>
+        <div className="err-line" role="alert">
+          {errorMessage(create.error, t, 'skills.saveFailed')}
+        </div>
       )}
       <div className="wz-foot">
         <button className="btn" onClick={onClose}>

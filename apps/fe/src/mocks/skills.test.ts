@@ -1,4 +1,4 @@
-import { MAX_AGENT_SKILLS } from '@repo/shared';
+import { MAX_AGENT_SKILLS, MAX_AGENT_SKILL_CONTENT } from '@repo/shared';
 import { describe, expect, it } from 'vitest';
 import { HttpError, MockBackend } from './backend';
 import {
@@ -113,5 +113,38 @@ describe('mock skill library', () => {
       (_, i) => createSkill(b, { name: `S${i}`, description: 'd', content: 'c' }).id,
     );
     expect(() => setAgentSkills(b, b.agent('a1')!, ids)).toThrow(/tối đa/);
+  });
+
+  it('checks the 30-skill limit before looking the ids up', () => {
+    const b = setup();
+    const ids = Array.from({ length: MAX_AGENT_SKILLS + 1 }, (_, i) => `missing-${i}`);
+    expect(() => setAgentSkills(b, b.agent('a1')!, ids)).toThrow(
+      expect.objectContaining({ status: 400 }),
+    );
+  });
+
+  it('rejects a skill edit or restore that pushes an agent over the size limit', () => {
+    const b = setup();
+    const agent = b.agent('a1')!;
+    const sk = b.db.skills.find((s) => s.id === 'sk-git')!;
+    expect(agent.skills.find((x) => x.id === sk.id)!.enabled).toBe(true);
+    const err = (fn: () => unknown) => {
+      try {
+        fn();
+      } catch (e) {
+        return e as HttpError;
+      }
+      throw new Error('did not throw');
+    };
+    // The agent's other skills already hold almost the whole budget.
+    for (const x of agent.skills) x.enabled = true;
+    const others = b.db.skills.filter((x) => x.id !== sk.id);
+    others[0].content = 'x'.repeat(MAX_AGENT_SKILL_CONTENT - 10);
+    for (const x of others.slice(1)) x.content = '';
+    sk.content = 'y';
+    const e = err(() => updateSkill(b, sk.id, { content: 'z'.repeat(20) }));
+    expect(e.status).toBe(400);
+    expect((e.details?.agents as string[]).length).toBeGreaterThan(0);
+    expect(skillVersions(b, sk.id)).toHaveLength(1);
   });
 });

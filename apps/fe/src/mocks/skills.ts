@@ -61,11 +61,38 @@ export function rebuildAgentSkills(b: MockBackend): void {
 /** Every id is a live skill, within the per-agent count and size limits. */
 export function assertSkillIds(b: MockBackend, ids: readonly string[]): void {
   const unique = [...new Set(ids)];
-  const skills = unique.map((id) => skillOr404(b, id));
-  if (skills.length > MAX_AGENT_SKILLS)
+  // Same order as the API: the count first, then the ids, then the total size.
+  if (unique.length > MAX_AGENT_SKILLS)
     throw new HttpError(400, `Mỗi agent tối đa ${MAX_AGENT_SKILLS} skill`);
+  const skills = unique.map((id) => skillOr404(b, id));
   if (skills.reduce((n, s) => n + s.content.length, 0) > MAX_AGENT_SKILL_CONTENT)
     throw new HttpError(400, 'Các skill của agent quá dài');
+}
+
+/**
+ * A skill that grows must not push an agent that has it on past the total size limit
+ * (400, naming the agents like the API's `skills.TOO_LARGE`).
+ */
+function assertAgentsFit(b: MockBackend, skill: Skill, newLength: number): void {
+  const tooLarge = b.db.agents
+    .filter((a) => a.skills.some((x) => x.id === skill.id && x.enabled))
+    .filter((a) => {
+      const total = a.skills
+        .filter((x) => x.enabled)
+        .reduce(
+          (n, x) =>
+            n +
+            (x.id === skill.id
+              ? newLength
+              : (b.db.skills.find((s) => s.id === x.id)?.content.length ?? 0)),
+          0,
+        );
+      return total > MAX_AGENT_SKILL_CONTENT;
+    })
+    .map((a) => a.name)
+    .sort((x, y) => x.localeCompare(y));
+  if (tooLarge.length)
+    throw new HttpError(400, 'Các skill của agent quá dài', { agents: tooLarge });
 }
 
 const changed = (b: MockBackend) => {
@@ -74,8 +101,9 @@ const changed = (b: MockBackend) => {
   b.emit({ type: 'agents.changed' });
 };
 
-const text = (v: unknown, max: number, label: string): string => {
-  const out = typeof v === 'string' ? v.trim() : '';
+const text = (v: unknown, max: number, label: string, collapse = false): string => {
+  let out = typeof v === 'string' ? v.trim() : '';
+  if (collapse) out = out.replace(/\s+/g, ' ');
   if (!out || out.length > max) throw new HttpError(400, `${label} cần từ 1 đến ${max} ký tự`);
   return out;
 };
@@ -97,7 +125,7 @@ function uniqueSlug(b: MockBackend, base: string): string {
 export function createSkill(b: MockBackend, input: Partial<CreateSkillInput>): Skill {
   const tpl = input.templateId ? skillTemplateById(input.templateId) : undefined;
   if (input.templateId && !tpl) throw new HttpError(400, 'Mẫu skill không tồn tại');
-  const name = text(input.name ?? tpl?.name, MAX_SKILL_NAME, 'Tên');
+  const name = text(input.name ?? tpl?.name, MAX_SKILL_NAME, 'Tên', true);
   const description = text(input.description ?? tpl?.description, MAX_SKILL_DESCRIPTION, 'Mô tả');
   const body = content(input.content ?? tpl?.content);
   let slug: string;
@@ -156,13 +184,15 @@ function newVersion(b: MockBackend, skill: Skill, next: UpdateSkillInput & { con
 export function updateSkill(b: MockBackend, id: string, patch: UpdateSkillInput): Skill {
   const skill = skillOr404(b, id);
   assertCanEdit(b, skill);
-  const name = patch.name === undefined ? skill.name : text(patch.name, MAX_SKILL_NAME, 'Tên');
+  const name =
+    patch.name === undefined ? skill.name : text(patch.name, MAX_SKILL_NAME, 'Tên', true);
   const description =
     patch.description === undefined
       ? skill.description
       : text(patch.description, MAX_SKILL_DESCRIPTION, 'Mô tả');
   const body = patch.content === undefined ? skill.content : content(patch.content);
   if (name !== skill.name || description !== skill.description || body !== skill.content) {
+    assertAgentsFit(b, skill, body.length);
     newVersion(b, skill, { name, description, content: body });
     changed(b);
   }
@@ -174,6 +204,7 @@ export function restoreSkill(b: MockBackend, id: string, version: unknown): Skil
   assertCanEdit(b, skill);
   const old = skillVersions(b, id).find((v) => v.version === version);
   if (!old) throw new HttpError(404, 'Không tìm thấy phiên bản');
+  assertAgentsFit(b, skill, old.content.length);
   newVersion(b, skill, { name: old.name, description: old.description, content: old.content });
   changed(b);
   return view(b, skill);

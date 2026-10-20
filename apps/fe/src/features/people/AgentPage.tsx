@@ -18,8 +18,8 @@ import { useDepartments } from '../departments/departments.api';
 import { cleanTitle, isTitleValid } from '../departments/departments.logic';
 import { usePeople } from '../workspace/workspace.api';
 import { useSession } from '../workspace/workspace.api';
-import { useSetAgentSkills } from '../skills/skills.api';
-import { atSkillLimit, canSetAgentSkills, enabledIdsOf, toggleId } from '../skills/skills.logic';
+import { useToggleAgentSkill } from '../skills/skills.api';
+import { atSkillLimit, canSetAgentSkills, enabledIdsOf } from '../skills/skills.logic';
 import {
   MANAGER_ONLY_HINT,
   nextAgentAfterDelete,
@@ -493,7 +493,7 @@ function PersonaEditor({
 function SkillsPanel({ agent }: { agent: Agent }) {
   const t = useT();
   const me = useSession().data?.user;
-  const set = useSetAgentSkills(agent.id);
+  const set = useToggleAgentSkill(agent.id);
   const canEdit = canSetAgentSkills(me, agent);
   const on = enabledIdsOf(agent);
   const full = atSkillLimit(on.length);
@@ -515,9 +515,12 @@ function SkillsPanel({ agent }: { agent: Agent }) {
                 <button
                   type="button"
                   aria-pressed={s.enabled}
-                  disabled={blocked || set.isPending}
+                  aria-disabled={blocked || set.isPending}
                   title={canEdit ? undefined : t('people.skillsChangeHint')}
-                  onClick={() => set.mutate(toggleId(on, s.id))}
+                  onClick={() => {
+                    if (blocked || set.isPending) return;
+                    set.mutate(s.id);
+                  }}
                 >
                   {s.name}
                 </button>
@@ -540,9 +543,11 @@ function SkillsPanel({ agent }: { agent: Agent }) {
         {canEdit ? t('people.toggleSkills') : t('people.skillsChangeHint')}
         {canEdit && full ? ` ${t('people.skillsLimit', { max: MAX_AGENT_SKILLS })}` : ''}
       </p>
-      {set.error && (
-        <div className="err-line">{errorMessage(set.error, t, 'skills.saveFailed')}</div>
-      )}
+      <div role="alert">
+        {set.error && (
+          <div className="err-line">{errorMessage(set.error, t, 'skills.saveFailed')}</div>
+        )}
+      </div>
     </>
   );
 }

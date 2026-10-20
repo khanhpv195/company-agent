@@ -8,6 +8,7 @@ import {
   filterSkills,
   inUseAgents,
   isSkillDirty,
+  normalizeSkillName,
   slugifySkill,
   toggleId,
   validateSkillForm,
@@ -107,5 +108,13 @@ describe('form', () => {
     const s = { name: 'A', description: 'd', content: 'c' };
     expect(isSkillDirty(s, { ...s, name: ' A ' })).toBe(false);
     expect(isSkillDirty(s, { ...s, content: 'c2' })).toBe(true);
+  });
+
+  it('normalizes whitespace in the name on both sides, like the server', () => {
+    const s = { name: 'Báo giá', description: 'd', content: 'c' };
+    expect(isSkillDirty(s, { ...s, name: '  Báo   giá ' })).toBe(false);
+    expect(isSkillDirty({ ...s, name: 'Báo  giá' }, s)).toBe(false);
+    expect(isSkillDirty(s, { ...s, name: 'Báo giá 2' })).toBe(true);
+    expect(normalizeSkillName(' a \t b\n c ')).toBe('a b c');
   });
 });
