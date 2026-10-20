@@ -14,11 +14,13 @@ describe('text utils', () => {
 
   it('collapses whitespace in department names', () => {
     expect(cleanDepartmentName({ value: '  Kinh \u0007  doanh  ' })).toBe('Kinh doanh');
+    expect(cleanDepartmentName({ value: 'Kinh\ndoanh' })).toBe('Kinh doanh');
     expect(cleanDepartmentName({ value: 5 })).toBe(5);
   });
 
   it('turns an empty title into null', () => {
     expect(cleanTitle({ value: '  Trưởng phòng \n' })).toBe('Trưởng phòng');
+    expect(cleanTitle({ value: 'Trưởng\nphòng' })).toBe('Trưởng phòng');
     expect(cleanTitle({ value: ' \u0000 ' })).toBeNull();
     expect(cleanTitle({ value: null })).toBeNull();
     expect(cleanTitle({ value: undefined })).toBeUndefined();

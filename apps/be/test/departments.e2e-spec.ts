@@ -189,6 +189,25 @@ describe('Departments (e2e)', () => {
       expect((await channels()).find((r) => r.id === third.roomId)?.name).toBe('ke-toan-3');
     });
 
+    it('serializes two parallel creates with the same name: one success, one 409', async () => {
+      const results = await Promise.all([
+        raw('post', '/departments', owner, { name: 'Kinh doanh' }),
+        raw('post', '/departments', owner, { name: 'kinh  doanh' }),
+      ]);
+      expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+      expect(await list()).toHaveLength(1);
+    });
+
+    it('gives parallel creates with colliding slugs distinct channel names', async () => {
+      const results = await Promise.all([
+        raw('post', '/departments', owner, { name: 'Kế toán' }),
+        raw('post', '/departments', owner, { name: 'Ke toan' }),
+      ]);
+      expect(results.map((r) => r.status)).toEqual([200, 200]);
+      const names = (await channels()).map((r) => r.name).sort();
+      expect(names).toEqual(['ke-toan', 'ke-toan-2']);
+    });
+
     it('validates the body', async () => {
       await fail('post', '/departments', owner, 400, { name: '   ' });
       await fail('post', '/departments', owner, 400, {});
@@ -409,6 +428,29 @@ describe('Departments (e2e)', () => {
       expect((await call<AgentContract[]>('get', '/agents', owner)).map((x) => x.name)).toEqual(
         expect.arrayContaining(['Alpha', 'Beta']),
       );
+    });
+
+    it('moves an agent to another computer and department in one PATCH (simulated -> real, plan lock)', async () => {
+      const sim = await createComputer(dataSource, owner.workspaceId, { simulated: true });
+      const real = await createComputer(dataSource, owner.workspaceId, { name: 'real-box' });
+      const moving = await createAgent(dataSource, owner.workspaceId, sim.id, { name: 'Mover' });
+      const dept = await create('Kinh doanh');
+      const updated = await call<AgentContract>('patch', `/agents/${moving.id}`, owner, {
+        computerId: real.id,
+        departmentId: dept.id,
+        title: 'Chuyển',
+      });
+      expect(updated).toMatchObject({
+        computerId: real.id,
+        departmentId: dept.id,
+        title: 'Chuyển',
+      });
+      expect(await roomsOfAgent(moving.id)).toEqual(['kinh-doanh']);
+      await fail('patch', `/agents/${moving.id}`, owner, 404, {
+        computerId: sim.id,
+        departmentId: NIL,
+      });
+      expect((await agentOf(moving.id)).computerId).toBe(real.id);
     });
 
     it('answers 404 for unknown, malformed, deleted and foreign ids', async () => {

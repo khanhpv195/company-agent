@@ -34,7 +34,7 @@ import { SeatSyncService } from '../billing/seat-sync.service';
 import { PlanLimitsService } from '../billing/plan-limits.service';
 import { Member } from '../workspace/entities/member.entity';
 import { Workspace } from '../workspace/entities/workspace.entity';
-import { joinDefaultRooms } from '../chat/room-access';
+import { joinDefaultRooms, lockRooms } from '../chat/room-access';
 import { findLiveDepartment, joinDepartmentRoom } from '../departments/department-access';
 import { Department } from '../departments/entities/department.entity';
 import { toSession } from '../workspace/workspace.mapper';
@@ -262,7 +262,7 @@ export class InvitesService {
     try {
       const result = await transactionWithEffects(this.dataSource, async (manager, effects) => {
         const now = this.clock.now();
-        // Lock the workspace first (a concurrent delete waits or has already won), then redeem.
+        // Lock rooms, then the workspace (a concurrent delete waits or has already won), then redeem.
         const pending = returnedRows<{ workspace_id: string }>(
           await manager.query(
             `SELECT workspace_id FROM invites WHERE token_hash = $1 AND accepted_at IS NULL
@@ -271,6 +271,9 @@ export class InvitesService {
           ),
         )[0];
         if (!pending) throw new NotFoundException({ message: 'invites.INVALID' });
+        // Lock order: the rooms lock (a concurrent department delete holds it) before the
+        // workspaces row, as in `removeMember`. The department read below is then stable.
+        await lockRooms(manager, pending.workspace_id);
         const locked = returnedRows<{ id: string; plan: WorkspacePlan }>(
           await manager.query('SELECT id, plan FROM workspaces WHERE id = $1 FOR UPDATE', [
             pending.workspace_id,

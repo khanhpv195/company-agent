@@ -16,6 +16,7 @@ import {
 } from '@repo/shared';
 import { DataSource, IsNull } from 'typeorm';
 import { ClockService } from '../../common/clock';
+import { cleanTitle } from '../../common/utils/text.util';
 import { ASSIGNMENT_ENDED_EVENT, type AssignmentEndedPayload } from '../events';
 import type { AuthContext, ComputerContext } from '../../common/types';
 import {
@@ -77,6 +78,10 @@ const optString = (input: Input, key: string, max: number): string | undefined =
   if (input[key] === undefined || input[key] === null) return undefined;
   return reqString(input, key, max);
 };
+/** Job title as the HTTP DTOs clean it: control characters stripped, empty -> null. */
+const toolJobTitle = (value: string | null | undefined): string | null | undefined =>
+  cleanTitle({ value }) as string | null | undefined;
+
 /** Like `optString`, but `null` stays `null` (it clears the field). */
 const nullableString = (input: Input, key: string, max: number): string | null | undefined =>
   input[key] === null ? null : optString(input, key, max);
@@ -475,7 +480,7 @@ export class GatewayToolsService {
         workdir: toolWorkdir(optString(input, 'workdir', MAX_WORKDIR_LENGTH)),
         maxTurns: optInt(input, 'maxTurns', 1, MAX_TURNS_LIMIT),
         departmentId: optString(input, 'departmentId', 100),
-        title: optString(input, 'title', MAX_JOB_TITLE)?.trim(),
+        title: toolJobTitle(optString(input, 'title', MAX_JOB_TITLE)) ?? undefined,
       },
       { memberId: ctx.member?.id ?? null },
     );
@@ -495,7 +500,6 @@ export class GatewayToolsService {
       // The list is the full set of enabled skills.
       skills = catalog.map((skill) => ({ id: skill.id, enabled: wanted.includes(skill.id) }));
     }
-    const title = nullableString(input, 'title', MAX_JOB_TITLE);
     const updated = await this.agents.update(
       ctx.workspaceId,
       id,
@@ -506,7 +510,7 @@ export class GatewayToolsService {
         workdir: toolWorkdir(optString(input, 'workdir', MAX_WORKDIR_LENGTH)),
         maxTurns: optInt(input, 'maxTurns', 1, MAX_TURNS_LIMIT),
         departmentId: nullableString(input, 'departmentId', 100),
-        title: title === null ? null : title?.trim(),
+        title: toolJobTitle(nullableString(input, 'title', MAX_JOB_TITLE)),
       },
       { memberId: ctx.member?.id ?? null },
     );

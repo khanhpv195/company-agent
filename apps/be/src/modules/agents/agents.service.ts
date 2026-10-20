@@ -156,6 +156,17 @@ export class AgentsService {
         row.name = dto.name;
         renamed = true;
       }
+      // Lock order: the rooms lock (taken when resolving the department) comes before the
+      // workspaces row lock (`limits.lockPlan`), as everywhere else. Resolve the department first.
+      let department: Department | null | undefined;
+      const departmentBefore = row.departmentId;
+      if (dto.departmentId !== undefined) {
+        department =
+          dto.departmentId === null
+            ? null
+            : await this.requireDepartment(manager, workspaceId, dto.departmentId);
+        row.departmentId = department?.id ?? null;
+      }
       if (dto.computerId !== undefined && dto.computerId !== row.computerId) {
         const computer = await this.requireComputer(manager, workspaceId, dto.computerId);
         const open = await manager.exists(Assignment, {
@@ -173,15 +184,6 @@ export class AgentsService {
       if (dto.maxTurns !== undefined) row.maxTurns = dto.maxTurns;
       if (dto.persona !== undefined) row.persona = dto.persona;
       if (dto.title !== undefined) row.title = dto.title;
-      let department: Department | null | undefined;
-      const departmentBefore = row.departmentId;
-      if (dto.departmentId !== undefined) {
-        department =
-          dto.departmentId === null
-            ? null
-            : await this.requireDepartment(manager, workspaceId, dto.departmentId);
-        row.departmentId = department?.id ?? null;
-      }
       if (dto.skills) {
         const enabledById = new Map(dto.skills.map((skill) => [skill.id, skill.enabled]));
         row.skills = row.skills.map((skill) =>
