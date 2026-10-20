@@ -1,6 +1,6 @@
 # Spec: Onboarding thiết lập công ty (phòng ban, nhân viên, agent, skill)
 
-Trạng thái: **bản nháp, chờ duyệt**. Chưa có code.
+Trạng thái: **đã chốt hết câu hỏi, chờ duyệt lần cuối**. Chưa có code.
 
 ## 1. Mục tiêu
 
@@ -14,7 +14,10 @@ khi chạy. Owner/admin xem, sửa, tạo skill riêng trong app.
 
 Đã chốt với product owner:
 
-- Kết nối máy trước, chat sau.
+- **Chat ngay sau khi đăng ký**, kết nối máy chung ở bước Tạo đội ngũ (thay quyết định cũ "kết nối
+  máy trước").
+- Trợ lý **ở lại** sau onboarding thành **Trợ lý quản trị** cho owner/admin (mục 5.8).
+- Nhân viên người và agent có **chức danh** (mục 3.1).
 - Skill sửa được, user tuỳ biến theo công ty.
 - Phòng ban gồm cả nhân viên người lẫn agent.
 - Trợ lý thiết lập dùng **Jev** (model ra quyết định của TypeSafe) để điều phối từng lượt chat;
@@ -60,6 +63,12 @@ Bảng mới `departments`:
 | `room_id`                                | uuid FK rooms, nullable, set null | phòng chat của phòng ban                             |
 | `template_id`                            | varchar nullable                  | template gốc, để thống kê                            |
 | `created_at`, `updated_at`, `deleted_at` |                                   | xoá mềm                                              |
+
+**Chức danh.** Thêm `title varchar(80) NULL` vào `members`, `invites` và `agents` (ví dụ "Trưởng
+phòng Kinh doanh", "Nhân viên CSKH"). Người tự sửa chức danh của mình ở hồ sơ; owner/admin sửa cho
+mọi người và mọi agent. Agent tạo từ template nhận chức danh mặc định của template. Chức danh hiện ở
+People, hồ sơ, danh sách thành viên phòng ban, và trong brief gửi agent ("Requested by: Lan, Trưởng
+phòng Kinh doanh") để agent biết người đang nhờ là ai.
 
 Thêm `department_id uuid NULL` (FK, set null) vào `members`, `agents`, `invites`.
 Một người/agent thuộc tối đa một phòng ban. Không có phòng ban = "Chưa phân phòng".
@@ -154,27 +163,35 @@ giống cũ trong một phiên bản chuyển tiếp.
 ## 5. Luồng onboarding
 
 ```
-Đăng ký → Kết nối máy (đã có) → Chat với Trợ lý thiết lập → Thẻ đề xuất → Tạo đội ngũ → Vào app
+Đăng ký → Chat với Trợ lý thiết lập → Thẻ đề xuất → Kết nối máy chung → Tạo đội ngũ → Vào app
 ```
+
+Chat và thẻ đề xuất chạy hoàn toàn phía server (Jev + câu kịch bản), nên không cần máy. Máy chỉ cần
+ở bước tạo agent.
 
 ### 5.1 Trợ lý thiết lập
 
-Khi `cli-status` báo máy đầu tiên đã kết nối và workspace chưa onboard, backend tạo (idempotent,
-dưới khoá workspace):
+Ngay khi đăng ký (trong transaction của `register`, idempotent), backend tạo:
 
-- agent **Trợ lý thiết lập** trên máy đó, persona riêng (mục 5.5), không có skill, `system = true`
-  (cột mới trên `agents`; agent system không tính vào danh sách nhân viên, không có phòng ban).
-  Tin nhắn gửi cho nó **không** tự đi thẳng xuống máy như agent thường: backend điều phối bằng Jev
-  trước (mục 5.7), và chỉ tạo assignment cho máy khi Jev chọn nhánh Claude;
-- phòng mặc định `all-members` (nếu chưa có), thêm owner vào;
+- agent **Trợ lý thiết lập** với `system = true` (cột mới trên `agents`; agent system không tính
+  vào danh sách nhân viên, không có phòng ban, không tính vào giới hạn gói). `computer_id` đổi thành
+  nullable, kèm CHECK: chỉ agent `system` mới được để trống. Khi máy chung đầu tiên kết nối, agent
+  này được gán vào máy đó. Tin nhắn gửi cho nó **không** tự đi xuống máy như agent thường: backend
+  điều phối bằng Jev trước (mục 5.7), và chỉ tạo assignment khi Jev chọn nhánh Claude **và** đã có
+  máy;
+- phòng mặc định `all-members`, thêm owner vào;
 - DM giữa owner và Trợ lý thiết lập, kèm tin nhắn chào đầu tiên.
 
-Trang onboarding bước 4 hiện DM đó: tái dùng component chat hiện có, khung gọn. Nút "Bỏ qua" vẫn
-còn; bỏ qua thì gọi `POST /onboarding/complete` như cũ.
+Trang onboarding hiện DM đó: tái dùng component chat hiện có, khung gọn. Nút "Bỏ qua" vẫn còn; bỏ
+qua thì gọi `POST /onboarding/complete` như cũ và vào app (kết nối máy sau ở trang Máy tính).
 
-Sau khi onboard xong, Trợ lý thiết lập bị lưu trữ (xoá mềm). Owner/admin có thể chạy lại từ
-Settings → Đội ngũ → "Thiết lập lại với trợ lý"; khi đó nó chỉ **thêm** phòng ban/agent mới, không xoá
-cái có sẵn.
+**Chưa có máy mà Jev chọn nhánh Claude**: trả câu kịch bản "Câu này mình trả lời kỹ hơn được sau khi
+kết nối máy chung. Giờ mình đi tiếp phần thiết lập nhé", rồi hỏi câu tiếp theo. Câu hỏi đó được lưu;
+khi máy kết nối, trợ lý trả lời lại bằng Claude.
+
+**Chưa cấu hình Jev và chưa có máy**: trợ lý chạy bảng câu hỏi cố định, mỗi câu kèm nút trả lời
+nhanh (chọn ngành, chọn quy mô, tick phòng ban, tick kênh). Vẫn ra được thẻ đề xuất, nên onboarding
+không bao giờ phụ thuộc Jev hay máy. Nút trả lời nhanh cũng hiện khi có Jev, để user bấm thay vì gõ.
 
 ### 5.2 Tool cho Trợ lý thiết lập
 
@@ -203,11 +220,12 @@ interface SetupProposalCard {
     templateId: string | null;
     agents: {
       name: string;
+      title: string | null;
       templateId: string | null;
       persona?: string;
       skillTemplateIds: string[];
     }[];
-    people: { name: string; email: string; role: 'admin' | 'member' }[];
+    people: { name: string; email: string; title: string | null; role: 'admin' | 'member' }[];
   }[];
   appliedAt?: string;
 }
@@ -217,17 +235,24 @@ Backend kiểm tra thẻ khi agent gọi `propose_setup`: template id phải t�
 hợp lệ, tối đa 12 phòng ban, 40 agent, 100 người. Sai thì tool trả lỗi để agent sửa.
 
 FE hiển thị thẻ dạng cây phòng ban, sửa trực tiếp được: đổi tên, bỏ một mục, thêm agent từ template,
-bật/tắt skill, thêm người (tên + email). Nút **Tạo đội ngũ** và **Bỏ qua đề xuất**.
+bật/tắt skill, thêm người (tên, email, chức danh), sửa chức danh agent. Nút **Tạo đội ngũ** và **Bỏ
+qua đề xuất**.
+
+Bấm **Tạo đội ngũ** khi chưa có máy: thẻ mở bảng kết nối máy chung ngay trong chat (tái dùng
+`PairingPanel`, lời nhắc "Nên dùng máy luôn bật, mọi agent của công ty chạy trên máy này"). Máy kết
+nối xong thì tự gọi `POST /onboarding/setup`. Đề xuất đã sửa được lưu lại trên thẻ, nên đóng app rồi
+mở lại vẫn còn.
 
 ### 5.4 Áp dụng: `POST /onboarding/setup`
 
 Owner/admin. Body: `{ messageId, proposal }` (bản đã sửa). Một transaction dưới `WorkspaceLockService`:
 
-1. Kiểm tra thẻ còn `pending` (gọi lại lần hai trả kết quả cũ, idempotent).
+1. Kiểm tra thẻ còn `pending` (gọi lại lần hai trả kết quả cũ, idempotent), và workspace đã có một
+   máy thật đang online; chưa có thì trả 409 `onboarding.COMPUTER_REQUIRED`.
 2. Tạo skill từ template còn thiếu trong thư viện workspace (theo `template_id`, không tạo trùng).
 3. Tạo phòng ban (trùng tên với phòng ban có sẵn thì dùng lại), tạo room của phòng ban.
-4. Tạo agent trên máy đã kết nối: persona và skill từ template; tên trùng thì thêm hậu tố ` 2`.
-5. Tạo lời mời cho từng người, gắn `department_id`. Email gửi sau commit (`sendSafe`). Người đã là
+4. Tạo agent trên máy chung: persona, chức danh và skill từ template; tên trùng thì thêm hậu tố ` 2`.
+5. Tạo lời mời cho từng người, gắn `department_id` và `title`. Email gửi sau commit (`sendSafe`). Người đã là
    thành viên thì chỉ gán phòng ban.
 6. Thêm owner, agent của phòng ban vào room phòng ban; thêm mọi agent vào `all-members`.
 7. Đổi thẻ sang `applied`, ghi audit `setup.applied` (số phòng ban, agent, lời mời).
@@ -237,8 +262,8 @@ Owner/admin. Body: `{ messageId, proposal }` (bản đã sửa). Một transacti
 Trả về tóm tắt; FE chuyển sang dashboard với thông báo "Đã tạo 4 phòng ban, 6 agent, gửi 3 lời
 mời".
 
-Khi nhận lời mời, member mới được gán phòng ban từ invite và vào room của phòng ban, cùng với
-`joinDefaultRooms` như hiện tại.
+Khi nhận lời mời, member mới được gán phòng ban và chức danh từ invite và vào room của phòng ban,
+cùng với `joinDefaultRooms` như hiện tại.
 
 ### 5.5 Persona của Trợ lý thiết lập
 
@@ -311,8 +336,9 @@ công ty cần phòng ban nào, đã đủ thông tin để đề xuất chưa, 
 
 - Tối đa 20 lượt Jev và 5 lượt Claude cho một phiên thiết lập; vượt thì dừng hỏi, đưa thẻ đề xuất
   theo `facts` hiện có.
-- Jev lỗi, quá 3 giây, hoặc chưa cấu hình key: chuyển sang nhánh Claude như mục 5.1 (hành vi cũ).
-  Không bao giờ chặn onboarding vì Jev.
+- Jev lỗi, quá 3 giây, hoặc chưa cấu hình key: nếu đã có máy thì chuyển sang nhánh Claude; chưa có
+  máy thì dùng bảng câu hỏi cố định có nút trả lời nhanh (mục 5.1). Không bao giờ chặn onboarding vì
+  Jev.
 - Mỗi lần gọi ghi một dòng `routing_decisions` (workspace, phiên, câu hỏi, câu trả lời, độ trễ, số
   token, nhánh đã chọn) để đo tỉ lệ dùng Claude và chỉnh ngưỡng. Không lưu key, xoá theo
   `RETENTION_ENABLED` như audit.
@@ -336,6 +362,29 @@ ba"). Chỉ gửi tin nhắn trong DM thiết lập, không gửi tin nhắn ph�
 
 **Mở rộng sau** (không thuộc spec này): dùng cùng `DecisionClient` để định tuyến tin nhắn trong
 phòng ban tới đúng agent, và quyết định một việc có cần chạy Claude hay trả lời bằng mẫu được.
+
+### 5.8 Sau onboarding: Trợ lý quản trị
+
+Product owner chốt: trợ lý **ở lại**. Khi workspace đã onboard, agent system đổi tên hiển thị thành
+**Trợ lý quản trị** (cùng một agent, cùng DM, giữ lịch sử thiết lập).
+
+- **Ai dùng được:** owner và admin, mỗi người có DM riêng với trợ lý. Member không thấy trợ lý trong
+  danh sách agent và không nhắn được (403 `agents.SYSTEM_RESTRICTED`); member vẫn tạo skill ở trang
+  Skill như mục 6.
+- **Làm được gì:** cùng cơ chế thẻ đề xuất, mở rộng `card.kind`:
+  - `setup_proposal`: thêm phòng ban, agent, mời người (như onboarding, chỉ **thêm**, không xoá);
+  - `agent_change`: đổi persona, chức danh, phòng ban, bật/tắt skill của một agent;
+  - `skill_draft`: soạn một skill mới từ mô tả của user (nội dung do Claude viết), user sửa rồi bấm
+    Lưu vào thư viện.
+
+  Mọi thay đổi chỉ áp dụng khi người bấm nút trên thẻ, qua API bình thường với quyền của người bấm.
+  Trợ lý không có tool xoá và không tự áp dụng.
+
+- **Điều phối:** vẫn qua Jev. Câu hỏi `intent` thêm nhãn `add_team`, `change_agent`, `new_skill`,
+  `question_about_app`. Việc cần viết tự do (soạn skill, giải thích) đi nhánh Claude trên máy chung.
+- **Giới hạn:** 50 lượt Jev và 10 lượt Claude mỗi người mỗi ngày; vượt thì trợ lý báo và hẹn hôm sau.
+- **Rail:** trợ lý ghim ở đầu danh sách DM của owner/admin, có huy hiệu "Hệ thống"; không xoá được,
+  chỉ ẩn được.
 
 ## 6. Quản lý sau onboarding
 
@@ -384,29 +433,32 @@ Mọi thông báo lỗi mới có key i18n ở cả `en` và `vi`. Swagger dùng
 
 ## 8. Migration và tương thích
 
-1. Tạo `departments`, `skills`; thêm `department_id` vào `members`, `agents`, `invites`; thêm
-   `system` vào `agents`; thêm `card` vào `chat_messages`.
-2. Với mỗi workspace có sẵn: tạo các skill trong thư viện cho mọi id cũ đang được agent dùng (id cũ
+1. Tạo `departments`, `skills`, `skill_versions`, `setup_sessions`, `routing_decisions`; thêm
+   `department_id` và `title` vào `members`, `agents`, `invites`; thêm `system` vào `agents` và cho
+   `agents.computer_id` nullable kèm CHECK (`system = true OR computer_id IS NOT NULL`); thêm `card`
+   vào `chat_messages`. Mọi chỗ đang giả định agent luôn có máy (gateway, task engine, simulator,
+   People) loại agent `system` ra hoặc xử lý `computer_id` null.
+2. Workspace có sẵn: tạo Trợ lý quản trị (gán vào máy thật online đầu tiên nếu có) và DM với
+   owner/admin.
+3. Với mỗi workspace có sẵn: tạo các skill trong thư viện cho mọi id cũ đang được agent dùng (id cũ
    như `web-research` ánh xạ sang skill template tương ứng; id không có template thì tạo skill với
    nội dung ngắn mô tả đúng tên), rồi đổi `agents.skills` sang uuid mới. Migration có `down`.
-3. Workspace đã onboard không thấy bước mới; có nút chạy lại ở Settings.
-4. Dev seed: thêm phòng ban Kinh doanh, Kỹ thuật, gán các agent và member seed vào.
+4. Workspace đã onboard không thấy bước onboarding; dùng Trợ lý quản trị để thêm đội ngũ.
+5. Dev seed: thêm phòng ban Kinh doanh, Kỹ thuật, chức danh cho member seed, gán agent và member
+   seed vào phòng ban, tạo Trợ lý quản trị.
 
 ## 9. Giai đoạn và PR
 
-| PR  | Nội dung                                                                                                                                                                  | Độ khó (CLAUDE.md)                              |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| A   | Phòng ban: bảng, API, gán người/agent, room phòng ban, invite có phòng ban, People/rail nhóm theo phòng ban, Settings → Đội ngũ                                           | khó (migration, shared contract)                |
-| B   | Thư viện skill: bảng, API, Settings → Skill, trang agent dùng thư viện, migration dữ liệu cũ, daemon cài `SKILL.md`, nội dung skill template                              | khó (migration, daemon, Claude Code)            |
-| C   | Onboarding: spike Jev, module `routing` + `SetupOrchestrator`, template, Trợ lý thiết lập, tool `propose_setup`, thẻ đề xuất, `POST /onboarding/setup`, simulator và mock | khó (auth/onboarding, realtime, tích hợp ngoài) |
+| PR  | Nội dung                                                                                                                                                                                                                | Độ khó (CLAUDE.md)                              |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| A   | Phòng ban và chức danh: bảng, API, gán người/agent, room phòng ban, invite có phòng ban và chức danh, People/rail nhóm theo phòng ban, Settings → Đội ngũ                                                               | khó (migration, shared contract)                |
+| B   | Thư viện skill: bảng, API, Settings → Skill, trang agent dùng thư viện, migration dữ liệu cũ, daemon cài `SKILL.md`, nội dung skill template                                                                            | khó (migration, daemon, Claude Code)            |
+| C   | Onboarding: spike Jev, module `routing` + `SetupOrchestrator`, agent `system` không cần máy, template, Trợ lý thiết lập / quản trị, thẻ đề xuất (cả kết nối máy trong thẻ), `POST /onboarding/setup`, simulator và mock | khó (auth/onboarding, realtime, tích hợp ngoài) |
 
 Mỗi PR có: unit test cho rule thuần, e2e cho API (quyền, idempotent, trùng tên, workspace khác
 không thấy), test FE cho logic thẻ đề xuất, test CLI cho đồng bộ skill.
 
 ## 10. Câu hỏi còn mở
 
-1. Trợ lý thiết lập có nên **ở lại** làm "trợ lý quản trị" (thêm agent, sửa skill qua chat) thay vì
-   lưu trữ sau onboarding không?
-2. Nhân viên người có cần thêm trường **chức danh** (ví dụ "Trưởng phòng Kinh doanh") không?
-3. Có muốn cho chat thiết lập **trước** khi kết nối máy không? Với Jev, phần hỏi và đề xuất không cần
-   máy; chỉ bước Tạo đội ngũ và nhánh Claude mới cần máy.
+Không còn câu hỏi nào. Việc chưa chắc duy nhất là định dạng API của Jev, chốt bằng spike đầu PR C với
+key product owner cung cấp.
