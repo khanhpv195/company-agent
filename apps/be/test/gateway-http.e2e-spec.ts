@@ -146,7 +146,7 @@ describe('Gateway over HTTP (e2e)', () => {
   };
 
   const call = async <T>(
-    method: 'get' | 'post' | 'patch' | 'delete',
+    method: 'get' | 'post' | 'put' | 'patch' | 'delete',
     path: string,
     body?: object,
     client = me,
@@ -963,6 +963,101 @@ describe('Gateway over HTTP (e2e)', () => {
       // a demoted requester loses the admin tools at once
       await dataSource.query(`UPDATE members SET role = 'member' WHERE id = $1`, [me.memberId]);
       await toolError('create_agent', second.id, { name: 'Another' }, 403);
+    });
+
+    it('create_agent / update_agent set department and title, and list tools show them', async () => {
+      const dept = await call<{ id: string }>('post', '/departments', { name: 'Kinh doanh' });
+      const foreignOwner = await registerAndLogin(app);
+      const foreignDept = await call<{ id: string }>(
+        'post',
+        '/departments',
+        { name: 'Kinh doanh' },
+        foreignOwner,
+      );
+      const memberRun = await runningChat('tạo agent', member);
+      await toolError(
+        'create_agent',
+        memberRun.claimed.id,
+        { name: 'Nope', departmentId: dept.id, title: 'x' },
+        403,
+      );
+      await toolError(
+        'update_agent',
+        memberRun.claimed.id,
+        { id: agent.id, departmentId: dept.id },
+        403,
+      );
+
+      const ownerChat = await dmOf(agent, me);
+      await sendChat(ownerChat, 'tạo agent', me);
+      const run = (await gw<Claimed | null>('/claim', { maxChats: 3 }))!;
+      await gw(`/assignments/${run.id}/accept`, { attempt: 1 });
+
+      const created = (
+        await tool('create_agent', run.id, {
+          name: 'Hằng',
+          departmentId: dept.id,
+          title: ' Trợ \n lý\u0007 ',
+        })
+      ).result as { id: string; departmentId: string | null; title: string | null };
+      expect(created).toMatchObject({ departmentId: dept.id, title: 'Trợ lý' });
+      // the tool layer turns a 404 into a plain 400 the model can read
+      expect(
+        await toolError('create_agent', run.id, { name: 'Lạc', departmentId: foreignDept.id }, 400),
+      ).toBe('Department not found');
+      await toolError('create_agent', run.id, { name: 'Dài', title: 'x'.repeat(81) }, 400);
+
+      // read tools show department name and title
+      const agents = (await tool('list_agents', run.id)).result as Array<{
+        id: string;
+        department: string | null;
+        title: string | null;
+      }>;
+      expect(agents.find((a) => a.id === created.id)).toMatchObject({
+        department: 'Kinh doanh',
+        title: 'Trợ lý',
+      });
+      await call('put', `/members/${member.memberId}/department`, { departmentId: dept.id });
+      await call('put', `/members/${member.memberId}/title`, { title: 'Nhân viên' });
+      const members = (await tool('list_members', run.id)).result as Array<{
+        id: string;
+        department: string | null;
+        title: string | null;
+      }>;
+      expect(members.find((m) => m.id === member.memberId)).toMatchObject({
+        department: 'Kinh doanh',
+        title: 'Nhân viên',
+      });
+
+      // update: change, clear with null, blank title clears, foreign department -> 404
+      const other = await call<{ id: string }>('post', '/departments', { name: 'Kỹ thuật' });
+      const changed = (
+        await tool('update_agent', run.id, {
+          id: created.id,
+          departmentId: other.id,
+          title: 'Kỹ sư',
+        })
+      ).result as { departmentId: string | null; title: string | null };
+      expect(changed).toMatchObject({ departmentId: other.id, title: 'Kỹ sư' });
+      const cleared = (
+        await tool('update_agent', run.id, { id: created.id, departmentId: null, title: null })
+      ).result as { departmentId: string | null; title: string | null };
+      expect(cleared).toMatchObject({ departmentId: null, title: null });
+      await tool('update_agent', run.id, { id: created.id, title: 'Tạm' });
+      const blank = (await tool('update_agent', run.id, { id: created.id, title: '\u0007' }))
+        .result as { title: string | null };
+      expect(blank.title).toBeNull();
+      await toolError(
+        'update_agent',
+        run.id,
+        { id: created.id, departmentId: foreignDept.id },
+        400,
+      );
+      // omitted fields stay
+      await tool('update_agent', run.id, { id: created.id, departmentId: dept.id, title: 'Giữ' });
+      const kept = (await tool('update_agent', run.id, { id: created.id, persona: 'p' }))
+        .result as { departmentId: string | null; title: string | null };
+      expect(kept).toMatchObject({ departmentId: dept.id, title: 'Giữ' });
     });
 
     it('stops create_agent at the plan limit (403 billing.LIMIT_REACHED)', async () => {

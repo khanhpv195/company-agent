@@ -1,6 +1,7 @@
 export const qk = {
   session: ['session'] as const,
   members: ['members'] as const,
+  departments: ['departments'] as const,
   invites: ['invites'] as const,
   computers: ['computers'] as const,
   agents: ['agents'] as const,

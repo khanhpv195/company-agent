@@ -7,6 +7,7 @@ export * from './interfaces/billing.interface';
 export * from './interfaces/computer.interface';
 export * from './interfaces/connection.interface';
 export * from './interfaces/dashboard.interface';
+export * from './interfaces/department.interface';
 export * from './interfaces/message.interface';
 export * from './interfaces/pagination.interface';
 export * from './interfaces/realtime-event.interface';

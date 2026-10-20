@@ -23,6 +23,12 @@ export class MemberDto implements MemberContract {
 
   @ApiProperty({ type: String, nullable: true, example: '#b0516f' })
   color: string | null;
+
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
+  departmentId: string | null;
+
+  @ApiProperty({ type: String, nullable: true, example: 'Trưởng phòng Kinh doanh' })
+  title: string | null;
 }
 
 export class SessionUserDto extends MemberDto implements SessionUser {

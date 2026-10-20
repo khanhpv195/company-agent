@@ -32,6 +32,16 @@ import {
   verifyEmail,
   WithMeta,
 } from './account';
+import {
+  assertDepartmentId,
+  cleanTitle,
+  createDepartment,
+  deleteDepartment,
+  joinDepartmentRoom,
+  liveDepartments,
+  reorderDepartments,
+  updateDepartment,
+} from './departments';
 import { createInvite, previewInvite, revokeInvite, seedTeam, takeInvite, team } from './team';
 import { skillCatalog } from './fixtures';
 import {
@@ -192,7 +202,7 @@ on('POST', '/onboarding/complete', () => {
 // ----- account -----
 const me = () => db.members.find((m) => m.id === db.meId)!;
 on('PATCH', '/me', (ctx) => {
-  updateProfile(me(), body<{ name?: unknown; color?: unknown }>(ctx));
+  updateProfile(me(), body<{ name?: unknown; color?: unknown; title?: unknown }>(ctx));
   backend.emit({ type: 'members.changed' });
   return session();
 });
@@ -308,7 +318,9 @@ on('GET', '/invites', () => {
 });
 on('POST', '/invites', (ctx) => {
   requireManager();
-  const invite = createInvite(backend.now(), me().name, body(ctx), me().role);
+  const invite = createInvite(backend.now(), me().name, body(ctx), me().role, (id) =>
+    assertDepartmentId(backend, id),
+  );
   if (db.members.some((m) => m.email.toLowerCase() === invite.invite.email))
     throw new HttpError(409, 'Email này đã có tài khoản');
   return invite;
@@ -333,15 +345,21 @@ on('POST', '/invites/accept', (ctx) => {
   if (!isStrongPassword(password ?? '', invite.email))
     throw new HttpError(400, 'Mật khẩu cần 8-128 ký tự, gồm chữ và số');
   if (acceptTerms !== true) throw new HttpError(400, 'Bạn cần đồng ý với điều khoản');
-  takeInvite(token);
+  const accepted = takeInvite(token);
+  const departmentId = db.departments.some((d) => d.id === accepted.departmentId)
+    ? accepted.departmentId
+    : null;
   const member = {
     id: `u${db.members.length + 1}-${Math.floor(backend.now() % 10000)}`,
     name: name.trim(),
     email: invite.email,
     role: invite.role,
     color: PALETTE[db.members.length % PALETTE.length],
+    departmentId,
+    title: accepted.title,
   };
   db.members.push(member);
+  joinDepartmentRoom(backend, departmentId, 'member', member.id);
   db.meId = member.id;
   db.session.loggedIn = true;
   db.session.onboarded = true;
@@ -358,6 +376,24 @@ on('PATCH', '/members/:id', ({ params, body: raw }) => {
   if (target.id === me().id || target.role === 'owner')
     throw new HttpError(403, 'Không thể đổi vai trò của chủ sở hữu');
   target.role = role;
+  backend.emit({ type: 'members.changed' });
+  return target;
+});
+on('PUT', '/members/:id/department', ({ params, body: raw }) => {
+  requireManager();
+  const target = memberOr404(params.id);
+  target.departmentId = assertDepartmentId(
+    backend,
+    (raw as { departmentId?: unknown } | undefined)?.departmentId,
+  );
+  joinDepartmentRoom(backend, target.departmentId, 'member', target.id);
+  backend.emit({ type: 'departments.changed' });
+  return target;
+});
+on('PUT', '/members/:id/title', ({ params, body: raw }) => {
+  requireManager();
+  const target = memberOr404(params.id);
+  target.title = cleanTitle((raw as { title?: unknown } | undefined)?.title);
   backend.emit({ type: 'members.changed' });
   return target;
 });
@@ -452,6 +488,35 @@ on('DELETE', '/computers/:id', ({ params, query }) => {
   backend.emit({ type: 'agents.changed' });
   backend.emit({ type: 'rooms.changed' });
   return null;
+});
+on('GET', '/departments', () => liveDepartments(backend));
+on('POST', '/departments', (ctx) => {
+  requireManager();
+  return createDepartment(backend, body(ctx));
+});
+// Declared before `/departments/:id`, like the API, so "order" is not taken as an id.
+on('PUT', '/departments/order', (ctx) => {
+  requireManager();
+  return reorderDepartments(backend, body<{ ids?: unknown }>(ctx).ids);
+});
+on('PATCH', '/departments/:id', (ctx) => {
+  requireManager();
+  return updateDepartment(backend, ctx.params.id, body(ctx));
+});
+on('DELETE', '/departments/:id', ({ params }) => {
+  requireManager();
+  deleteDepartment(backend, params.id);
+  return null;
+});
+on('PUT', '/agents/:id/department', ({ params, body: raw }) => {
+  requireManager();
+  const a = backend.agent(params.id);
+  if (!a) throw new HttpError(404, 'Agent not found');
+  backend.updateAgent(a, {
+    departmentId: ((raw as { departmentId?: string | null } | undefined)?.departmentId ?? null) as
+      string | null,
+  });
+  return a;
 });
 on('GET', '/agents', () => db.agents);
 on('GET', '/agents/skill-catalog', () => skillCatalog());

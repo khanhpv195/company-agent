@@ -1,5 +1,6 @@
 import type { AssignableRole, Invite, InvitePreview, Member } from '@repo/shared';
 import { HttpError } from './backend';
+import { cleanTitle } from './departments';
 
 const DAY = 86_400_000;
 
@@ -20,8 +21,10 @@ export function seedTeam(now: number): void {
 export function createInvite(
   now: number,
   inviterName: string,
-  input: { email?: unknown; role?: unknown },
+  input: { email?: unknown; role?: unknown; departmentId?: unknown; title?: unknown },
   actorRole: Member['role'] = 'owner',
+  /** Throws for a department that does not exist; returns its id (or null). */
+  departmentOf: (id: unknown) => string | null = () => null,
 ) {
   const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
   if (!/^\S+@\S+\.\S+$/.test(email)) throw new HttpError(400, 'Email không hợp lệ');
@@ -35,6 +38,8 @@ export function createInvite(
     id: `inv-${team.seq}`,
     email,
     role: input.role as AssignableRole,
+    departmentId: departmentOf(input.departmentId),
+    title: cleanTitle(input.title),
     invitedByName: inviterName,
     createdAt: iso(now),
     expiresAt: iso(now + 7 * DAY),

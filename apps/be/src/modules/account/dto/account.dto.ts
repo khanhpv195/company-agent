@@ -1,14 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import type {
-  AuthSessionInfo,
-  ChangePasswordInput,
-  DeleteAccountInput,
-  UpdateProfileInput,
+import {
+  MAX_TITLE,
+  type AuthSessionInfo,
+  type ChangePasswordInput,
+  type DeleteAccountInput,
+  type UpdateProfileInput,
 } from '@repo/shared';
 import { Transform } from 'class-transformer';
 import { IsNotEmpty, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { i18nValidationMessage } from 'nestjs-i18n';
-import { cleanName } from '../../../common/utils';
+import { cleanName, cleanTitle } from '../../../common/utils';
 import { IsStrongPassword } from '../../../common/validators';
 
 export const PROFILE_NAME_MAX = 60;
@@ -32,6 +33,19 @@ export class UpdateProfileDto implements UpdateProfileInput {
   @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
   @Matches(/^#[0-9a-fA-F]{6}$/, { message: i18nValidationMessage('validation.IS_HEX_COLOR') })
   color?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    maxLength: MAX_TITLE,
+    example: 'Trưởng phòng Kinh doanh',
+    description: 'Own job title; empty or null clears it',
+  })
+  @Transform(cleanTitle)
+  @IsOptional()
+  @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
+  @MaxLength(MAX_TITLE, { message: i18nValidationMessage('validation.MAX_LENGTH') })
+  title?: string | null;
 }
 
 export class ChangePasswordDto implements ChangePasswordInput {

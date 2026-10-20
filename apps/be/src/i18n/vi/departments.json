@@ -1,0 +1,12 @@
+{
+  "LISTED": "Đã tải danh sách phòng ban",
+  "CREATED": "Đã tạo phòng ban",
+  "UPDATED": "Đã cập nhật phòng ban",
+  "REORDERED": "Đã sắp xếp lại phòng ban",
+  "DELETED": "Đã xoá phòng ban",
+  "ASSIGNED": "Đã cập nhật phòng ban",
+  "TITLE_UPDATED": "Đã cập nhật chức danh",
+  "NOT_FOUND": "Không tìm thấy phòng ban",
+  "NAME_TAKEN": "Đã có phòng ban trùng tên",
+  "ORDER_MISMATCH": "Danh sách phải có đủ từng phòng ban đúng một lần"
+}

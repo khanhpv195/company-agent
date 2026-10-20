@@ -22,7 +22,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolSpec[] = [
   {
     name: 'list_agents',
     access: 'read',
-    description: 'List the agents of this workspace.',
+    description: 'List the agents of this workspace, with their job title and department.',
     shape: {},
   },
   {
@@ -40,7 +40,7 @@ export const WORKSPACE_TOOLS: WorkspaceToolSpec[] = [
   {
     name: 'list_members',
     access: 'read',
-    description: 'List the human members of this workspace.',
+    description: 'List the human members of this workspace, with their job title and department.',
     shape: {},
   },
   {
@@ -98,12 +98,15 @@ export const WORKSPACE_TOOLS: WorkspaceToolSpec[] = [
       workdir: z.string().optional(),
       maxTurns: z.number().int().optional(),
       computerId: z.string().optional(),
+      departmentId: z.string().optional(),
+      title: z.string().optional(),
     },
   },
   {
     name: 'update_agent',
     access: 'admin',
-    description: 'Update an agent persona, skills, name, workdir or maxTurns (owner/admin only).',
+    description:
+      'Update an agent persona, skills, name, workdir, maxTurns, department or job title (owner/admin only). departmentId and title may be null to clear them.',
     shape: {
       id: z.string(),
       persona: z.string().optional(),
@@ -111,6 +114,8 @@ export const WORKSPACE_TOOLS: WorkspaceToolSpec[] = [
       name: z.string().optional(),
       workdir: z.string().optional(),
       maxTurns: z.number().int().optional(),
+      departmentId: z.string().nullable().optional(),
+      title: z.string().nullable().optional(),
     },
   },
 ];

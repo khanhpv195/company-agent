@@ -14,13 +14,15 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { i18nValidationMessage } from 'nestjs-i18n';
-import type {
-  Agent as AgentContract,
-  AgentActivity as AgentActivityContract,
-  AgentSkill,
-  AgentStatus,
-  CreateAgentInput,
-  UpdateAgentInput,
+import { cleanTitle } from '../../../common/utils';
+import {
+  MAX_TITLE,
+  type Agent as AgentContract,
+  type AgentActivity as AgentActivityContract,
+  type AgentSkill,
+  type AgentStatus,
+  type CreateAgentInput,
+  type UpdateAgentInput,
 } from '@repo/shared';
 
 export const MAX_PERSONA_LENGTH = 20_000;
@@ -79,6 +81,12 @@ export class AgentDto implements AgentContract {
 
   @ApiProperty({ description: 'Demo agent on a simulated computer (it cannot do real work)' })
   simulated: boolean;
+
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
+  departmentId: string | null;
+
+  @ApiProperty({ type: String, nullable: true, example: 'Nhân viên CSKH' })
+  title: string | null;
 }
 
 export class AgentActivityDto implements AgentActivityContract {
@@ -162,6 +170,22 @@ export class CreateAgentDto implements CreateAgentInput {
   @Min(1, { message: i18nValidationMessage('validation.MIN') })
   @Max(MAX_TURNS_LIMIT, { message: i18nValidationMessage('validation.MAX') })
   maxTurns?: number;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'A live department of the workspace; the agent joins its room',
+  })
+  @IsOptional()
+  @IsString(isString)
+  @IsNotEmpty(notEmpty)
+  departmentId?: string;
+
+  @ApiPropertyOptional({ maxLength: MAX_TITLE })
+  @IsOptional()
+  @Transform(cleanTitle)
+  @IsString(isString)
+  @MaxLength(MAX_TITLE, maxLength)
+  title?: string;
 }
 
 export class UpdateAgentDto implements UpdateAgentInput {
@@ -213,4 +237,22 @@ export class UpdateAgentDto implements UpdateAgentInput {
   @IsString(isString)
   @IsNotEmpty(notEmpty)
   computerId?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description: 'A live department of the workspace (the agent joins its room), or null for none',
+  })
+  @IsOptional()
+  @IsString(isString)
+  @IsNotEmpty(notEmpty)
+  departmentId?: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, maxLength: MAX_TITLE })
+  @IsOptional()
+  @Transform(cleanTitle)
+  @IsString(isString)
+  @MaxLength(MAX_TITLE, maxLength)
+  title?: string | null;
 }

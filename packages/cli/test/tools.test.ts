@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { GatewayClient } from '../src/api.js';
 import {
   callWorkspaceTool,
@@ -59,6 +60,20 @@ describe('workspace tool proxy', () => {
     expect(inTask).toContain('create_task');
     expect(inTask).not.toContain('create_agent');
     expect(inTask).not.toContain('update_agent');
+  });
+
+  it('lets create_agent and update_agent carry a department and a job title', () => {
+    const shapeOf = (name: string) => z.object(WORKSPACE_TOOLS.find((t) => t.name === name)!.shape);
+    const created = shapeOf('create_agent').parse({
+      name: 'Bán hàng',
+      departmentId: 'd1',
+      title: 'Trợ lý',
+    });
+    expect(created).toMatchObject({ departmentId: 'd1', title: 'Trợ lý' });
+    // update_agent may clear both with null.
+    const cleared = shapeOf('update_agent').parse({ id: 'a1', departmentId: null, title: null });
+    expect(cleared).toMatchObject({ departmentId: null, title: null });
+    expect(shapeOf('create_agent').safeParse({ name: 'x', departmentId: 5 }).success).toBe(false);
   });
 
   it('builds an in-process MCP server named workspace', () => {

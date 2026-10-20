@@ -7,6 +7,9 @@ export interface Member {
   role: MemberRole;
   /** Avatar background; the UI falls back to the default avatar color. */
   color: string | null;
+  departmentId: string | null;
+  /** Job title, e.g. "Trưởng phòng Kinh doanh". */
+  title: string | null;
 }
 
 export type WorkspacePlan = 'free' | 'pro' | 'team';
@@ -61,6 +64,8 @@ export interface UpdateProfileInput {
   name?: string;
   /** `#rrggbb`, or `null` to go back to the default avatar color. */
   color?: string | null;
+  /** Own job title: trimmed, at most 80 characters; empty or `null` clears it. */
+  title?: string | null;
 }
 
 export interface ChangePasswordInput {
@@ -111,6 +116,8 @@ export interface Invite {
   id: string;
   email: string;
   role: AssignableRole;
+  departmentId: string | null;
+  title: string | null;
   /** `null` when the inviter was removed since. */
   invitedByName: string | null;
   /** ISO timestamps. */
@@ -121,6 +128,10 @@ export interface Invite {
 export interface CreateInviteInput {
   email: string;
   role: AssignableRole;
+  /** A live department of the workspace; the invitee joins it (and its room) on accept. */
+  departmentId?: string;
+  /** Copied onto the new member on accept. */
+  title?: string;
 }
 
 /** `token` and `url` are returned once, so the admin can copy the link when mail is not set up. */

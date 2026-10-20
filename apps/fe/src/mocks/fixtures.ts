@@ -4,6 +4,7 @@ import type {
   Computer,
   Connection,
   DashboardSummary,
+  Department,
   Member,
   Message,
   MessageAuthor,
@@ -22,6 +23,7 @@ export interface MockDb {
   meId: string;
   workspace: Workspace;
   members: Member[];
+  departments: Department[];
   computers: Computer[];
   agents: Agent[];
   rooms: Room[];
@@ -125,9 +127,39 @@ export function seed(now: number = Date.now()): MockDb {
     items.map(([title, done]) => ({ title, done: !!done }));
 
   const members: Member[] = [
-    { id: 'u1', name: 'khanhpv', email: 'khanhpv@holatech.tech', role: 'owner', color: null },
-    { id: 'u2', name: 'Hằng', email: 'hang@holatech.tech', role: 'member', color: '#b0516f' },
-    { id: 'u3', name: 'Minh', email: 'minh@holatech.tech', role: 'admin', color: '#3d8a6a' },
+    {
+      id: 'u1',
+      name: 'khanhpv',
+      email: 'khanhpv@holatech.tech',
+      role: 'owner',
+      color: null,
+      departmentId: null,
+      title: null,
+    },
+    {
+      id: 'u2',
+      name: 'Hằng',
+      email: 'hang@holatech.tech',
+      role: 'member',
+      color: '#b0516f',
+      departmentId: 'd-sales',
+      title: 'Trưởng phòng Kinh doanh',
+    },
+    {
+      id: 'u3',
+      name: 'Minh',
+      email: 'minh@holatech.tech',
+      role: 'admin',
+      color: '#3d8a6a',
+      departmentId: 'd-eng',
+      title: 'Kỹ sư trưởng',
+    },
+  ];
+
+  // The demo departments have no channel yet (`roomId: null`); new ones get one.
+  const departments: Department[] = [
+    { id: 'd-sales', name: 'Kinh doanh', icon: 'chart', rank: 0, roomId: null },
+    { id: 'd-eng', name: 'Kỹ thuật', icon: 'terminal', rank: 1, roomId: null },
   ];
 
   const computers: Computer[] = [
@@ -167,6 +199,8 @@ export function seed(now: number = Date.now()): MockDb {
       maxTurns: 40,
       status: 'idle',
       simulated: false,
+      departmentId: 'd-eng',
+      title: 'Trợ lý kỹ thuật',
       skills: skills(SKILL_NAMES, DEFAULT_ENABLED_SKILLS),
     },
     {
@@ -180,6 +214,8 @@ export function seed(now: number = Date.now()): MockDb {
       maxTurns: 40,
       status: 'idle',
       simulated: false,
+      departmentId: 'd-sales',
+      title: 'Nghiên cứu thị trường',
       skills: skills(['web-research', 'summarize', 'pdf-reader', 'translate'], 4),
     },
     {
@@ -193,6 +229,8 @@ export function seed(now: number = Date.now()): MockDb {
       maxTurns: 40,
       status: 'offline',
       simulated: true,
+      departmentId: null,
+      title: null,
       skills: skills(['deploy-app', 'git-ops', 'build-app'], 3),
     },
   ];
@@ -792,6 +830,7 @@ export function seed(now: number = Date.now()): MockDb {
     meId: 'u1',
     workspace: { id: 'w1', name: 'khanhpv workspace', slug: 'khanhpv', plan: 'free' },
     members,
+    departments,
     computers,
     agents,
     rooms,

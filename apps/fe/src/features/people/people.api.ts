@@ -24,10 +24,13 @@ export function useUpdateAgent(id: string) {
   return useMutation({
     mutationFn: (patch: UpdateAgentInput) => api.patch<Agent>(`/agents/${id}`, patch),
     meta: { silentError: true },
-    onSuccess: (agent) =>
+    onSuccess: (agent) => {
       qc.setQueryData<Agent[]>(qk.agents, (old) =>
         old?.map((a) => (a.id === agent.id ? agent : a)),
-      ),
+      );
+      void qc.invalidateQueries({ queryKey: qk.rooms });
+      void qc.invalidateQueries({ queryKey: qk.departments });
+    },
   });
 }
 
@@ -51,6 +54,8 @@ export function useCreateAgent() {
       qc.setQueryData<Agent[]>(qk.agents, (old) => (old ? [...old, agent] : old));
       void qc.invalidateQueries({ queryKey: qk.agents });
       void qc.invalidateQueries({ queryKey: qk.billing });
+      void qc.invalidateQueries({ queryKey: qk.rooms });
+      void qc.invalidateQueries({ queryKey: qk.departments });
     },
   });
 }

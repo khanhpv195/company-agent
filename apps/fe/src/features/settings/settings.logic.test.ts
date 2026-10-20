@@ -70,6 +70,9 @@ describe('settings sections and profile', () => {
     const ids = (r: 'owner' | 'admin' | 'member' | undefined) => sectionsFor(r).map((s) => s.id);
     expect(ids('member')).toEqual(['profile', 'security', 'appearance', 'members', 'desktop']);
     expect(ids('admin')).toContain('audit');
+    expect(ids('admin')).toContain('team');
+    expect(ids('owner')).toContain('team');
+    expect(ids('member')).not.toContain('team');
     expect(ids('owner')).not.toContain('billing'); // plan limits off by default
     expect(sectionsFor('owner', true).map((s) => s.id)).toContain('billing');
     expect(sectionsFor('admin', true).map((s) => s.id)).toContain('billing');
@@ -81,6 +84,22 @@ describe('settings sections and profile', () => {
     expect(profilePatch(saved, { name: ' Ann ', color: null })).toBeNull();
     expect(profilePatch(saved, { name: 'Bo', color: null })).toEqual({ name: 'Bo' });
     expect(profilePatch(saved, { name: 'Ann', color: '#fff' })).toEqual({ color: '#fff' });
+  });
+  it('sends the job title only when it changed, trimmed, empty as null', () => {
+    const saved = { name: 'Ann', color: null, title: 'Sales' };
+    expect(profilePatch(saved, { name: 'Ann', color: null, title: ' Sales ' })).toBeNull();
+    expect(profilePatch(saved, { name: 'Ann', color: null, title: ' Head ' })).toEqual({
+      title: 'Head',
+    });
+    expect(profilePatch(saved, { name: 'Ann', color: null, title: '  ' })).toEqual({ title: null });
+    expect(
+      profilePatch(
+        { name: 'Ann', color: null, title: null },
+        { name: 'Ann', color: null, title: '' },
+      ),
+    ).toBeNull();
+    // a form without a title field never sends one
+    expect(profilePatch(saved, { name: 'Bo', color: null })).toEqual({ name: 'Bo' });
   });
   it('validates the name length', () => {
     expect(isProfileNameValid('  ')).toBe(false);

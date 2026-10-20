@@ -15,7 +15,10 @@ import { In, Not, Repository, type EntityManager } from 'typeorm';
 import { randomUUID } from 'node:crypto';
 import { AGENT_ACTIVITY_LIMIT } from '../../contacts';
 import { Room } from '../chat/entities/room.entity';
+import { lockRooms } from '../chat/room-access';
 import { Computer } from '../computers/entities/computer.entity';
+import { findLiveDepartment, joinDepartmentRoom } from '../departments/department-access';
+import type { Department } from '../departments/entities/department.entity';
 import { TaskEngineService } from '../tasks/task-engine.service';
 import { WorkspaceLockService } from '../tasks/workspace-lock.service';
 import { slugify } from '../workspace/slug.util';
@@ -76,6 +79,10 @@ export class AgentsService {
     return this.lock.run(workspaceId, async (manager, effects) => {
       const computer = await this.requireComputer(manager, workspaceId, dto.computerId);
       await this.assertNameFree(manager, workspaceId, dto.name);
+      const department =
+        dto.departmentId === undefined
+          ? null
+          : await this.requireDepartment(manager, workspaceId, dto.departmentId);
       const catalog = defaultSkills();
       const known = new Set(catalog.map((skill) => skill.id));
       if (dto.skills?.some((skill) => !known.has(skill.id)))
@@ -105,6 +112,8 @@ export class AgentsService {
           skills,
           workdir: dto.workdir ?? `~/.agent/agents/${this.slugOf(dto.name)}-${id.slice(0, 6)}`,
           maxTurns: dto.maxTurns ?? DEFAULT_MAX_TURNS,
+          departmentId: department?.id ?? null,
+          title: dto.title ?? null,
         }),
       );
       row.computer = computer;
@@ -121,6 +130,7 @@ export class AgentsService {
         manager,
       );
       effects.push(() => this.events.publish(workspaceId, { type: 'agents.changed' }));
+      if (department) await this.placeInDepartment(manager, effects, actor, row, department, null);
       return toAgent(row, false);
     });
   }
@@ -146,6 +156,17 @@ export class AgentsService {
         row.name = dto.name;
         renamed = true;
       }
+      // Lock order: the rooms lock (taken when resolving the department) comes before the
+      // workspaces row lock (`limits.lockPlan`), as everywhere else. Resolve the department first.
+      let department: Department | null | undefined;
+      const departmentBefore = row.departmentId;
+      if (dto.departmentId !== undefined) {
+        department =
+          dto.departmentId === null
+            ? null
+            : await this.requireDepartment(manager, workspaceId, dto.departmentId);
+        row.departmentId = department?.id ?? null;
+      }
       if (dto.computerId !== undefined && dto.computerId !== row.computerId) {
         const computer = await this.requireComputer(manager, workspaceId, dto.computerId);
         const open = await manager.exists(Assignment, {
@@ -162,6 +183,7 @@ export class AgentsService {
       if (dto.workdir !== undefined) row.workdir = dto.workdir;
       if (dto.maxTurns !== undefined) row.maxTurns = dto.maxTurns;
       if (dto.persona !== undefined) row.persona = dto.persona;
+      if (dto.title !== undefined) row.title = dto.title;
       if (dto.skills) {
         const enabledById = new Map(dto.skills.map((skill) => [skill.id, skill.enabled]));
         row.skills = row.skills.map((skill) =>
@@ -182,6 +204,9 @@ export class AgentsService {
         manager,
       );
       effects.push(() => this.events.publish(workspaceId, { type: 'agents.changed' }));
+      if (department !== undefined) {
+        await this.placeInDepartment(manager, effects, actor, row, department, departmentBefore);
+      }
       if (renamed) {
         // The agent's DMs carry its name.
         await manager.update(Room, { agentId: row.id, kind: 'dm' }, { name: row.name });
@@ -226,6 +251,51 @@ export class AgentsService {
       : null;
     if (!row) throw new NotFoundException({ message: 'agents.NOT_FOUND' });
     return row;
+  }
+
+  /** A live department of the workspace, under the rooms lock (so its room cannot vanish meanwhile). */
+  private async requireDepartment(
+    manager: EntityManager,
+    workspaceId: string,
+    departmentId: string,
+  ): Promise<Department> {
+    await lockRooms(manager, workspaceId);
+    return findLiveDepartment(manager, workspaceId, departmentId);
+  }
+
+  /**
+   * The agent now belongs to `department` (null = none): it joins the department room (never
+   * leaving another one) and the move is audited. Joining again is a no-op.
+   */
+  private async placeInDepartment(
+    manager: EntityManager,
+    effects: Array<() => void>,
+    actor: AuditActor,
+    agent: Agent,
+    department: Department | null,
+    from: string | null,
+  ): Promise<void> {
+    const joined = department
+      ? await joinDepartmentRoom(manager, department, { agentId: agent.id })
+      : false;
+    if (from !== (department?.id ?? null)) {
+      await this.audit.record(
+        {
+          workspaceId: agent.workspaceId,
+          actorMemberId: actor.memberId,
+          action: 'agent.department_changed',
+          targetType: 'agent',
+          targetId: agent.id,
+          meta: { from, to: department?.id ?? null },
+          ip: actor.ip,
+        },
+        manager,
+      );
+      effects.push(() => this.events.publish(agent.workspaceId, { type: 'departments.changed' }));
+    }
+    if (joined) {
+      effects.push(() => this.events.publish(agent.workspaceId, { type: 'rooms.changed' }));
+    }
   }
 
   private async requireComputer(

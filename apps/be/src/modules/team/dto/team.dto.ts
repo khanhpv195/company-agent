@@ -1,15 +1,16 @@
-import { ApiProperty } from '@nestjs/swagger';
-import type {
-  AcceptInviteInput,
-  AssignableRole,
-  CreateInviteInput,
-  CreateInviteResult,
-  DeleteWorkspaceInput,
-  Invite as InviteContract,
-  InvitePreview,
-  TransferOwnershipInput,
-  UpdateMemberRoleInput,
-  UpdateWorkspaceInput,
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  MAX_TITLE,
+  type AcceptInviteInput,
+  type AssignableRole,
+  type CreateInviteInput,
+  type CreateInviteResult,
+  type DeleteWorkspaceInput,
+  type Invite as InviteContract,
+  type InvitePreview,
+  type TransferOwnershipInput,
+  type UpdateMemberRoleInput,
+  type UpdateWorkspaceInput,
 } from '@repo/shared';
 import { Transform } from 'class-transformer';
 import {
@@ -18,12 +19,13 @@ import {
   IsEmail,
   IsIn,
   IsNotEmpty,
+  IsOptional,
   IsString,
   IsUUID,
   MaxLength,
 } from 'class-validator';
 import { i18nValidationMessage } from 'nestjs-i18n';
-import { cleanName } from '../../../common/utils';
+import { cleanName, cleanTitle } from '../../../common/utils';
 import { IsStrongPassword } from '../../../common/validators';
 
 export const ASSIGNABLE_ROLES: AssignableRole[] = ['admin', 'member'];
@@ -46,6 +48,12 @@ export class InviteDto implements InviteContract {
   @ApiProperty({ enum: ASSIGNABLE_ROLES })
   role: AssignableRole;
 
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
+  departmentId: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  title: string | null;
+
   @ApiProperty({ type: String, nullable: true })
   invitedByName: string | null;
 
@@ -66,6 +74,22 @@ export class CreateInviteDto implements CreateInviteInput {
   @ApiProperty({ enum: ASSIGNABLE_ROLES })
   @IsIn(ASSIGNABLE_ROLES, { message: i18nValidationMessage('validation.IS_ENUM') })
   role: AssignableRole;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'A live department of the workspace; the invitee joins it on accept',
+  })
+  @IsOptional()
+  @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
+  @IsNotEmpty({ message: i18nValidationMessage('validation.IS_NOT_EMPTY') })
+  departmentId?: string;
+
+  @ApiPropertyOptional({ maxLength: MAX_TITLE, description: 'Copied onto the member on accept' })
+  @IsOptional()
+  @Transform(cleanTitle)
+  @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
+  @MaxLength(MAX_TITLE, { message: i18nValidationMessage('validation.MAX_LENGTH') })
+  title?: string;
 }
 
 export class CreateInviteResultDto implements CreateInviteResult {

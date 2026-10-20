@@ -8,9 +8,15 @@ import {
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { InjectDataSource } from '@nestjs/typeorm';
-import type { Task, TaskPriority, TaskStatus } from '@repo/shared';
+import {
+  MAX_TITLE as MAX_JOB_TITLE,
+  type Task,
+  type TaskPriority,
+  type TaskStatus,
+} from '@repo/shared';
 import { DataSource, IsNull } from 'typeorm';
 import { ClockService } from '../../common/clock';
+import { cleanTitle } from '../../common/utils/text.util';
 import { ASSIGNMENT_ENDED_EVENT, type AssignmentEndedPayload } from '../events';
 import type { AuthContext, ComputerContext } from '../../common/types';
 import {
@@ -21,6 +27,7 @@ import {
 } from '../agents/dto/agent.dto';
 import { AgentActivity } from '../agents/entities/agent-activity.entity';
 import { Agent } from '../agents/entities/agent.entity';
+import { Department } from '../departments/entities/department.entity';
 import { AgentsService } from '../agents/agents.service';
 import { ChatService } from '../chat/chat.service';
 import { AgentGatewayService } from '../gateway/agent-gateway.service';
@@ -71,6 +78,13 @@ const optString = (input: Input, key: string, max: number): string | undefined =
   if (input[key] === undefined || input[key] === null) return undefined;
   return reqString(input, key, max);
 };
+/** Job title as the HTTP DTOs clean it: control characters stripped, empty -> null. */
+const toolJobTitle = (value: string | null | undefined): string | null | undefined =>
+  cleanTitle({ value }) as string | null | undefined;
+
+/** Like `optString`, but `null` stays `null` (it clears the field). */
+const nullableString = (input: Input, key: string, max: number): string | null | undefined =>
+  input[key] === null ? null : optString(input, key, max);
 const optBool = (input: Input, key: string): boolean | undefined => {
   const value = input[key];
   if (value === undefined || value === null) return undefined;
@@ -254,11 +268,19 @@ export class GatewayToolsService {
 
   // ---------- read ----------
 
+  private async departmentNames(workspaceId: string): Promise<Map<string, string>> {
+    const rows = await this.dataSource.getRepository(Department).find({ where: { workspaceId } });
+    return new Map(rows.map((row) => [row.id, row.name]));
+  }
+
   private async listAgents(ctx: ToolContext) {
     const agents = await this.agents.list(ctx.workspaceId);
+    const departments = await this.departmentNames(ctx.workspaceId);
     return agents.map((agent) => ({
       id: agent.id,
       name: agent.name,
+      title: agent.title,
+      department: (agent.departmentId && departments.get(agent.departmentId)) || null,
       status: agent.status,
       computerId: agent.computerId,
       workdir: agent.workdir,
@@ -301,7 +323,14 @@ export class GatewayToolsService {
       where: { workspaceId: ctx.workspaceId, removedAt: IsNull() },
       order: { createdAt: 'ASC', id: 'ASC' },
     });
-    return members.map((member) => ({ id: member.id, name: member.name, role: member.role }));
+    const departments = await this.departmentNames(ctx.workspaceId);
+    return members.map((member) => ({
+      id: member.id,
+      name: member.name,
+      role: member.role,
+      title: member.title,
+      department: (member.departmentId && departments.get(member.departmentId)) || null,
+    }));
   }
 
   // ---------- write: any member ----------
@@ -450,6 +479,8 @@ export class GatewayToolsService {
         skills: skills?.map((id) => ({ id, enabled: true })),
         workdir: toolWorkdir(optString(input, 'workdir', MAX_WORKDIR_LENGTH)),
         maxTurns: optInt(input, 'maxTurns', 1, MAX_TURNS_LIMIT),
+        departmentId: optString(input, 'departmentId', 100),
+        title: toolJobTitle(optString(input, 'title', MAX_JOB_TITLE)) ?? undefined,
       },
       { memberId: ctx.member?.id ?? null },
     );
@@ -478,6 +509,8 @@ export class GatewayToolsService {
         name: optString(input, 'name', MAX_NAME_LENGTH)?.trim(),
         workdir: toolWorkdir(optString(input, 'workdir', MAX_WORKDIR_LENGTH)),
         maxTurns: optInt(input, 'maxTurns', 1, MAX_TURNS_LIMIT),
+        departmentId: nullableString(input, 'departmentId', 100),
+        title: toolJobTitle(nullableString(input, 'title', MAX_JOB_TITLE)),
       },
       { memberId: ctx.member?.id ?? null },
     );
@@ -492,6 +525,8 @@ export class GatewayToolsService {
       computerId: agent.computerId,
       workdir: agent.workdir,
       maxTurns: agent.maxTurns,
+      departmentId: agent.departmentId,
+      title: agent.title,
       skills: agent.skills.filter((skill) => skill.enabled).map((skill) => skill.id),
     };
   }

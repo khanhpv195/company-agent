@@ -4574,3 +4574,32 @@ label.terms a {
 .find-hit:hover {
   background: var(--hover);
 }
+
+/* departments */
+.dept-ico {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--bg-f0efec);
+  color: var(--soft);
+}
+.dept-row .icon-btn {
+  flex: none;
+}
+.dept-edit {
+  display: grid;
+  gap: 8px;
+}
+.dept-edit .set-row {
+  margin-top: 4px;
+}
+.dept-icons .chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 9px;
+}

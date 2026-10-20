@@ -67,6 +67,12 @@ const taskToolsHint = (): string =>
     UNTRUSTED_HINT,
   ].join(' ');
 
+/** "Requested by" line of a brief; the job title, when set, tells the agent who is asking. */
+export const requesterLine = (requester: Pick<Member, 'name' | 'role' | 'title'> | null): string =>
+  requester
+    ? `Requested by: ${requester.name}${requester.title ? `, ${requester.title}` : ''} (${requester.role})`
+    : 'Requested by: nobody in particular (automated run, read-only tools)';
+
 const languageLine = (lang: string | null): string =>
   lang === 'vi'
     ? "Requester's language: Vietnamese. Reply in Vietnamese unless asked otherwise."
@@ -82,12 +88,6 @@ export class AssignmentBriefService {
     return row.sourceKind === 'chat'
       ? this.chatBrief(row, agent, requester)
       : this.taskBrief(row, agent, requester);
-  }
-
-  private requesterLine(requester: Member | null): string {
-    return requester
-      ? `Requested by: ${requester.name} (${requester.role})`
-      : 'Requested by: nobody in particular (automated run, read-only tools)';
   }
 
   private async chatBrief(
@@ -135,7 +135,7 @@ export class AssignmentBriefService {
       `Workspace: ${workspace.name}`,
       `Conversation: ${where}`,
       `Room id: ${placeholder.room_id}${placeholder.parent_id ? `; thread root message id: ${placeholder.parent_id}` : ''}`,
-      this.requesterLine(requester),
+      requesterLine(requester),
       languageLine(row.lang),
       `You are ${agent.name}.`,
       earlier.length ? `Earlier in the room (oldest first):\n${earlier.join('\n')}` : '',
@@ -274,7 +274,7 @@ export class AssignmentBriefService {
     const context = [
       `Workspace: ${workspace.name}`,
       `Task ${task.id}: status ${STATUS_NAME[task.status]}, priority ${task.priority}, ${task.requiresReview ? 'goes to review when done' : 'no review needed'}`,
-      this.requesterLine(requester),
+      requesterLine(requester),
       `You are ${agent.name}.`,
       events.length ? `Task activity (oldest first):\n${events.join('\n')}` : '',
       taskToolsHint(),

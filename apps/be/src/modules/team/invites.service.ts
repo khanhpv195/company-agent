@@ -34,7 +34,9 @@ import { SeatSyncService } from '../billing/seat-sync.service';
 import { PlanLimitsService } from '../billing/plan-limits.service';
 import { Member } from '../workspace/entities/member.entity';
 import { Workspace } from '../workspace/entities/workspace.entity';
-import { joinDefaultRooms } from '../chat/room-access';
+import { joinDefaultRooms, lockRooms } from '../chat/room-access';
+import { findLiveDepartment, joinDepartmentRoom } from '../departments/department-access';
+import { Department } from '../departments/entities/department.entity';
 import { toSession } from '../workspace/workspace.mapper';
 import { AcceptInviteDto, CreateInviteDto } from './dto/team.dto';
 import { Invite } from './entities/invite.entity';
@@ -48,6 +50,8 @@ interface InviteRow {
   id: string;
   email: string;
   role: 'admin' | 'member';
+  department_id: string | null;
+  title: string | null;
   created_at: Date;
   expires_at: Date;
   inviter_name: string | null;
@@ -57,6 +61,8 @@ const toInvite = (row: InviteRow): InviteContract => ({
   id: row.id,
   email: row.email,
   role: row.role,
+  departmentId: row.department_id,
+  title: row.title,
   invitedByName: row.inviter_name,
   createdAt: row.created_at.toISOString(),
   expiresAt: row.expires_at.toISOString(),
@@ -88,6 +94,9 @@ export class InvitesService {
     const now = this.clock.now();
     const token = randomBytes(32).toString('base64url');
     const created = await transactionWithEffects(this.dataSource, async (manager, effects) => {
+      // Rooms lock first (global order: rooms, then the workspaces row), so a concurrent
+      // department delete cannot leave this invite pointing at a deleted department.
+      await lockRooms(manager, auth.workspaceId);
       // Serialises two invites for one address so the partial unique index is never the answer.
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1::text))', [
         `invite:${auth.workspaceId}:${dto.email}`,
@@ -104,6 +113,9 @@ export class InvitesService {
       }
       if (dto.role === 'admin' && actor.role !== 'owner') {
         throw new ForbiddenException({ message: 'invites.ADMIN_REQUIRES_OWNER' });
+      }
+      if (dto.departmentId !== undefined) {
+        await findLiveDepartment(manager, auth.workspaceId, dto.departmentId);
       }
       // Only this workspace's members are checked: an address registered elsewhere must not be
       // discoverable here. Removed members had their address rewritten, so this matches live ones.
@@ -129,6 +141,8 @@ export class InvitesService {
           workspaceId: auth.workspaceId,
           email: dto.email,
           role: dto.role,
+          departmentId: dto.departmentId ?? null,
+          title: dto.title ?? null,
           tokenHash: hashToken(token),
           invitedBy: actor.id,
           expiresAt: new Date(now.getTime() + INVITE_TTL_MS),
@@ -144,7 +158,13 @@ export class InvitesService {
           action: 'invite.created',
           targetType: 'invite',
           targetId: row.id,
-          meta: { email: dto.email, role: dto.role, replaced: replaced.length },
+          meta: {
+            email: dto.email,
+            role: dto.role,
+            replaced: replaced.length,
+            departmentId: row.departmentId,
+            title: row.title,
+          },
           ip: auth.ip,
         },
         manager,
@@ -158,6 +178,8 @@ export class InvitesService {
           id: row.id,
           email: row.email,
           role: row.role,
+          department_id: row.departmentId,
+          title: row.title,
           created_at: row.createdAt,
           expires_at: row.expiresAt,
           inviter_name: actor.name,
@@ -174,7 +196,8 @@ export class InvitesService {
   /** Pending and still valid, newest first. */
   async list(workspaceId: string): Promise<InviteContract[]> {
     const rows = await this.dataSource.query<InviteRow[]>(
-      `SELECT i.id, i.email, i.role, i.created_at, i.expires_at, m.name AS inviter_name
+      `SELECT i.id, i.email, i.role, i.department_id, i.title, i.created_at, i.expires_at,
+              m.name AS inviter_name
        FROM invites i LEFT JOIN members m ON m.id = i.invited_by
        WHERE i.workspace_id = $1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL
          AND i.expires_at > $2
@@ -216,8 +239,8 @@ export class InvitesService {
   /** Public: valid means pending, unrevoked and unexpired; anything else is the same 404. */
   async preview(token: string): Promise<InvitePreview> {
     const rows = await this.dataSource.query<(InviteRow & { workspace_name: string })[]>(
-      `SELECT i.id, i.email, i.role, i.created_at, i.expires_at, m.name AS inviter_name,
-              w.name AS workspace_name
+      `SELECT i.id, i.email, i.role, i.department_id, i.title, i.created_at, i.expires_at,
+              m.name AS inviter_name, w.name AS workspace_name
        FROM invites i
        JOIN workspaces w ON w.id = i.workspace_id
        LEFT JOIN members m ON m.id = i.invited_by
@@ -242,7 +265,7 @@ export class InvitesService {
     try {
       const result = await transactionWithEffects(this.dataSource, async (manager, effects) => {
         const now = this.clock.now();
-        // Lock the workspace first (a concurrent delete waits or has already won), then redeem.
+        // Lock rooms, then the workspace (a concurrent delete waits or has already won), then redeem.
         const pending = returnedRows<{ workspace_id: string }>(
           await manager.query(
             `SELECT workspace_id FROM invites WHERE token_hash = $1 AND accepted_at IS NULL
@@ -251,6 +274,9 @@ export class InvitesService {
           ),
         )[0];
         if (!pending) throw new NotFoundException({ message: 'invites.INVALID' });
+        // Lock order: the rooms lock (a concurrent department delete holds it) before the
+        // workspaces row, as in `removeMember`. The department read below is then stable.
+        await lockRooms(manager, pending.workspace_id);
         const locked = returnedRows<{ id: string; plan: WorkspacePlan }>(
           await manager.query('SELECT id, plan FROM workspaces WHERE id = $1 FOR UPDATE', [
             pending.workspace_id,
@@ -263,12 +289,14 @@ export class InvitesService {
           workspace_id: string;
           email: string;
           role: 'admin' | 'member';
+          department_id: string | null;
+          title: string | null;
         }>(
           await manager.query(
             `UPDATE invites SET accepted_at = $2
              WHERE token_hash = $1 AND accepted_at IS NULL AND revoked_at IS NULL
                AND expires_at > $2
-             RETURNING id, workspace_id, email, role`,
+             RETURNING id, workspace_id, email, role, department_id, title`,
             [hashToken(dto.token), now],
           ),
         );
@@ -284,6 +312,13 @@ export class InvitesService {
           where: { id: invite.workspace_id },
         });
         if (!workspace) throw new NotFoundException({ message: 'invites.INVALID' });
+        // The department may have been deleted since (its invites were cleared then); a live
+        // one is checked again here so a late delete is never joined.
+        const department = invite.department_id
+          ? await manager.findOne(Department, {
+              where: { id: invite.department_id, workspaceId: workspace.id },
+            })
+          : null;
         const member = await manager.save(
           manager.create(Member, {
             workspaceId: workspace.id,
@@ -292,6 +327,8 @@ export class InvitesService {
             passwordHash,
             role: invite.role,
             color: null,
+            departmentId: department?.id ?? null,
+            title: invite.title,
             // The invite reached this address, which is the verification.
             emailVerifiedAt: now,
             termsAcceptedAt: now,
@@ -299,6 +336,7 @@ export class InvitesService {
           }),
         );
         await joinDefaultRooms(manager, workspace.id, member.id);
+        if (department) await joinDepartmentRoom(manager, department, { memberId: member.id });
         const pair = await this.tokens.issuePair(manager, member, randomUUID(), meta);
         await this.audit.record(
           {
@@ -307,12 +345,15 @@ export class InvitesService {
             action: 'invite.accepted',
             targetType: 'invite',
             targetId: invite.id,
-            meta: { role: invite.role },
+            meta: { role: invite.role, departmentId: member.departmentId },
             ip: meta.ip,
           },
           manager,
         );
-        effects.push(() => this.events.publish(workspace.id, { type: 'members.changed' }));
+        effects.push(() => {
+          this.events.publish(workspace.id, { type: 'members.changed' });
+          if (department) this.events.publish(workspace.id, { type: 'departments.changed' });
+        });
         return { session: toSession(member, workspace), ...pair };
       });
       await this.seats.sync(result.session.workspace.id); // after the commit, best-effort

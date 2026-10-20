@@ -1,5 +1,5 @@
 import { DemoBadge } from '../../components/DemoBadge';
-import type { Agent, UpdateAgentInput } from '@repo/shared';
+import { MAX_TITLE, type Agent, type UpdateAgentInput } from '@repo/shared';
 import { getRouteApi, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { AgentAvatar, Dot } from '../../components/Avatar';
@@ -12,6 +12,9 @@ import { useT, type MessageKey } from '../../i18n';
 import { useOpenDm } from '../chat/chat.api';
 import { selectableComputers } from '../computers/computers.logic';
 import { useTasks } from '../tasks/tasks.api';
+import { DepartmentSelect } from '../departments/DepartmentSelect';
+import { useDepartments } from '../departments/departments.api';
+import { cleanTitle, isTitleValid } from '../departments/departments.logic';
 import { usePeople } from '../workspace/workspace.api';
 import {
   MANAGER_ONLY_HINT,
@@ -55,6 +58,7 @@ export function AgentPage() {
   const nav = route.useNavigate();
   const navigate = useNavigate();
   const people = usePeople();
+  const departments = useDepartments();
   const agent = people.agent(agentId);
   const activity = useAgentActivity(agentId, !!agent);
   const tasks = useTasks().data ?? [];
@@ -95,6 +99,7 @@ export function AgentPage() {
             </h2>
             <div style={{ color: 'var(--muted)', display: 'flex', gap: 8, alignItems: 'center' }}>
               <Dot state={agentPresence(agent.status)} />
+              {agent.title ? `${agent.title} · ` : ''}
               {t(AGENT_STATUS_KEY[agent.status])} · {agent.provider}
               {current && (
                 <>
@@ -180,6 +185,10 @@ export function AgentPage() {
               />
             ) : (
               <dl className="kv">
+                <dt>{t('departments.department')}</dt>
+                <dd>{departments.byId(agent.departmentId)?.name ?? t('departments.none')}</dd>
+                <dt>{t('departments.title')}</dt>
+                <dd>{agent.title ?? '—'}</dd>
                 <dt>{t('people.provider')}</dt>
                 <dd>{agent.provider}</dd>
                 <dt>{t('people.computer')}</dt>
@@ -333,6 +342,8 @@ function RuntimeEditor({
   );
   const [workdir, setWorkdir] = useState(agent.workdir);
   const [maxTurns, setMaxTurns] = useState(String(agent.maxTurns));
+  const [departmentId, setDepartmentId] = useState<string | null>(agent.departmentId);
+  const [title, setTitle] = useState(agent.title ?? '');
   const [errors, setErrors] = useState<AgentFormErrors>({});
 
   const submit = () => {
@@ -343,6 +354,7 @@ function RuntimeEditor({
       computers.map((c) => c.id),
       { requireWorkdir: true },
     );
+    if (!isTitleValid(title)) found.title = t('departments.titleTooLong', { max: MAX_TITLE });
     setErrors(found);
     if (Object.keys(found).length) return;
     const patch: UpdateAgentInput = {};
@@ -350,6 +362,8 @@ function RuntimeEditor({
     if (computerId !== agent.computerId) patch.computerId = computerId;
     if (workdir.trim() !== agent.workdir) patch.workdir = workdir.trim();
     if (Number(maxTurns) !== agent.maxTurns && maxTurns.trim()) patch.maxTurns = Number(maxTurns);
+    if (departmentId !== agent.departmentId) patch.departmentId = departmentId;
+    if (cleanTitle(title) !== agent.title) patch.title = cleanTitle(title);
     if (!Object.keys(patch).length) return onCancel();
     onSave(patch);
   };
@@ -358,6 +372,25 @@ function RuntimeEditor({
 
   return (
     <div style={{ display: 'grid', gap: 8 }}>
+      <label>
+        {t('departments.department')}
+        <DepartmentSelect
+          label={t('departments.department')}
+          value={departmentId}
+          onChange={setDepartmentId}
+        />
+      </label>
+      <label>
+        {t('departments.title')}
+        <input
+          className="field"
+          style={border('title')}
+          aria-label={t('departments.title')}
+          placeholder={t('departments.titlePlaceholder')}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+      </label>
       <label>
         {t('people.name')}
         <input

@@ -62,6 +62,13 @@ export const AUDIT_ACTION_KEYS = {
   'workspace.renamed': 'settings.audit.actions.workspaceRenamed',
   'workspace.ownership_transferred': 'settings.audit.actions.workspaceOwnershipTransferred',
   'billing.plan_changed': 'settings.audit.actions.billingPlanChanged',
+  'department.created': 'settings.audit.actions.departmentCreated',
+  'department.updated': 'settings.audit.actions.departmentUpdated',
+  'department.deleted': 'settings.audit.actions.departmentDeleted',
+  'department.reordered': 'settings.audit.actions.departmentReordered',
+  'member.department_changed': 'settings.audit.actions.memberDepartmentChanged',
+  'agent.department_changed': 'settings.audit.actions.agentDepartmentChanged',
+  'member.title_changed': 'settings.audit.actions.memberTitleChanged',
 } as const satisfies Record<string, MessageKey>;
 
 type Translate = (key: MessageKey) => string;
@@ -100,6 +107,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
   { id: 'appearance', group: 'account' },
   { id: 'workspace', group: 'workspace', roles: ['owner', 'admin'] },
   { id: 'members', group: 'workspace' },
+  { id: 'team', group: 'workspace', roles: ['owner', 'admin'] },
   { id: 'billing', group: 'workspace', roles: ['owner', 'admin'] },
   { id: 'audit', group: 'workspace', roles: ['owner', 'admin'] },
   { id: 'desktop', group: 'app' },
@@ -131,17 +139,29 @@ export const PROFILE_COLORS = [
 export interface ProfileDraft {
   name: string;
   color: string | null;
+  /** Job title; leave out when the form has no title field. */
+  title?: string | null;
+}
+
+export interface ProfilePatch {
+  name?: string;
+  color?: string | null;
+  title?: string | null;
 }
 
 /** Fields that differ from the saved profile (only these are sent), or null when nothing changed. */
 export function profilePatch(
-  saved: { name: string; color: string | null },
+  saved: { name: string; color: string | null; title?: string | null },
   draft: ProfileDraft,
-): { name?: string; color?: string | null } | null {
-  const patch: { name?: string; color?: string | null } = {};
+): ProfilePatch | null {
+  const patch: ProfilePatch = {};
   const name = draft.name.trim();
   if (name !== saved.name) patch.name = name;
   if (draft.color !== saved.color) patch.color = draft.color;
+  if (draft.title !== undefined) {
+    const title = draft.title?.trim() || null;
+    if (title !== (saved.title ?? null)) patch.title = title;
+  }
   return Object.keys(patch).length ? patch : null;
 }
 

@@ -10,6 +10,7 @@ import { DesktopSection } from './DesktopSection';
 import { MembersSection } from './MembersSection';
 import { ProfileSection } from './ProfileSection';
 import { SecuritySection } from './SecuritySection';
+import { TeamSection } from './TeamSection';
 import { WorkspaceSection } from './WorkspaceSection';
 import { sectionsFor, type SettingsGroup } from './settings.logic';
 
@@ -24,6 +25,7 @@ const BODIES: Record<string, () => ReactNode> = {
   appearance: () => <AppearanceSection />,
   workspace: () => <WorkspaceSection />,
   members: () => <MembersSection />,
+  team: () => <TeamSection />,
   billing: () => <BillingSection />,
   audit: () => <AuditSection />,
   desktop: () => <DesktopSection />,
@@ -32,6 +34,7 @@ const BODIES: Record<string, () => ReactNode> = {
 const LEADS: Partial<Record<string, MessageKey>> = {
   workspace: 'settings.workspace.lead',
   members: 'settings.members.lead',
+  team: 'settings.team.lead',
   audit: 'settings.audit.lead',
 };
 
