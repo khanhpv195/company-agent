@@ -5,6 +5,14 @@
 
 export type MemberRole = 'owner' | 'admin' | 'member';
 
+export interface SkillDef {
+  slug: string;
+  name: string;
+  description: string;
+  content: string;
+  version: number;
+}
+
 export interface GatewayAgent {
   id: string;
   name: string;
@@ -12,6 +20,8 @@ export interface GatewayAgent {
   workdir: string;
   maxTurns: number;
   skills: string[];
+  /** Enabled workspace skills; absent on older servers. */
+  skillDefs?: SkillDef[];
 }
 
 export interface GatewayAssignment {

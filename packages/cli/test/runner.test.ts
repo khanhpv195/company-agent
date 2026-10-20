@@ -1,5 +1,5 @@
 import type { Options, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import { mkdtempSync, realpathSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync } from 'node:fs';
 import { mkdir, symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -58,6 +58,74 @@ let n = 0;
 async function withWorkdir() {
   return path.join(root, `wd-${++n}`, 'nested');
 }
+
+describe('runAssignment skills', () => {
+  const agentHomeDir = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'agent-home-')));
+  const withHome = async <T>(fn: () => Promise<T>): Promise<T> => {
+    const prev = process.env.AGENT_HOME;
+    process.env.AGENT_HOME = agentHomeDir;
+    try {
+      return await fn();
+    } finally {
+      if (prev === undefined) delete process.env.AGENT_HOME;
+      else process.env.AGENT_HOME = prev;
+    }
+  };
+  const skill = {
+    slug: 'tom-tat',
+    name: 'Tóm tắt',
+    description: 'Summarise',
+    content: 'body',
+    version: 1,
+  };
+
+  it('passes the plugin and skills to query and installs the files', async () => {
+    const workdir = await withWorkdir();
+    const t = setup({}, async function* () {
+      yield success('ok');
+    });
+    await withHome(() =>
+      t.run(assignment({ agent: { ...assignment().agent, workdir, skillDefs: [skill] } })),
+    );
+    const o = t.seen().options;
+    const dir = path.join(agentHomeDir, 'skills', 'ag-1');
+    expect(o.plugins).toEqual([{ type: 'local', path: dir, skipMcpDiscovery: true }]);
+    expect(o.skills).toEqual(['workspace:tom-tat']);
+    expect(o.settingSources).toEqual([]);
+    expect(readFileSync(path.join(dir, 'skills', 'tom-tat', 'SKILL.md'), 'utf8')).toContain(
+      'name: tom-tat',
+    );
+  });
+
+  it('passes neither option when skillDefs is missing or empty', async () => {
+    const workdir = await withWorkdir();
+    const t = setup({}, async function* () {
+      yield success('ok');
+    });
+    await withHome(() => t.run(assignment({ agent: { ...assignment().agent, workdir } })));
+    expect(t.seen().options).not.toHaveProperty('plugins');
+    expect(t.seen().options).not.toHaveProperty('skills');
+  });
+
+  it('fails the run without calling the SDK when a slug is unsafe', async () => {
+    const workdir = await withWorkdir();
+    const t = setup({}, async function* () {
+      yield success('ok');
+    });
+    await withHome(() =>
+      t.run(
+        assignment({
+          agent: { ...assignment().agent, workdir, skillDefs: [{ ...skill, slug: '../x' }] },
+        }),
+      ),
+    );
+    expect(t.seen()).toBeUndefined();
+    const last = t.calls[t.calls.length - 1];
+    expect(last.path).toBe('/gateway/assignments/as-1/result');
+    expect(last.body.status).toBe('failed');
+    expect(String(last.body.error)).toMatch(/invalid slug/);
+  });
+});
 
 describe('runAssignment', () => {
   it('chat: accepts, streams text and tools, reports completed with session/turns/cost', async () => {

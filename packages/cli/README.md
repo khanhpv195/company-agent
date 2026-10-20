@@ -85,6 +85,18 @@ never uses them. For a workdir `/home/me/.agent/agents/hana` it passes path-scop
   requester is an owner or admin, and never in task runs. In task runs the server also refuses
   `move_task` to `done` and changing `requiresReview`: review stays a human decision.
 
+### Skills
+
+The workspace skill library reaches agents through `skillDefs` in the assignment (enabled skills
+of that agent; a server that does not send it means no skills). Before each run the daemon syncs
+a Claude Code plugin named `workspace` to `~/.agent/skills/<agentId>/`, outside the workdir:
+`.claude-plugin/plugin.json` and `skills/<slug>/SKILL.md` (frontmatter `name` and `description`,
+then the skill content). A `.version` stamp per skill skips unchanged ones, skills no longer
+enabled are removed, files are written atomically, and a slug outside `^[a-z0-9-]{1,64}$` fails
+the run. The query gets `plugins: [{ type: 'local', path, skipMcpDiscovery: true }]` and
+`skills: ['workspace:<slug>', ...]` (neither when there are no skills); `settingSources` stays
+`[]`. Agents cannot Edit or Write under `~/.agent/skills/**`.
+
 ### Working directory
 
 The server chooses each agent's `workdir`, so the daemon validates it first. It is expanded

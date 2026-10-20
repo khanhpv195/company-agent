@@ -51,6 +51,13 @@ describe('buildPermissionRules', () => {
     expect(rules.disallowedTools).toContain('WebFetch');
   });
 
+  it('denies Edit and Write (not Read) on the daemon-owned skills directory', () => {
+    for (const tool of ['Edit', 'Write']) {
+      expect(rules.disallowedTools).toContain(`${tool}(//Users/test/.agent/skills/**)`);
+    }
+    expect(rules.disallowedTools).not.toContain('Read(//Users/test/.agent/skills/**)');
+  });
+
   it('lets WebFetch through when enabled', () => {
     const r = buildPermissionRules('/w', { extraAllowedTools: [], allowWebFetch: true, home, env });
     expect(r.disallowedTools).not.toContain('WebFetch');

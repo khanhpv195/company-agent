@@ -4,6 +4,7 @@ import { ApiError, type GatewayClient } from './api.js';
 import type { AgentConfig } from './config.js';
 import { errorMessage, type Logger } from './log.js';
 import { buildPermissionRules } from './permissions.js';
+import { syncAgentSkills, type SkillsPlugin } from './skills.js';
 import { coalesce, StreamMapper } from './stream.js';
 import { createWorkspaceServer, WORKSPACE_SERVER } from './tools.js';
 import { prepareWorkdir } from './workdir.js';
@@ -60,6 +61,7 @@ export function buildOptions(
   cwd: string,
   abortController: AbortController,
   session: { id: string; resume: boolean } = a.session,
+  skills: SkillsPlugin | null = null,
 ): Options {
   const rules = buildPermissionRules(cwd, deps.config);
   return {
@@ -74,6 +76,12 @@ export function buildOptions(
     allowedTools: rules.allowedTools,
     disallowedTools: rules.disallowedTools,
     mcpServers: { [WORKSPACE_SERVER]: createWorkspaceServer(deps.client, a) },
+    ...(skills
+      ? {
+          plugins: [{ type: 'local' as const, path: skills.path, skipMcpDiscovery: true }],
+          skills: skills.names,
+        }
+      : {}),
   };
 }
 
@@ -297,10 +305,11 @@ export async function runAssignment(
   try {
     if (!abort.signal.aborted) {
       const cwd = await prepareWorkdir(a.agent.workdir, deps.config.workdirRoots);
+      const skills = await syncAgentSkills(a.agent.id, a.agent.skillDefs);
       const consume = async (session: { id: string; resume: boolean }) => {
         const q = deps.query({
           prompt: a.prompt,
-          options: buildOptions(a, deps, cwd, abort, session),
+          options: buildOptions(a, deps, cwd, abort, session, skills),
         });
         for await (const msg of q) {
           const events = mapper.map(msg);
