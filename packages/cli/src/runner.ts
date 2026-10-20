@@ -73,6 +73,7 @@ export function buildOptions(
     settingSources: [],
     includePartialMessages: true,
     abortController,
+    // No `Skill` in allowedTools on purpose: the SDK `skills` option below enables the Skill tool, and listing `Skill` in allowedTools is deprecated.
     allowedTools: rules.allowedTools,
     disallowedTools: rules.disallowedTools,
     mcpServers: { [WORKSPACE_SERVER]: createWorkspaceServer(deps.client, a) },

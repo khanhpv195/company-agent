@@ -7,12 +7,14 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import {
+  MAX_AGENT_SKILL_CONTENT,
+  MAX_SKILL_CONTENT,
   MAX_SKILL_SLUG,
   skillTemplateById,
   type Skill as SkillContract,
   type SkillVersion as SkillVersionContract,
 } from '@repo/shared';
-import { DataSource, QueryFailedError, type EntityManager } from 'typeorm';
+import { DataSource, In, QueryFailedError, type EntityManager } from 'typeorm';
 import type { AuthContext } from '../../common/types';
 import { Agent } from '../agents/entities/agent.entity';
 import { AuditService } from '../audit/audit.service';
@@ -166,6 +168,9 @@ export class SkillsService {
         if (dto[key] !== undefined && dto[key] !== row[key]) changes[key] = dto[key];
       }
       const agentIds = (await this.usage(manager, auth.workspaceId, row.id)).get(row.id) ?? [];
+      if (changes.content !== undefined) {
+        await this.assertAgentsFit(manager, auth.workspaceId, row.id, changes.content.length);
+      }
       if (Object.keys(changes).length > 0) {
         const from = row.version;
         Object.assign(row, changes, { version: row.version + 1, updatedByMemberId: auth.memberId });
@@ -204,6 +209,13 @@ export class SkillsService {
         where: { skillId: row.id, version: dto.version },
       });
       if (!old) throw new NotFoundException({ message: 'skills.VERSION_NOT_FOUND' });
+      if (old.content.length > MAX_SKILL_CONTENT) {
+        throw new BadRequestException({
+          message: 'skills.CONTENT_TOO_LONG',
+          args: { max: MAX_SKILL_CONTENT },
+        });
+      }
+      await this.assertAgentsFit(manager, auth.workspaceId, row.id, old.content.length);
       const from = row.version;
       Object.assign(row, {
         name: old.name,
@@ -305,6 +317,46 @@ export class SkillsService {
       content: skill.content,
       editedByMemberId: editorMemberId,
     });
+  }
+
+  /**
+   * A skill that grows must not push any live agent that has it on past
+   * `MAX_AGENT_SKILL_CONTENT` characters of skill content in total (400 `skills.TOO_LARGE`,
+   * naming the agents). One query for the agents, one for the contents involved.
+   */
+  private async assertAgentsFit(
+    manager: EntityManager,
+    workspaceId: string,
+    skillId: string,
+    newLength: number,
+  ): Promise<void> {
+    const agents = await manager
+      .createQueryBuilder(Agent, 'a')
+      .select(['a.id', 'a.name', 'a.skills'])
+      .where('a.workspace_id = :workspaceId', { workspaceId })
+      .andWhere('a.skills @> :needle::jsonb', { needle: JSON.stringify([skillId]) })
+      .orderBy('a.name', 'ASC')
+      .getMany();
+    if (!agents.length) return;
+    const ids = [...new Set(agents.flatMap((agent) => agent.skills))];
+    const lengths = new Map(
+      (await manager.find(Skill, { where: { workspaceId, id: In(ids) } })).map((skill) => [
+        skill.id,
+        skill.content.length,
+      ]),
+    );
+    lengths.set(skillId, newLength);
+    const tooLarge = agents.filter(
+      (agent) =>
+        agent.skills.reduce((sum, id) => sum + (lengths.get(id) ?? 0), 0) > MAX_AGENT_SKILL_CONTENT,
+    );
+    if (tooLarge.length) {
+      throw new BadRequestException({
+        message: 'skills.TOO_LARGE',
+        args: { max: MAX_AGENT_SKILL_CONTENT },
+        details: { agents: tooLarge.map((agent) => agent.name) },
+      });
+    }
   }
 
   /** Live agents that have each skill on (one query; optionally only the agents with `skillId`). */

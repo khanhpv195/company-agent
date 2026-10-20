@@ -103,3 +103,18 @@ export const loadSkillDefs = async (
     ]),
   );
 };
+
+/** Slugs of the live skills among `ids`, keyed by skill id (no content: for the heartbeat). */
+export const loadSkillSlugs = async (
+  manager: EntityManager,
+  workspaceId: string,
+  ids: readonly string[],
+): Promise<Map<string, string>> => {
+  const valid = [...new Set(ids)].filter((id) => isUUID(id));
+  if (!valid.length) return new Map();
+  const rows = await manager.find(Skill, {
+    where: { workspaceId, id: In(valid) },
+    select: { id: true, slug: true },
+  });
+  return new Map(rows.map((row) => [row.id, row.slug]));
+};

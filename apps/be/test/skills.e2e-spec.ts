@@ -333,6 +333,69 @@ describe('Skill library (e2e)', () => {
       await call('delete', `/skills/${created.id}`, admin);
     });
 
+    /** Nine 20k skills and one 19k skill on `Alpha` (199 000), plus a tiny `target` skill (1). */
+    const nearlyFullAgent = async () => {
+      const ids: string[] = [];
+      for (let i = 0; i < 9; i++) {
+        ids.push((await skill(`big${i}`, owner, { content: 'x'.repeat(MAX_SKILL_CONTENT) })).id);
+      }
+      ids.push((await skill('medium', owner, { content: 'x'.repeat(19_000) })).id);
+      const target = await skill('target', owner, { content: 'x'.repeat(MAX_SKILL_CONTENT) });
+      await call<Skill>('patch', `/skills/${target.id}`, owner, { content: 'x' });
+      await setSkills([...ids, target.id]);
+      return target;
+    };
+
+    it('refuses an edit that pushes an agent past the total content limit, naming the agents', async () => {
+      const target = await nearlyFullAgent();
+      const body = await fail('patch', `/skills/${target.id}`, owner, 400, {
+        content: 'x'.repeat(1_001),
+      });
+      expect(body.message).toBe(
+        `The skills of an agent can hold at most ${MAX_AGENT_SKILL_CONTENT} characters in total`,
+      );
+      expect(JSON.stringify(body)).toContain('Alpha');
+      expect((await call<Skill>('get', `/skills/${target.id}`, owner)).version).toBe(2);
+      // exactly at the limit is fine, and a skill nobody uses is only bound by its own limit
+      await call('patch', `/skills/${target.id}`, owner, { content: 'x'.repeat(1_000) });
+      const free = await skill('free');
+      await call('patch', `/skills/${free.id}`, owner, { content: 'x'.repeat(MAX_SKILL_CONTENT) });
+    });
+
+    it('applies the same limits to restore: per agent total and the skill length', async () => {
+      const target = await nearlyFullAgent();
+      // version 1 holds 20 000 characters: restoring it would make Alpha hold 219 000
+      const body = await fail('post', `/skills/${target.id}/restore`, owner, 400, { version: 1 });
+      expect(body.message).toContain('in total');
+      expect(JSON.stringify(body)).toContain('Alpha');
+      expect((await call<Skill>('get', `/skills/${target.id}`, owner)).version).toBe(2);
+
+      await dataSource.query(
+        `UPDATE skill_versions SET content = repeat('y', $1::int) WHERE skill_id = $2 AND version = 1`,
+        [MAX_SKILL_CONTENT + 1, target.id],
+      );
+      const long = await fail('post', `/skills/${target.id}/restore`, owner, 400, { version: 1 });
+      expect(long.message).toBe(`A skill can hold at most ${MAX_SKILL_CONTENT} characters`);
+      expect((await call<Skill>('get', `/skills/${target.id}`, owner)).version).toBe(2);
+    });
+
+    it('records the actor and the number of agents in the skill.updated audit row', async () => {
+      const created = await skill('Báo giá', alice);
+      await setSkills([created.id]);
+      await call('patch', `/skills/${created.id}`, alice, { content: '# changed' });
+      const rows = await call<AuditEvent[]>('get', '/audit-events?limit=100', owner);
+      const row = rows.find((e) => e.action === 'skill.updated')!;
+      expect(row.actor?.id).toBe(alice.memberId);
+      expect(row.targetId).toBe(created.id);
+      expect(row.meta).toMatchObject({
+        slug: 'bao-gia',
+        from: 1,
+        to: 2,
+        fields: ['content'],
+        agents: 1,
+      });
+    });
+
     it('lists the agents using a skill, and an edit tells the agents list too', async () => {
       const created = await skill('Báo giá');
       const other = await skill('Khác');

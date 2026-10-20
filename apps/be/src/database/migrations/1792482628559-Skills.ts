@@ -5,6 +5,13 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * the old fixed catalog (`[{ id, name, enabled }]`) to a jsonb array of enabled skill uuids.
  * The data part is plain SQL on purpose: it must not depend on app or shared code, which change
  * after this migration ran.
+ *
+ * Two deliberate choices about legacy data:
+ * - The old skill ids were labels only: they never reached an agent run, so they had no effect.
+ *   They still become library rows (so the names survive and can be filled in), but they are
+ *   NOT enabled on any agent: migrating them as enabled would make agents suddenly run with
+ *   placeholder instructions. Every agent starts with `skills = []`.
+ * - Consequently `down` cannot know which legacy skills an agent had; it restores `[]`.
  */
 
 export class Skills1792482628559 implements MigrationInterface {
@@ -94,34 +101,17 @@ export class Skills1792482628559 implements MigrationInterface {
             INSERT INTO "skill_versions" ("skill_id", "version", "name", "description", "content")
             SELECT "id", 1, "name", "description", "content" FROM "skills"
         `);
-    // agents.skills becomes the array of enabled skill uuids (ids with no skill are dropped).
+    // agents.skills becomes the array of enabled skill uuids: none (see the header comment).
     await queryRunner.query(`
-            UPDATE "agents" a SET "skills" = coalesce((
-              SELECT jsonb_agg(to_jsonb(s."id"::text) ORDER BY s."slug")
-              FROM jsonb_array_elements(
-                CASE WHEN jsonb_typeof(a."skills") = 'array' THEN a."skills" ELSE '[]'::jsonb END
-              ) AS e(value)
-              JOIN "skills" s
-                ON s."workspace_id" = a."workspace_id" AND s."slug" = (e.value ->> 'id')
-              WHERE jsonb_typeof(e.value) = 'object'
-                AND coalesce(e.value ->> 'enabled', 'false') = 'true'
-            ), '[]'::jsonb)
+            UPDATE "agents" SET "skills" = '[]'::jsonb
         `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    // agents.skills back to the old shape: the enabled skills only, id = name = slug.
+    // agents.skills back to the old shape (an empty list). Which skills an agent had enabled is
+    // lost on purpose: the old list never affected runs, and `up` did not carry it over.
     await queryRunner.query(`
-            UPDATE "agents" a SET "skills" = coalesce((
-              SELECT jsonb_agg(
-                jsonb_build_object('id', s."slug", 'name', s."slug", 'enabled', true)
-                ORDER BY s."slug"
-              )
-              FROM jsonb_array_elements_text(
-                CASE WHEN jsonb_typeof(a."skills") = 'array' THEN a."skills" ELSE '[]'::jsonb END
-              ) AS e(value)
-              JOIN "skills" s ON s."id"::text = e.value AND s."workspace_id" = a."workspace_id"
-            ), '[]'::jsonb)
+            UPDATE "agents" SET "skills" = '[]'::jsonb
         `);
     await queryRunner.query(`
             ALTER TABLE "skill_versions" DROP CONSTRAINT "FK_3405f3df12d4798ca1f4d8d65ef"

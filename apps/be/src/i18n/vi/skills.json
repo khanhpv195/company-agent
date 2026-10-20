@@ -15,5 +15,6 @@
   "AGENT_FORBIDDEN": "Chỉ chủ sở hữu, quản trị viên hoặc thành viên cùng phòng ban với agent mới đổi được skill của agent",
   "IN_USE": "Skill đang được bật ở các agent; hãy tắt ở đó trước",
   "TOO_MANY": "Một agent có tối đa {max} skill",
-  "TOO_LARGE": "Tổng nội dung skill của một agent tối đa {max} ký tự"
+  "TOO_LARGE": "Tổng nội dung skill của một agent tối đa {max} ký tự",
+  "CONTENT_TOO_LONG": "Một skill chỉ có thể dài tối đa {max} ký tự"
 }

@@ -8,7 +8,7 @@ import { ClockService } from '../../common/clock';
 import { transactionWithEffects } from '../../common/utils';
 import type { ComputerContext } from '../../common/types';
 import { Agent } from '../agents/entities/agent.entity';
-import { loadSkillDefs, type GatewaySkillDef } from '../skills/skill-access';
+import { loadSkillDefs, loadSkillSlugs, type GatewaySkillDef } from '../skills/skill-access';
 import { ChatService } from '../chat/chat.service';
 import { ComputersService } from '../computers/computers.service';
 import { Computer } from '../computers/entities/computer.entity';
@@ -43,6 +43,9 @@ export interface GatewayAgent {
   /** The enabled skills of live library entries, sorted by slug. */
   skillDefs: GatewaySkillDef[];
 }
+
+/** What a heartbeat lists per agent: no skill content (that only travels with an assignment). */
+export type HeartbeatAgent = Omit<GatewayAgent, 'skillDefs'>;
 
 export interface GatewayAssignment {
   id: string;
@@ -177,7 +180,7 @@ export class DaemonGatewayService {
   async heartbeat(
     computer: ComputerContext,
     dto: HeartbeatDto,
-  ): Promise<{ agents: GatewayAgent[]; cancelled: string[] }> {
+  ): Promise<{ agents: HeartbeatAgent[]; cancelled: string[] }> {
     if (dto.cliVersion) {
       await this.dataSource
         .getRepository(Computer)
@@ -215,18 +218,25 @@ export class DaemonGatewayService {
     return rows.map((row) => row.id);
   }
 
-  async agentsOf(computerId: string): Promise<GatewayAgent[]> {
+  async agentsOf(computerId: string): Promise<HeartbeatAgent[]> {
     const agents = await this.dataSource.getRepository(Agent).find({
       where: { computerId },
       order: { createdAt: 'ASC', id: 'ASC' },
     });
     if (!agents.length) return [];
-    const library = await loadSkillDefs(
+    const slugs = await loadSkillSlugs(
       this.dataSource.manager,
       agents[0].workspaceId,
       agents.flatMap((agent) => agent.skills),
     );
-    return agents.map((agent) => toGatewayAgent(agent, library));
+    return agents.map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      persona: agent.persona,
+      workdir: agent.workdir,
+      maxTurns: agent.maxTurns,
+      skills: agent.skills.flatMap((id) => slugs.get(id) ?? []).sort(),
+    }));
   }
 
   // ---------- claim ----------

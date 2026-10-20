@@ -1,5 +1,5 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { agentHome } from './config.js';
 import type { SkillDef } from './types.js';
@@ -40,8 +40,10 @@ async function writeAtomic(file: string, data: string): Promise<void> {
   }
 }
 
+/** The text of a regular file; null when missing or when it is a symlink/directory/etc. */
 async function readOrNull(file: string): Promise<string | null> {
   try {
+    if (!(await lstat(file)).isFile()) return null;
     return await readFile(file, 'utf8');
   } catch {
     return null;
@@ -49,11 +51,42 @@ async function readOrNull(file: string): Promise<string | null> {
 }
 
 /**
+ * Makes `dir` a real directory (not a symlink, not a file): anything else is removed first.
+ * `rm` unlinks a symlink itself and never follows it.
+ */
+async function ensureRealDir(dir: string): Promise<void> {
+  const st = await lstat(dir).catch(() => null);
+  if (st && !st.isDirectory()) await rm(dir, { recursive: true, force: true });
+  await mkdir(dir, { recursive: true });
+}
+
+/** Removes `file` unless it is a regular file (a symlink or directory in its place). */
+async function dropIfNotFile(file: string): Promise<void> {
+  const st = await lstat(file).catch(() => null);
+  if (st && !st.isFile()) await rm(file, { recursive: true, force: true });
+}
+
+/** One sync at a time per agent directory, so overlapping runs cannot interleave. */
+const tails = new Map<string, Promise<unknown>>();
+
+function exclusive<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const run = (tails.get(key) ?? Promise.resolve()).then(fn, fn);
+  const tail = run.catch(() => undefined);
+  tails.set(key, tail);
+  void tail.then(() => {
+    if (tails.get(key) === tail) tails.delete(key);
+  });
+  return run;
+}
+
+/**
  * Syncs the agent's skills into a daemon-owned Claude Code plugin at
  * `<agent home>/skills/<agentId>/` (outside the agent's workdir):
- * `.claude-plugin/plugin.json` and `skills/<slug>/SKILL.md`. Unchanged skills (same
- * version and content) are not rewritten, skills that are no longer listed are removed.
- * Returns null when there are no skills. Throws on an unsafe agent id or slug.
+ * `.claude-plugin/plugin.json` and `skills/<slug>/SKILL.md`. A skill is left alone only when its
+ * SKILL.md on disk already equals the expected text; skills that are no longer listed are
+ * removed. Symlinks and non-directories where the daemon expects its own directories are
+ * replaced, never followed. Syncs of the same agent run one after another. Returns null when
+ * there are no skills. Throws on an unsafe agent id or slug.
  */
 export async function syncAgentSkills(
   agentId: string,
@@ -73,34 +106,44 @@ export async function syncAgentSkills(
   }
 
   const pluginDir = path.join(skillsRoot(env), agentId);
+  return exclusive(pluginDir, () => syncLocked(pluginDir, list, seen));
+}
+
+async function syncLocked(
+  pluginDir: string,
+  list: SkillDef[],
+  seen: Set<string>,
+): Promise<SkillsPlugin | null> {
   const skillsDir = path.join(pluginDir, 'skills');
   if (list.length === 0) {
     await rm(pluginDir, { recursive: true, force: true });
     return null;
   }
 
-  const manifest = path.join(pluginDir, '.claude-plugin', 'plugin.json');
+  await ensureRealDir(pluginDir);
+  const manifestDir = path.join(pluginDir, '.claude-plugin');
+  await ensureRealDir(manifestDir);
+  const manifest = path.join(manifestDir, 'plugin.json');
   const manifestText = `${JSON.stringify({ name: SKILLS_PLUGIN }, null, 2)}\n`;
-  if ((await readOrNull(manifest)) !== manifestText) await writeAtomic(manifest, manifestText);
+  if ((await readOrNull(manifest)) !== manifestText) {
+    await dropIfNotFile(manifest);
+    await writeAtomic(manifest, manifestText);
+  }
 
-  await mkdir(skillsDir, { recursive: true });
+  await ensureRealDir(skillsDir);
   for (const entry of await readdir(skillsDir)) {
+    // rm never follows a symlink: it removes the link itself.
     if (!seen.has(entry)) await rm(path.join(skillsDir, entry), { recursive: true, force: true });
   }
 
   for (const def of list) {
     const dir = path.join(skillsDir, def.slug);
+    await ensureRealDir(dir);
+    const file = path.join(dir, 'SKILL.md');
     const text = renderSkill(def);
-    const stamp = `${def.version}:${createHash('sha256').update(text).digest('hex')}`;
-    const stampFile = path.join(dir, '.version');
-    if (
-      (await readOrNull(stampFile)) === stamp &&
-      (await readOrNull(path.join(dir, 'SKILL.md'))) !== null
-    ) {
-      continue;
-    }
-    await writeAtomic(path.join(dir, 'SKILL.md'), text);
-    await writeAtomic(stampFile, stamp);
+    if ((await readOrNull(file)) === text) continue;
+    await dropIfNotFile(file);
+    await writeAtomic(file, text);
   }
 
   return { path: pluginDir, names: list.map((d) => `${SKILLS_PLUGIN}:${d.slug}`) };

@@ -1,5 +1,16 @@
 import { mkdtempSync, realpathSync } from 'node:fs';
-import { mkdir, readFile, stat, utimes, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  readlink,
+  rm,
+  stat,
+  symlink,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -78,4 +89,93 @@ describe('syncAgentSkills', () => {
     await writeFile(path.join(e.AGENT_HOME!, 'skills', 'ag-1', 'x'), '');
     expect(await syncAgentSkills('ag-1', undefined, e)).toBeNull();
   });
+
+  it('rewrites a skill whose SKILL.md on disk was changed, even with the same version', async () => {
+    const e = env();
+    const res = await syncAgentSkills('ag-1', [def()], e);
+    const file = path.join(res!.path, 'skills', 'bao-gia', 'SKILL.md');
+    await writeFile(file, 'tampered');
+    await syncAgentSkills('ag-1', [def()], e);
+    expect(await readFile(file, 'utf8')).toBe(renderSkill(def()));
+  });
+
+  it('replaces a skill directory or SKILL.md that is a symlink, without writing through it', async () => {
+    const e = env();
+    const outside = path.join(e.AGENT_HOME!, 'outside');
+    await mkdir(outside);
+    await writeFile(path.join(outside, 'SKILL.md'), 'secret');
+    const res = await syncAgentSkills('ag-1', [def(), def({ slug: 'dich' })], e);
+    const skills = path.join(res!.path, 'skills');
+    await rm(path.join(skills, 'bao-gia'), { recursive: true });
+    await symlink(outside, path.join(skills, 'bao-gia'));
+    await rm(path.join(skills, 'dich', 'SKILL.md'));
+    await symlink(path.join(outside, 'SKILL.md'), path.join(skills, 'dich', 'SKILL.md'));
+
+    await syncAgentSkills('ag-1', [def(), def({ slug: 'dich' })], e);
+    for (const slug of ['bao-gia', 'dich']) {
+      expect((await lstat(path.join(skills, slug))).isDirectory()).toBe(true);
+      expect((await lstat(path.join(skills, slug, 'SKILL.md'))).isFile()).toBe(true);
+    }
+    expect(await readFile(path.join(outside, 'SKILL.md'), 'utf8')).toBe('secret');
+    expect(await readFile(path.join(skills, 'dich', 'SKILL.md'), 'utf8')).toContain('name: dich');
+  });
+
+  it('replaces a skill path that is a plain file, and a symlinked skills dir or plugin dir', async () => {
+    const e = env();
+    const outside = path.join(e.AGENT_HOME!, 'outside');
+    await mkdir(outside);
+    const res = await syncAgentSkills('ag-1', [def()], e);
+    await rm(path.join(res!.path, 'skills', 'bao-gia'), { recursive: true });
+    await writeFile(path.join(res!.path, 'skills', 'bao-gia'), 'file');
+    await syncAgentSkills('ag-1', [def()], e);
+    expect((await lstat(path.join(res!.path, 'skills', 'bao-gia'))).isDirectory()).toBe(true);
+
+    await rm(path.join(res!.path, 'skills'), { recursive: true });
+    await symlink(outside, path.join(res!.path, 'skills'));
+    await syncAgentSkills('ag-1', [def()], e);
+    expect((await lstat(path.join(res!.path, 'skills'))).isDirectory()).toBe(true);
+
+    await rm(res!.path, { recursive: true });
+    await symlink(outside, res!.path);
+    await syncAgentSkills('ag-1', [def()], e);
+    expect((await lstat(res!.path)).isDirectory()).toBe(true);
+    expect((await readdir(outside)).length).toBe(0);
+  });
+
+  it('removes stale entries without following symlinks', async () => {
+    const e = env();
+    const outside = path.join(e.AGENT_HOME!, 'outside');
+    await mkdir(outside);
+    await writeFile(path.join(outside, 'keep.txt'), 'keep');
+    const res = await syncAgentSkills('ag-1', [def()], e);
+    const skills = path.join(res!.path, 'skills');
+    await symlink(outside, path.join(skills, 'stale-link'));
+    await mkdir(path.join(skills, 'stale-dir'));
+    await symlink(outside, path.join(skills, 'stale-dir', 'inner'));
+    await writeFile(path.join(skills, 'stale-file'), 'x');
+    await syncAgentSkills('ag-1', [def()], e);
+    expect(await readdir(skills)).toEqual(['bao-gia']);
+    expect(await readFile(path.join(outside, 'keep.txt'), 'utf8')).toBe('keep');
+    await expect(readlink(path.join(skills, 'stale-link'))).rejects.toThrow();
+  });
+
+  it('serialises overlapping syncs of the same agent', async () => {
+    const e = env();
+    const calls = [
+      syncAgentSkills('ag-1', [def({ version: 1, content: 'one' })], e),
+      syncAgentSkills('ag-1', [def({ slug: 'dich', content: 'two' })], e),
+      syncAgentSkills('ag-1', [def({ version: 3, content: 'three' })], e),
+      syncAgentSkills('ag-1', [def({ slug: 'dich', content: 'four' })], e),
+    ];
+    await Promise.all(calls);
+    // the last call wins completely: no leftovers or half-written files from the others
+    const skills = path.join(skillsRootOf(e), 'ag-1', 'skills');
+    expect(await readdir(skills)).toEqual(['dich']);
+    expect(await readFile(path.join(skills, 'dich', 'SKILL.md'), 'utf8')).toContain('four');
+    // a failing sync does not block the next one
+    await expect(syncAgentSkills('ag-1', [def(), def()], e)).rejects.toThrow(/duplicate/);
+    expect(await syncAgentSkills('ag-1', [def()], e)).not.toBeNull();
+  });
 });
+
+const skillsRootOf = (e: NodeJS.ProcessEnv) => path.join(e.AGENT_HOME!, 'skills');

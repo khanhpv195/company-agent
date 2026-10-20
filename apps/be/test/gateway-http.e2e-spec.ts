@@ -11,6 +11,7 @@ import { AgentActivity } from '../src/modules/agents/entities/agent-activity.ent
 import { ChatMessage } from '../src/modules/chat/entities/chat-message.entity';
 import { Computer } from '../src/modules/computers/entities/computer.entity';
 import { REALTIME_EVENT, RealtimeEnvelope } from '../src/modules/events';
+import { MAX_WRITE_CALLS } from '../src/modules/daemon/gateway-tools.service';
 import { AgentGatewayService } from '../src/modules/gateway/agent-gateway.service';
 import { Assignment } from '../src/modules/gateway/entities/assignment.entity';
 import { TaskEntity } from '../src/modules/tasks/entities/task.entity';
@@ -332,22 +333,7 @@ describe('Gateway over HTTP (e2e)', () => {
           workdir: '~/workspace',
           maxTurns: 40,
           skills: ['git-ops', 'summarize'],
-          skillDefs: [
-            {
-              slug: 'git-ops',
-              name: 'Git ops',
-              description: 'Use for git work.',
-              content: '# Git ops',
-              version: 3,
-            },
-            {
-              slug: 'summarize',
-              name: 'Summarize',
-              description: 'Use to summarize.',
-              content: '# Summarize',
-              version: 1,
-            },
-          ],
+          // no skillDefs: skill content only travels with a claimed assignment
         },
       ]);
       const computer = await dataSource
@@ -880,6 +866,42 @@ describe('Gateway over HTTP (e2e)', () => {
         'Invalid tool input',
       );
       expect(await toolError('nope', id, {}, 404)).toBe('Unknown tool nope');
+    });
+
+    it('list_skills is member-level, workspace-scoped and not a write call', async () => {
+      const stranger = await registerAndLogin(app);
+      await createSkill(dataSource, stranger.workspaceId, {
+        slug: 'foreign',
+        name: 'Foreign',
+        description: 'Other workspace.',
+        content: '# Foreign',
+      });
+      const { claimed } = await runningChat('ai đó', member);
+      for (let i = 0; i < MAX_WRITE_CALLS + 5; i++) {
+        const slugs = ((await tool('list_skills', claimed.id)).result as Array<{ slug: string }>)
+          .map((s) => s.slug)
+          .sort();
+        expect(slugs).toEqual(['git-ops', 'summarize', 'translate']);
+      }
+      // the write budget is untouched: a write tool still works after all those reads
+      await tool('create_task', claimed.id, { title: 'Vẫn ghi được', status: 'backlog' });
+    });
+
+    it('update_agent rejects unknown skill slugs and leaves the agent unchanged', async () => {
+      const ownerChat = await dmOf(agent, me);
+      await sendChat(ownerChat, 'đổi skill', me);
+      const run = (await gw<Claimed | null>('/claim', { maxChats: 3 }))!;
+      await gw(`/assignments/${run.id}/accept`, { attempt: 1 });
+      const before = await dataSource.getRepository(Agent).findOneByOrFail({ id: agent.id });
+      const message = await toolError(
+        'update_agent',
+        run.id,
+        { id: agent.id, skills: ['git-ops', 'nope'] },
+        400,
+      );
+      expect(message).toContain('unknown skills: nope');
+      const after = await dataSource.getRepository(Agent).findOneByOrFail({ id: agent.id });
+      expect(after.skills).toEqual(before.skills);
     });
 
     it('writes as the requester and attributes every write to the agent', async () => {

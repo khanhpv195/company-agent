@@ -15,5 +15,6 @@
   "AGENT_FORBIDDEN": "Only an owner, an admin or a member of the agent's department can change its skills",
   "IN_USE": "The skill is enabled on agents; turn it off there first",
   "TOO_MANY": "An agent can have at most {max} skills",
-  "TOO_LARGE": "The skills of an agent can hold at most {max} characters in total"
+  "TOO_LARGE": "The skills of an agent can hold at most {max} characters in total",
+  "CONTENT_TOO_LONG": "A skill can hold at most {max} characters"
 }
