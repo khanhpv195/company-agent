@@ -105,8 +105,16 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
   { id: 'desktop', group: 'app' },
 ];
 
-export const sectionsFor = (role: MemberRole | undefined): SettingsSectionDef[] =>
-  SETTINGS_SECTIONS.filter((s) => !s.roles || (role !== undefined && s.roles.includes(role)));
+/** The billing section only exists while the server enforces plan limits (`limitsEnabled`). */
+export const sectionsFor = (
+  role: MemberRole | undefined,
+  limitsEnabled = false,
+): SettingsSectionDef[] =>
+  SETTINGS_SECTIONS.filter(
+    (s) =>
+      (s.id !== 'billing' || limitsEnabled) &&
+      (!s.roles || (role !== undefined && s.roles.includes(role))),
+  );
 
 /** Avatar colors (match the seeded members); `null` is the default avatar color. */
 export const PROFILE_COLORS = [

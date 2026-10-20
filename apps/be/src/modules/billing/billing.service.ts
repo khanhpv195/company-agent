@@ -122,6 +122,7 @@ export class BillingService {
           }
         : null,
       checkoutAvailable: this.checkoutAvailable,
+      limitsEnabled: this.limits.limitsEnabled,
     };
   }
 

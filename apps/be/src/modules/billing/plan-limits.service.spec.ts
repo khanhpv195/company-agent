@@ -4,9 +4,14 @@ import type { EntityManager } from 'typeorm';
 
 const NOW = new Date('2026-01-01T00:00:00Z');
 
-const build = (row: { seats: string; agents: string; computers: string }) => {
+const build = (row: { seats: string; agents: string; computers: string }, limitsEnabled = true) => {
   const query = jest.fn().mockResolvedValue([row]);
-  const service = new PlanLimitsService({ now: () => NOW } as unknown as ClockService);
+  const service = new PlanLimitsService(
+    { now: () => NOW } as unknown as ClockService,
+    {
+      limitsEnabled,
+    } as never,
+  );
   return { service, query, manager: { query } as unknown as EntityManager };
 };
 
@@ -48,6 +53,16 @@ describe('PlanLimitsService', () => {
     });
   });
 
+  it('does nothing, and runs no query, when limits are disabled', async () => {
+    const { service, query, manager } = build(
+      { seats: '99', agents: '99', computers: '99' },
+      false,
+    );
+    expect(service.limitsEnabled).toBe(false);
+    await expect(service.assertCanAdd(manager, 'ws', 'free', 'seats', 5)).resolves.toBeUndefined();
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it('honours the number being added and the plan', async () => {
     const { service, manager } = build({ seats: '8', agents: '0', computers: '0' });
     await expect(service.assertCanAdd(manager, 'ws', 'pro', 'seats', 2)).resolves.toBeUndefined();
@@ -60,7 +75,12 @@ describe('PlanLimitsService', () => {
   });
 
   it('lockPlan returns the plan, and throws when the workspace is gone', async () => {
-    const found = new PlanLimitsService({ now: () => NOW } as unknown as ClockService);
+    const found = new PlanLimitsService(
+      { now: () => NOW } as unknown as ClockService,
+      {
+        limitsEnabled: true,
+      } as never,
+    );
     const manager = {
       query: jest.fn().mockResolvedValue([{ plan: 'team' }]),
     } as unknown as EntityManager;

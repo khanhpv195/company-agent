@@ -70,7 +70,10 @@ describe('settings sections and profile', () => {
     const ids = (r: 'owner' | 'admin' | 'member' | undefined) => sectionsFor(r).map((s) => s.id);
     expect(ids('member')).toEqual(['profile', 'security', 'appearance', 'members', 'desktop']);
     expect(ids('admin')).toContain('audit');
-    expect(ids('owner')).toContain('billing');
+    expect(ids('owner')).not.toContain('billing'); // plan limits off by default
+    expect(sectionsFor('owner', true).map((s) => s.id)).toContain('billing');
+    expect(sectionsFor('admin', true).map((s) => s.id)).toContain('billing');
+    expect(sectionsFor('member', true).map((s) => s.id)).not.toContain('billing');
     expect(ids(undefined)).not.toContain('audit');
   });
   it('builds a minimal patch', () => {

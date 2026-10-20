@@ -1,4 +1,4 @@
-import type { Room } from '@repo/shared';
+import type { MessageQuote, Room } from '@repo/shared';
 import { useMemo, useState, type ReactNode } from 'react';
 import type { LocalMessage } from '../../stores/chat';
 import { useSession } from '../workspace/workspace.api';

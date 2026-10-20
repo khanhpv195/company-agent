@@ -33,7 +33,7 @@ export class FakeStripeGateway extends StripeSdkGateway {
   subscriptions = new Map<string, StripeSubscriptionLike>();
 
   constructor() {
-    super({ provider: 'stripe', stripe: STRIPE_E2E });
+    super({ limitsEnabled: true, provider: 'stripe', stripe: STRIPE_E2E });
   }
 
   reset(): void {

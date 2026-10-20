@@ -91,6 +91,8 @@ export const envValidationSchema = Joi.object({
   SMTP_SECURE: Joi.boolean().default(false),
   SMTP_USER: Joi.string().allow('').optional(),
   SMTP_PASS: Joi.string().allow('').optional(),
+  // False (default): plan limits are not enforced and the plan UI is hidden.
+  BILLING_LIMITS_ENABLED: Joi.boolean().default(false),
   // Stripe is only wired (and its keys required) when billing is switched on.
   BILLING_PROVIDER: Joi.string().valid('none', 'stripe').default('none'),
   STRIPE_SECRET_KEY: stripeSetting,

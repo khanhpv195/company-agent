@@ -28,6 +28,8 @@ const FORCED: Record<string, string> = {
   LOG_LEVEL: 'silent',
   CONNECTIONS_MODE: 'simulated',
   SWAGGER_ENABLED: 'false',
+  // Limit specs rely on enforcement; billing-limits-off.e2e-spec.ts overrides it.
+  BILLING_LIMITS_ENABLED: 'true',
 };
 
 const DEFAULTS: Record<string, string> = {

@@ -232,7 +232,8 @@ on('GET', '/audit-events', ({ query }) => {
 
 // ----- billing -----
 const plan = (id: WorkspacePlan) => planById(id);
-const mockBilling = { plan: 'pro' as WorkspacePlan };
+/** Mirrors the real default (`BILLING_LIMITS_ENABLED=false`): no limits, no plan UI. */
+const mockBilling = { plan: 'pro' as WorkspacePlan, limitsEnabled: false };
 const requireOwner = () => {
   if (me().role !== 'owner') throw new HttpError(403, 'Chỉ chủ sở hữu mới quản lý được gói');
 };
@@ -277,6 +278,7 @@ on('GET', '/billing', (): BillingSummary => {
             cancelAtPeriodEnd: false,
           },
     checkoutAvailable: true,
+    limitsEnabled: mockBilling.limitsEnabled,
   };
 });
 on('POST', '/billing/checkout', () => {

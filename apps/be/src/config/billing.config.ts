@@ -1,6 +1,8 @@
 import { ConfigType, registerAs } from '@nestjs/config';
 
 export const billingConfig = registerAs('billing', () => ({
+  /** False (default): plan limits are not enforced and the plan UI is hidden. */
+  limitsEnabled: process.env.BILLING_LIMITS_ENABLED === 'true',
   provider: (process.env.BILLING_PROVIDER ?? 'none') as 'none' | 'stripe',
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY ?? '',

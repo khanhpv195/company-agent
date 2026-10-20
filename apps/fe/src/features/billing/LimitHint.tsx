@@ -7,6 +7,7 @@ import type { LimitGuard } from './billing.api';
 export function LimitHint({ guard }: { guard: LimitGuard }) {
   const t = useT();
   const role = useSession().data?.user.role;
+  // `blocked` is never set when the server runs without plan limits, so no plan UI shows.
   if (!guard.blocked) return null;
   const canUpgrade = role === 'owner' || role === 'admin';
   return (
