@@ -1,0 +1,21 @@
+{
+  "LISTED": "Skills loaded",
+  "LOADED": "Skill loaded",
+  "VERSIONS_LISTED": "Skill versions loaded",
+  "CREATED": "Skill created",
+  "UPDATED": "Skill updated",
+  "RESTORED": "Skill version restored",
+  "APPROVED": "Skill approved",
+  "DELETED": "Skill deleted",
+  "AGENT_SKILLS_UPDATED": "Agent skills updated",
+  "NOT_FOUND": "Skill not found",
+  "VERSION_NOT_FOUND": "Skill version not found",
+  "SLUG_TAKEN": "A skill with this slug already exists",
+  "UNKNOWN_TEMPLATE": "Skill template not found",
+  "FORBIDDEN": "Only the creator, an owner or an admin can change this skill",
+  "AGENT_FORBIDDEN": "Only an owner, an admin or a member of the agent's department can change its skills",
+  "IN_USE": "The skill is enabled on agents; turn it off there first",
+  "TOO_MANY": "An agent can have at most {max} skills",
+  "TOO_LARGE": "The skills of an agent can hold at most {max} characters in total",
+  "CONTENT_TOO_LONG": "A skill can hold at most {max} characters"
+}

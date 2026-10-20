@@ -15,5 +15,6 @@
   "IS_CURSOR": "{property} is not a valid cursor",
   "IS_ISO_DATE": "{property} must be an ISO 8601 date",
   "IS_HEX_COLOR": "{property} must be a color like #b0516f",
-  "IS_UUID": "{property} must be a valid id"
+  "IS_UUID": "{property} must be a valid id",
+  "IS_SLUG": "{property} must contain only lowercase letters, digits and \"-\" (1-64 characters)"
 }

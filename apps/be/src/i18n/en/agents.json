@@ -4,11 +4,9 @@
   "UPDATED": "Agent updated",
   "ACTIVITY_LISTED": "Agent activity loaded",
   "NOT_FOUND": "Agent not found",
-  "CATALOG_LOADED": "Skill catalog loaded",
   "CREATED": "Agent created",
   "DELETED": "Agent deleted",
   "NAME_TAKEN": "An agent with this name already exists",
   "UNKNOWN_COMPUTER": "Computer not found in this workspace",
-  "UNKNOWN_SKILL": "Unknown skill",
   "BUSY": "The agent has open work; wait for it to finish or stop it first"
 }

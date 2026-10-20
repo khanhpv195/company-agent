@@ -44,6 +44,13 @@ export const WORKSPACE_TOOLS: WorkspaceToolSpec[] = [
     shape: {},
   },
   {
+    name: 'list_skills',
+    access: 'member',
+    description:
+      'List the skills of the workspace skill library (read-only): slug, name and description. Use the slugs for the skills of create_agent / update_agent.',
+    shape: {},
+  },
+  {
     name: 'create_task',
     access: 'member',
     description: 'Create a task. assigneeId may be an agent or a member id.',
@@ -90,11 +97,15 @@ export const WORKSPACE_TOOLS: WorkspaceToolSpec[] = [
   {
     name: 'create_agent',
     access: 'admin',
-    description: 'Create a new agent (owner/admin only). Defaults to this computer.',
+    description:
+      'Create a new agent (owner/admin only). Defaults to this computer. skills are slugs of skills from the workspace skill library (see list_skills).',
     shape: {
       name: z.string(),
       persona: z.string().optional(),
-      skills: z.array(z.string()).optional(),
+      skills: z
+        .array(z.string())
+        .optional()
+        .describe('Slugs of skills from the workspace skill library (see list_skills)'),
       workdir: z.string().optional(),
       maxTurns: z.number().int().optional(),
       computerId: z.string().optional(),
@@ -106,11 +117,14 @@ export const WORKSPACE_TOOLS: WorkspaceToolSpec[] = [
     name: 'update_agent',
     access: 'admin',
     description:
-      'Update an agent persona, skills, name, workdir, maxTurns, department or job title (owner/admin only). departmentId and title may be null to clear them.',
+      'Update an agent persona, skills (slugs from the workspace skill library, see list_skills; the full set of enabled skills), name, workdir, maxTurns, department or job title (owner/admin only). departmentId and title may be null to clear them.',
     shape: {
       id: z.string(),
       persona: z.string().optional(),
-      skills: z.array(z.string()).optional(),
+      skills: z
+        .array(z.string())
+        .optional()
+        .describe('Slugs of skills from the workspace skill library (see list_skills)'),
       name: z.string().optional(),
       workdir: z.string().optional(),
       maxTurns: z.number().int().optional(),

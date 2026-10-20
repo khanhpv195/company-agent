@@ -12,6 +12,8 @@ export * from './interfaces/message.interface';
 export * from './interfaces/pagination.interface';
 export * from './interfaces/realtime-event.interface';
 export * from './interfaces/room.interface';
+export * from './interfaces/skill.interface';
 export * from './interfaces/task.interface';
 export * from './interfaces/workspace.interface';
 export * from './rules';
+export * from './templates';

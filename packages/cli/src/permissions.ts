@@ -61,6 +61,12 @@ export function sensitivePaths(
   return [...out];
 }
 
+/** Daemon-owned skill files: agents may read them but never change what they will run next. */
+export function skillWritePaths(env: NodeJS.ProcessEnv = process.env): string[] {
+  const roots = new Set([agentHome(env), tryRealpath(agentHome(env))]);
+  return [...roots].map((a) => `${a}/skills/**`);
+}
+
 export const WRITE_TOOLS = ['Edit', 'Write'] as const;
 
 /** Paths inside the workdir that Edit/Write may not touch. */
@@ -111,6 +117,9 @@ export function buildPermissionRules(
   const disallowedTools = [
     ...FILE_TOOLS.flatMap((t) => denied.map((p) => `${t}(${p})`)),
     ...WRITE_TOOLS.flatMap((t) => guarded.map((p) => `${t}(${p})`)),
+    ...WRITE_TOOLS.flatMap((t) =>
+      skillWritePaths(opts.env).map((p) => `${t}(${absoluteRulePath(p)})`),
+    ),
     ...(opts.allowWebFetch ? [] : ['WebFetch']),
   ];
   return { allowedTools, disallowedTools };

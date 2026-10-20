@@ -52,6 +52,7 @@ describe('workspace tool proxy', () => {
     expect(names(null)).toEqual(['list_agents', 'list_tasks', 'get_task', 'list_members']);
     const member = names({ id: 'm', name: 'M', role: 'member' });
     expect(member).toContain('create_task');
+    expect(member).toContain('list_skills');
     expect(member).not.toContain('create_agent');
     expect(names({ id: 'm', name: 'M', role: 'owner' })).toHaveLength(WORKSPACE_TOOLS.length);
     const admin = { id: 'm', name: 'M', role: 'admin' } as const;
@@ -74,6 +75,15 @@ describe('workspace tool proxy', () => {
     const cleared = shapeOf('update_agent').parse({ id: 'a1', departmentId: null, title: null });
     expect(cleared).toMatchObject({ departmentId: null, title: null });
     expect(shapeOf('create_agent').safeParse({ name: 'x', departmentId: 5 }).success).toBe(false);
+  });
+
+  it('describes skills as slugs of the workspace skill library', () => {
+    const spec = (name: string) => WORKSPACE_TOOLS.find((t) => t.name === name)!;
+    expect(spec('list_skills')).toMatchObject({ access: 'member', shape: {} });
+    for (const name of ['create_agent', 'update_agent']) {
+      expect(spec(name).description).toContain('skill library');
+      expect((spec(name).shape.skills as z.ZodType).description).toContain('skill library');
+    }
   });
 
   it('builds an in-process MCP server named workspace', () => {

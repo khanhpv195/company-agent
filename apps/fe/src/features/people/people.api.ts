@@ -1,10 +1,4 @@
-import type {
-  Agent,
-  AgentActivity,
-  AgentSkill,
-  CreateAgentInput,
-  UpdateAgentInput,
-} from '@repo/shared';
+import type { Agent, AgentActivity, CreateAgentInput, UpdateAgentInput } from '@repo/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api-client';
 import { qk } from '../../lib/query-keys';
@@ -36,14 +30,6 @@ export function useUpdateAgent(id: string) {
 
 /** Owner/admin only: the API answers 403 to a member for every agent, connection and scheduler write. */
 export const useCanManage = (): boolean => canManageAgents(useSession().data?.user.role);
-
-export const useSkillCatalog = (enabled = true) =>
-  useQuery({
-    queryKey: ['agents', 'skill-catalog'] as const,
-    queryFn: () => api.get<AgentSkill[]>('/agents/skill-catalog'),
-    enabled,
-    staleTime: Infinity,
-  }).data;
 
 export function useCreateAgent() {
   const qc = useQueryClient();

@@ -1,17 +1,9 @@
 import { INestApplication } from '@nestjs/common';
-import type {
-  Agent,
-  AgentSkill,
-  ApiErrorResponse,
-  ApiResponse,
-  Message,
-  Room,
-  Task,
-} from '@repo/shared';
+import type { Agent, ApiErrorResponse, ApiResponse, Message, Room, Task } from '@repo/shared';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource, IsNull } from 'typeorm';
-import { DEFAULT_PERSONA, defaultSkills } from '../src/modules/agents/agent-defaults';
+import { DEFAULT_PERSONA } from '../src/modules/agents/agent-defaults';
 import { Agent as AgentEntity } from '../src/modules/agents/entities/agent.entity';
 import { Assignment } from '../src/modules/gateway/entities/assignment.entity';
 import { TaskRun } from '../src/modules/tasks/entities/task-run.entity';
@@ -20,6 +12,7 @@ import {
   addMemberWithRole,
   createAgent,
   createComputer,
+  createSkill,
   createTestApp,
   createWorld,
   LoggedInClient,
@@ -86,21 +79,6 @@ describe('Agent management (e2e)', () => {
   const tasks = () => call<Task[]>('get', '/tasks');
   const create = (body: object, client = w.me) => call<Agent>('post', '/agents', body, 200, client);
 
-  describe('skill catalog', () => {
-    it('lists every default skill and is not taken for an agent id', async () => {
-      const catalog = await call<AgentSkill[]>(
-        'get',
-        '/agents/skill-catalog',
-        undefined,
-        200,
-        member,
-      );
-      expect(catalog).toEqual(defaultSkills());
-      expect(catalog.filter((s) => s.enabled).length).toBeGreaterThan(0);
-      expect(catalog.some((s) => !s.enabled)).toBe(true);
-    });
-  });
-
   describe('create', () => {
     it('applies the defaults and notifies', async () => {
       const agent = await create({ name: '  Ops Bot ', computerId: w.c1.id });
@@ -113,7 +91,7 @@ describe('Agent management (e2e)', () => {
         maxTurns: 40,
         status: 'idle',
       });
-      expect(agent.skills).toEqual(defaultSkills());
+      expect(agent.skills).toEqual([]);
       expect(agent.avatar).toBe(3 % 3); // three agents exist already
       expect((await agents()).map((a) => a.name)).toEqual([
         "khanhpv's Claude",
@@ -128,7 +106,12 @@ describe('Agent management (e2e)', () => {
       expect((await create({ name: 'Far', computerId: w.c2.id })).status).toBe('offline');
     });
 
-    it('takes explicit values; an explicit skill list switches the rest off', async () => {
+    it('takes explicit values; only the enabled library skills are on', async () => {
+      const gitOps = await createSkill(dataSource, w.me.workspaceId, {
+        slug: 'git-ops',
+        name: 'a',
+      });
+      const memory = await createSkill(dataSource, w.me.workspaceId, { slug: 'memory', name: 'b' });
       const agent = await create({
         name: 'Custom',
         computerId: w.c1.id,
@@ -136,13 +119,15 @@ describe('Agent management (e2e)', () => {
         workdir: ' ~/work/custom ',
         maxTurns: 7,
         skills: [
-          { id: 'git-ops', enabled: true },
-          { id: 'memory', enabled: false },
+          { id: gitOps.id, enabled: true },
+          { id: memory.id, enabled: false },
         ],
       });
       expect(agent).toMatchObject({ persona: 'Be terse.', workdir: '~/work/custom', maxTurns: 7 });
-      expect(agent.skills.filter((s) => s.enabled).map((s) => s.id)).toEqual(['git-ops']);
-      expect(agent.skills).toHaveLength(defaultSkills().length);
+      expect(agent.skills).toEqual([
+        { id: gitOps.id, name: 'a', enabled: true },
+        { id: memory.id, name: 'b', enabled: false },
+      ]);
     });
 
     it('falls back to the default persona for a blank one, and slugs odd names', async () => {
@@ -164,9 +149,14 @@ describe('Agent management (e2e)', () => {
         { name: 'ok', computerId: w.c1.id, maxTurns: 1.5 },
         { name: 'ok', computerId: w.c1.id, workdir: '  ' },
         { name: 'ok', computerId: w.c1.id, skills: [{ id: 'git-ops' }] },
-        { name: 'ok', computerId: w.c1.id, skills: [{ id: 'nope', enabled: true }] },
       ];
       for (const body of bad) await call('post', '/agents', body, 400);
+      await call(
+        'post',
+        '/agents',
+        { name: 'ok', computerId: w.c1.id, skills: [{ id: 'nope', enabled: true }] },
+        404,
+      );
       expect(await agents()).toHaveLength(3);
     });
 

@@ -2,11 +2,20 @@ import type { ReactNode } from 'react';
 import { usePeople } from '../features/workspace/workspace.api';
 import { blocks, inline } from './markdown-blocks';
 
-export function Markdown({ text, children }: { text: string; children?: ReactNode }) {
+/** `headings` (skill preview) turns `#` lines into headings and skips @mention chips. */
+export function Markdown({
+  text,
+  headings = false,
+  children,
+}: {
+  text: string;
+  headings?: boolean;
+  children?: ReactNode;
+}) {
   const { mentionNames } = usePeople();
   return (
     <>
-      {blocks(text, mentionNames)}
+      {blocks(text, headings ? [] : mentionNames, headings)}
       {children}
     </>
   );

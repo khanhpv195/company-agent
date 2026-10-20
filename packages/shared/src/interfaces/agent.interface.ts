@@ -1,6 +1,8 @@
 export type AgentStatus = 'idle' | 'working' | 'offline';
 
+/** Every live skill of the workspace library, with whether this agent has it on. */
 export interface AgentSkill {
+  /** The skill uuid. */
   id: string;
   name: string;
   enabled: boolean;
@@ -31,7 +33,7 @@ export interface CreateAgentInput {
   computerId: string;
   /** Defaults to the stock persona. */
   persona?: string;
-  /** Ids from the skill catalog; defaults to the catalog's default enabled set. */
+  /** Library skill ids and their flags; no skills unless given. */
   skills?: Pick<AgentSkill, 'id' | 'enabled'>[];
   /** Defaults to `~/.agent/agents/<slug-of-name>`. */
   workdir?: string;

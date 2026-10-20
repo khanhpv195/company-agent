@@ -5,6 +5,8 @@ export const qk = {
   invites: ['invites'] as const,
   computers: ['computers'] as const,
   agents: ['agents'] as const,
+  skills: ['skills'] as const,
+  skillVersions: (id: string) => ['skills', id, 'versions'] as const,
   agent: (id: string) => ['agents', id] as const,
   agentActivity: (id: string) => ['agents', id, 'activity'] as const,
   rooms: ['rooms'] as const,

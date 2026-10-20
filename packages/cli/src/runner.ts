@@ -4,6 +4,7 @@ import { ApiError, type GatewayClient } from './api.js';
 import type { AgentConfig } from './config.js';
 import { errorMessage, type Logger } from './log.js';
 import { buildPermissionRules } from './permissions.js';
+import { SKILLS_PLUGIN, syncAgentSkills, type SkillsPlugin } from './skills.js';
 import { coalesce, StreamMapper } from './stream.js';
 import { createWorkspaceServer, WORKSPACE_SERVER } from './tools.js';
 import { prepareWorkdir } from './workdir.js';
@@ -60,6 +61,7 @@ export function buildOptions(
   cwd: string,
   abortController: AbortController,
   session: { id: string; resume: boolean } = a.session,
+  skills: SkillsPlugin | null = null,
 ): Options {
   const rules = buildPermissionRules(cwd, deps.config);
   return {
@@ -69,12 +71,41 @@ export function buildOptions(
     maxTurns: a.agent.maxTurns,
     permissionMode: 'dontAsk',
     settingSources: [],
+    // Skills are member-authored text: never run their inline shell (`!` commands) at load time.
+    settings: { disableSkillShellExecution: true },
     includePartialMessages: true,
     abortController,
+    // No `Skill` in allowedTools on purpose: the SDK `skills` option below enables the Skill tool, and listing `Skill` in allowedTools is deprecated.
     allowedTools: rules.allowedTools,
     disallowedTools: rules.disallowedTools,
     mcpServers: { [WORKSPACE_SERVER]: createWorkspaceServer(deps.client, a) },
+    ...(skills
+      ? {
+          plugins: [{ type: 'local' as const, path: skills.path, skipMcpDiscovery: true }],
+          skills: skills.names,
+        }
+      : {}),
   };
+}
+
+/**
+ * The SDK `system` init message lists the plugins that loaded and the load errors; a plugin
+ * that failed (or a path that vanished) is only reported there, so warn but never fail the run.
+ */
+export function checkSkillsPlugin(msg: SDKMessage, agentId: string, log: Logger): void {
+  if (msg.type !== 'system' || msg.subtype !== 'init') return;
+  const errors = (msg.plugin_errors ?? []).filter(
+    (e) => e.plugin === SKILLS_PLUGIN || e.plugin.startsWith(`${SKILLS_PLUGIN}@`),
+  );
+  const loaded = msg.plugins?.some((p) => p.name === SKILLS_PLUGIN) ?? false;
+  if (loaded && errors.length === 0) return;
+  const detail = errors.length
+    ? errors.map((e) => `${e.type}: ${e.message}`).join('; ')
+    : 'plugin not listed as loaded';
+  log(
+    'warn',
+    `skills plugin "${SKILLS_PLUGIN}" of agent ${agentId} did not load cleanly: ${detail}`,
+  );
 }
 
 function isGone(err: unknown): boolean {
@@ -294,15 +325,18 @@ export async function runAssignment(
 
   let failure: string | undefined;
   let sessionOverride: { id: string; resume: boolean } | undefined;
+  let skills: SkillsPlugin | null = null;
   try {
     if (!abort.signal.aborted) {
       const cwd = await prepareWorkdir(a.agent.workdir, deps.config.workdirRoots);
+      skills = await syncAgentSkills(a.agent.id, a.agent.skillDefs);
       const consume = async (session: { id: string; resume: boolean }) => {
         const q = deps.query({
           prompt: a.prompt,
-          options: buildOptions(a, deps, cwd, abort, session),
+          options: buildOptions(a, deps, cwd, abort, session, skills),
         });
         for await (const msg of q) {
+          if (skills) checkSkillsPlugin(msg, a.agent.id, log);
           const events = mapper.map(msg);
           if (events.length) buffer.push(...events);
           if (abort.signal.aborted) break;
@@ -346,6 +380,7 @@ export async function runAssignment(
   } finally {
     clearInterval(flushTimer);
     clearInterval(leaseTimer);
+    (skills as SkillsPlugin | null)?.release();
   }
 
   const sessionId = mapper.sessionId ?? sessionOverride?.id;

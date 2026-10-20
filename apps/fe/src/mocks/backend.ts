@@ -24,12 +24,15 @@ import {
   type UpdateTaskInput,
 } from '@repo/shared';
 import { assertDepartmentId, cleanTitle, joinDepartmentRoom } from './departments';
-import { iso, PERSONA, seed, skillCatalog, type MockDb } from './fixtures';
+import { iso, PERSONA, seed, type MockDb } from './fixtures';
+import { assertSkillIds, rebuildAgentSkills } from './skills';
 
 export class HttpError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Machine-readable context, sent as `meta.details` of the error envelope. */
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -497,9 +500,8 @@ export class MockBackend {
     const pc = this.assertComputer(input.computerId);
     this.assertNameFree(name);
     this.assertMaxTurns(input.maxTurns);
-    const catalog = skillCatalog();
-    if (input.skills?.some((x) => !catalog.some((c) => c.id === x.id)))
-      throw new HttpError(400, 'Skill không tồn tại');
+    const on = (input.skills ?? []).filter((x) => x.enabled).map((x) => x.id);
+    assertSkillIds(this, on);
     const slug =
       name
         .normalize('NFD')
@@ -514,12 +516,7 @@ export class MockBackend {
       provider: 'claude-code',
       computerId: pc.id,
       persona: input.persona?.trim() ? input.persona : PERSONA,
-      skills: catalog.map((skill) => ({
-        ...skill,
-        enabled: input.skills
-          ? !!input.skills.find((x) => x.id === skill.id)?.enabled
-          : skill.enabled,
-      })),
+      skills: [],
       workdir: input.workdir?.trim() || `~/.agent/agents/${slug}`,
       maxTurns: input.maxTurns ?? 40,
       status: 'idle',
@@ -527,7 +524,9 @@ export class MockBackend {
       departmentId: assertDepartmentId(this, input.departmentId),
       title: cleanTitle(input.title),
     };
+    agent.skills = on.map((id) => ({ id, name: '', enabled: true }));
     this.db.agents.push(agent);
+    rebuildAgentSkills(this);
     joinDepartmentRoom(this, agent.departmentId, 'agent', agent.id);
     this.syncAgents();
     this.emit({ type: 'agents.changed' });
@@ -543,6 +542,16 @@ export class MockBackend {
     const departmentId =
       patch.departmentId === undefined ? undefined : assertDepartmentId(this, patch.departmentId);
     const title = patch.title === undefined ? undefined : cleanTitle(patch.title);
+    let skillIds: string[] | undefined;
+    if (patch.skills) {
+      const next = new Set(a.skills.filter((x) => x.enabled).map((x) => x.id));
+      for (const s of patch.skills) {
+        if (s.enabled) next.add(s.id);
+        else next.delete(s.id);
+      }
+      skillIds = [...next];
+      assertSkillIds(this, skillIds);
+    }
     let computerId: string | undefined;
     if (patch.computerId !== undefined && patch.computerId !== a.computerId) {
       computerId = this.assertComputer(patch.computerId).id;
@@ -564,9 +573,9 @@ export class MockBackend {
       this.emit({ type: 'departments.changed' });
     }
     if (title !== undefined) a.title = title;
-    for (const s of patch.skills ?? []) {
-      const skill = a.skills.find((x) => x.id === s.id);
-      if (skill) skill.enabled = s.enabled;
+    if (skillIds) {
+      a.skills = skillIds.map((id) => ({ id, name: '', enabled: true }));
+      rebuildAgentSkills(this);
     }
     this.syncAgents();
     this.emit({ type: 'agents.changed' });

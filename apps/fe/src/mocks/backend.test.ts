@@ -149,7 +149,8 @@ describe('MockBackend agent management', () => {
       status: 'idle',
       workdir: '~/.agent/agents/ops-bot',
     });
-    expect(a.skills.filter((s) => s.enabled)).toHaveLength(18);
+    expect(a.skills.length).toBe(b.db.skills.length);
+    expect(a.skills.filter((s) => s.enabled)).toHaveLength(0);
     expect(b.db.agents).toHaveLength(4);
     expect(() => b.createAgent({ name: 'ops BOT', computerId: 'c1' })).toThrow(/trùng tên/);
     expect(() => b.createAgent({ name: 'X', computerId: 'zz' })).toThrow(/computer/);
@@ -157,17 +158,17 @@ describe('MockBackend agent management', () => {
     expect(b.createAgent({ name: 'Off', computerId: 'c2' }).status).toBe('offline');
   });
 
-  it('an explicit skill list switches the other skills off', () => {
+  it('an explicit skill list switches the other skills on, the rest stay off', () => {
     const { b } = setup();
     const a = b.createAgent({
       name: 'Few',
       computerId: 'c1',
-      skills: [{ id: 'git-ops', enabled: true }],
+      skills: [{ id: 'sk-git', enabled: true }],
     });
-    expect(a.skills.filter((s) => s.enabled).map((s) => s.id)).toEqual(['git-ops']);
+    expect(a.skills.filter((s) => s.enabled).map((s) => s.id)).toEqual(['sk-git']);
     expect(() =>
       b.createAgent({ name: 'Bad', computerId: 'c1', skills: [{ id: 'nope', enabled: true }] }),
-    ).toThrow(/Skill/);
+    ).toThrow(/skill/i);
   });
 
   it('renames the DM too and blocks moving a busy agent to another computer', () => {

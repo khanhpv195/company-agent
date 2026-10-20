@@ -71,7 +71,7 @@ describe('Onboarding with the simulator (e2e)', () => {
       provider: 'claude-code',
       maxTurns: 40,
     });
-    expect(agents[0].skills.length).toBeGreaterThan(0);
+    expect(agents[0].skills).toEqual([]);
 
     clock.advance(SIMULATED_CONNECT_DELAY_MS - 100);
     expect((await cliStatus()).connected).toBe(false);

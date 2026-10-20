@@ -4,11 +4,9 @@
   "UPDATED": "Đã cập nhật agent",
   "ACTIVITY_LISTED": "Đã tải hoạt động của agent",
   "NOT_FOUND": "Không tìm thấy agent",
-  "CATALOG_LOADED": "Đã tải danh mục skill",
   "CREATED": "Đã tạo agent",
   "DELETED": "Đã xoá agent",
   "NAME_TAKEN": "Đã có agent trùng tên",
   "UNKNOWN_COMPUTER": "Không tìm thấy computer trong workspace",
-  "UNKNOWN_SKILL": "Skill không tồn tại",
   "BUSY": "Agent đang có việc dở; hãy đợi xong hoặc dừng trước"
 }

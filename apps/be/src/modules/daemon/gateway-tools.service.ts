@@ -14,6 +14,7 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from '@repo/shared';
+import { isUUID } from 'class-validator';
 import { DataSource, IsNull } from 'typeorm';
 import { ClockService } from '../../common/clock';
 import { cleanTitle } from '../../common/utils/text.util';
@@ -28,6 +29,8 @@ import {
 import { AgentActivity } from '../agents/entities/agent-activity.entity';
 import { Agent } from '../agents/entities/agent.entity';
 import { Department } from '../departments/entities/department.entity';
+import { Skill } from '../skills/entities/skill.entity';
+import { loadLibrary, type SkillRef } from '../skills/skill-access';
 import { AgentsService } from '../agents/agents.service';
 import { ChatService } from '../chat/chat.service';
 import { AgentGatewayService } from '../gateway/agent-gateway.service';
@@ -57,6 +60,8 @@ interface ToolContext {
 
 interface ToolSpec {
   access: Access;
+  /** Does not count against `MAX_WRITE_CALLS` although it needs a member (e.g. `list_skills`). */
+  readOnly?: boolean;
   run: (ctx: ToolContext, input: Input) => Promise<unknown>;
 }
 
@@ -149,6 +154,28 @@ const compactTask = (task: Task) => ({
   running: !!task.activeRun,
 });
 
+/** The slugs of the library skills the agent has on, sorted. */
+const enabledSlugs = (
+  agent: { skills: { id: string; enabled: boolean }[] },
+  library: readonly SkillRef[],
+): string[] => {
+  const slugById = new Map(library.map((skill) => [skill.id, skill.slug]));
+  return agent.skills
+    .filter((skill) => skill.enabled)
+    .flatMap((skill) => slugById.get(skill.id) ?? [])
+    .sort();
+};
+
+/** Library slugs -> skill ids; an unknown slug is an error the model can read. */
+const slugsToIds = (slugs: readonly string[], library: readonly SkillRef[]): string[] => {
+  const idBySlug = new Map(library.map((skill) => [skill.slug, skill.id]));
+  const unknown = slugs.filter((slug) => !idBySlug.has(slug));
+  if (unknown.length) {
+    throw badInput(`unknown skills: ${unknown.join(', ')} (see the list_skills tool)`);
+  }
+  return slugs.map((slug) => idBySlug.get(slug)!);
+};
+
 /** Workspace tools of a daemon run. Each call re-checks the run and the requester's role. */
 @Injectable()
 export class GatewayToolsService {
@@ -175,6 +202,7 @@ export class GatewayToolsService {
       list_tasks: { access: 'read', run: (ctx, input) => this.listTasks(ctx, input) },
       get_task: { access: 'read', run: (ctx, input) => this.getTask(ctx, input) },
       list_members: { access: 'read', run: (ctx) => this.listMembers(ctx) },
+      list_skills: { access: 'member', readOnly: true, run: (ctx) => this.listSkills(ctx) },
       create_task: { access: 'member', run: (ctx, input) => this.createTask(ctx, input) },
       update_task: { access: 'member', run: (ctx, input) => this.updateTask(ctx, input) },
       move_task: { access: 'member', run: (ctx, input) => this.moveTask(ctx, input) },
@@ -217,18 +245,28 @@ export class GatewayToolsService {
     // A task run acts on text that any member can edit (description, comments), so it never gets
     // admin tools, whoever started it. Chat runs keep the requester's real role.
     const isAdmin = !!member && (member.role === 'owner' || member.role === 'admin');
+    // Skill text steers the model too: when any enabled skill was last saved by someone who is
+    // not (any more) an owner or admin, the run is capped at member-level tools like a task run.
+    // Only looked up when an admin tool is asked for (one query).
+    const skillCapped =
+      tool.access === 'admin' && isAdmin && row.sourceKind !== 'task'
+        ? await this.hasUntrustedSkill(agent)
+        : false;
     const allowed =
       tool.access === 'read' ||
       (tool.access === 'member' && !!member) ||
-      (tool.access === 'admin' && isAdmin && row.sourceKind !== 'task');
+      (tool.access === 'admin' && isAdmin && row.sourceKind !== 'task' && !skillCapped);
     if (!allowed) {
       throw new ForbiddenException({
-        message:
-          tool.access === 'admin' && isAdmin ? 'gateway.TASK_RUN_NO_ADMIN' : 'auth.FORBIDDEN',
+        message: !(tool.access === 'admin' && isAdmin)
+          ? 'auth.FORBIDDEN'
+          : skillCapped
+            ? 'gateway.SKILL_NO_ADMIN'
+            : 'gateway.TASK_RUN_NO_ADMIN',
       });
     }
 
-    if (tool.access !== 'read') {
+    if (tool.access !== 'read' && !tool.readOnly) {
       const used = this.writeCalls.get(row.id) ?? 0;
       if (used >= MAX_WRITE_CALLS) {
         throw new ConflictException({
@@ -266,6 +304,31 @@ export class GatewayToolsService {
     }
   }
 
+  /**
+   * True when an enabled, live skill of the agent was last saved by a member who is not an owner
+   * or admin now (or has been removed). Skills without an editor (templates, migration, seed)
+   * are trusted.
+   */
+  private async hasUntrustedSkill(agent: Agent): Promise<boolean> {
+    // Uses the agent's current skill set, not the run's snapshot.
+    const ids = (agent.skills ?? []).filter((id) => isUUID(id));
+    if (!ids.length) return false;
+    const count = await this.dataSource
+      .getRepository(Skill)
+      .createQueryBuilder('s')
+      .leftJoin(
+        Member,
+        'm',
+        'm.id = s.updated_by_member_id AND m.workspace_id = s.workspace_id AND m.removed_at IS NULL',
+      )
+      .where('s.id IN (:...ids)', { ids })
+      .andWhere('s.workspace_id = :workspaceId', { workspaceId: agent.workspaceId })
+      .andWhere('s.updated_by_member_id IS NOT NULL')
+      .andWhere("(m.id IS NULL OR m.role NOT IN ('owner', 'admin'))")
+      .getCount();
+    return count > 0;
+  }
+
   // ---------- read ----------
 
   private async departmentNames(workspaceId: string): Promise<Map<string, string>> {
@@ -276,6 +339,7 @@ export class GatewayToolsService {
   private async listAgents(ctx: ToolContext) {
     const agents = await this.agents.list(ctx.workspaceId);
     const departments = await this.departmentNames(ctx.workspaceId);
+    const library = await loadLibrary(this.dataSource.manager, ctx.workspaceId);
     return agents.map((agent) => ({
       id: agent.id,
       name: agent.name,
@@ -284,8 +348,17 @@ export class GatewayToolsService {
       status: agent.status,
       computerId: agent.computerId,
       workdir: agent.workdir,
-      skills: agent.skills.filter((skill) => skill.enabled).map((skill) => skill.id),
+      skills: enabledSlugs(agent, library),
     }));
+  }
+
+  /** The skill library, read only: what an agent can be given (`create_agent`/`update_agent` take slugs). */
+  private async listSkills(ctx: ToolContext) {
+    const rows = await this.dataSource.getRepository(Skill).find({
+      where: { workspaceId: ctx.workspaceId },
+      order: { slug: 'ASC' },
+    });
+    return rows.map((row) => ({ slug: row.slug, name: row.name, description: row.description }));
   }
 
   private async listTasks(ctx: ToolContext, input: Input) {
@@ -468,7 +541,9 @@ export class GatewayToolsService {
 
   private async createAgent(ctx: ToolContext, input: Input) {
     const name = reqString(input, 'name', MAX_NAME_LENGTH).trim();
-    const skills = optStringList(input, 'skills');
+    const slugs = optStringList(input, 'skills');
+    const library = await loadLibrary(this.dataSource.manager, ctx.workspaceId);
+    const skills = slugs && slugsToIds(slugs, library);
     const computerId = optString(input, 'computerId', 100);
     const created = await this.agents.create(
       ctx.workspaceId,
@@ -485,20 +560,18 @@ export class GatewayToolsService {
       { memberId: ctx.member?.id ?? null },
     );
     await this.recordAgentChange(ctx, `tạo agent **${created.name}**`);
-    return this.agentSummary(created);
+    return this.agentSummary(created, library);
   }
 
   private async updateAgent(ctx: ToolContext, input: Input) {
     const id = reqString(input, 'id', 100);
     const wanted = optStringList(input, 'skills');
+    const library = await loadLibrary(this.dataSource.manager, ctx.workspaceId);
     let skills: { id: string; enabled: boolean }[] | undefined;
     if (wanted) {
-      const catalog = this.agents.skillCatalog();
-      const known = new Set(catalog.map((skill) => skill.id));
-      const unknown = wanted.filter((skill) => !known.has(skill));
-      if (unknown.length) throw badInput(`unknown skills: ${unknown.join(', ')}`);
       // The list is the full set of enabled skills.
-      skills = catalog.map((skill) => ({ id: skill.id, enabled: wanted.includes(skill.id) }));
+      const ids = new Set(slugsToIds(wanted, library));
+      skills = library.map((skill) => ({ id: skill.id, enabled: ids.has(skill.id) }));
     }
     const updated = await this.agents.update(
       ctx.workspaceId,
@@ -515,10 +588,13 @@ export class GatewayToolsService {
       { memberId: ctx.member?.id ?? null },
     );
     await this.recordAgentChange(ctx, `sửa agent **${updated.name}**`);
-    return this.agentSummary(updated);
+    return this.agentSummary(updated, library);
   }
 
-  private agentSummary(agent: Awaited<ReturnType<AgentsService['get']>>) {
+  private agentSummary(
+    agent: Awaited<ReturnType<AgentsService['get']>>,
+    library: readonly SkillRef[],
+  ) {
     return {
       id: agent.id,
       name: agent.name,
@@ -527,7 +603,7 @@ export class GatewayToolsService {
       maxTurns: agent.maxTurns,
       departmentId: agent.departmentId,
       title: agent.title,
-      skills: agent.skills.filter((skill) => skill.enabled).map((skill) => skill.id),
+      skills: enabledSlugs(agent, library),
     };
   }
 

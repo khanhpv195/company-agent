@@ -13,13 +13,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApiWrappedResponse, CurrentAuth, Roles, ResponseMessage } from '../../common/decorators';
 import { AuthContext } from '../../common/types';
 import { AgentsService } from './agents.service';
-import {
-  AgentActivityDto,
-  AgentDto,
-  AgentSkillDto,
-  CreateAgentDto,
-  UpdateAgentDto,
-} from './dto/agent.dto';
+import { AgentActivityDto, AgentDto, CreateAgentDto, UpdateAgentDto } from './dto/agent.dto';
 
 // Ids are validated inside the service: a malformed id (the FE may still hold mock ids)
 // is a 404 on /agents/:id and an empty list on /agents/:id/activity, never a 400.
@@ -35,15 +29,6 @@ export class AgentsController {
   @ApiWrappedResponse(AgentDto, HttpStatus.OK, { isArray: true })
   list(@CurrentAuth() auth: AuthContext) {
     return this.agents.list(auth.workspaceId);
-  }
-
-  // Declared before `:id` so the literal path is not taken as an agent id.
-  @Get('skill-catalog')
-  @ResponseMessage('agents.CATALOG_LOADED')
-  @ApiOperation({ summary: 'Every skill a new agent can have, with its default flag' })
-  @ApiWrappedResponse(AgentSkillDto, HttpStatus.OK, { isArray: true })
-  skillCatalog() {
-    return this.agents.skillCatalog();
   }
 
   @Post()

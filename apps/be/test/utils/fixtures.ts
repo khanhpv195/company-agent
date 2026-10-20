@@ -1,8 +1,8 @@
 import { ComputerStatus } from '@repo/shared';
 import { DataSource } from 'typeorm';
-import { buildSkills } from '../../src/modules/agents/agent-defaults';
 import { Agent } from '../../src/modules/agents/entities/agent.entity';
 import { Computer } from '../../src/modules/computers/entities/computer.entity';
+import { Skill } from '../../src/modules/skills/entities/skill.entity';
 
 export const createComputer = (
   ds: DataSource,
@@ -37,7 +37,7 @@ export const createAgent = (
       avatar: 0,
       provider: 'claude-code',
       persona: 'Be helpful.',
-      skills: buildSkills(['git-ops', 'summarize', 'translate'], 2),
+      skills: [],
       workdir: '~/workspace',
       maxTurns: 40,
       ...overrides,
@@ -68,3 +68,21 @@ export const joinAll = async (
     );
   }
 };
+
+/** A library skill inserted directly (no HTTP, no audit), live and created by nobody. */
+export const createSkill = (
+  ds: DataSource,
+  workspaceId: string,
+  overrides: Partial<Skill> = {},
+): Promise<Skill> =>
+  ds.getRepository(Skill).save(
+    ds.getRepository(Skill).create({
+      workspaceId,
+      slug: 'git',
+      name: 'Git',
+      description: 'Use when the task needs git.',
+      content: '# Git\n\nUse git carefully.',
+      version: 1,
+      ...overrides,
+    }),
+  );

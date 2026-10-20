@@ -1,15 +1,12 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import type {
-  Agent as AgentContract,
-  AgentActivity as AgentActivityContract,
-  AgentSkill as AgentSkillContract,
-} from '@repo/shared';
+import type { Agent as AgentContract, AgentActivity as AgentActivityContract } from '@repo/shared';
 import { isUUID } from 'class-validator';
 import { In, Not, Repository, type EntityManager } from 'typeorm';
 import { randomUUID } from 'node:crypto';
@@ -21,7 +18,10 @@ import { findLiveDepartment, joinDepartmentRoom } from '../departments/departmen
 import type { Department } from '../departments/entities/department.entity';
 import { TaskEngineService } from '../tasks/task-engine.service';
 import { WorkspaceLockService } from '../tasks/workspace-lock.service';
+import { loadLibrary, resolveAgentSkills } from '../skills/skill-access';
+import { Member } from '../workspace/entities/member.entity';
 import { slugify } from '../workspace/slug.util';
+import type { AuthContext } from '../../common/types';
 import { EventsService } from '../events';
 import { AuditService, type AuditActor } from '../audit/audit.service';
 import { PlanLimitsService } from '../billing/plan-limits.service';
@@ -33,12 +33,7 @@ import {
 } from '../gateway/entities/assignment.entity';
 import { toAgent, toAgentActivity } from './agent.mapper';
 import { CreateAgentDto, UpdateAgentDto } from './dto/agent.dto';
-import {
-  AGENT_AVATAR_VARIANTS,
-  DEFAULT_MAX_TURNS,
-  DEFAULT_PERSONA,
-  defaultSkills,
-} from './agent-defaults';
+import { AGENT_AVATAR_VARIANTS, DEFAULT_MAX_TURNS, DEFAULT_PERSONA } from './agent-defaults';
 import { AgentActivity } from './entities/agent-activity.entity';
 import { Agent } from './entities/agent.entity';
 
@@ -62,17 +57,14 @@ export class AgentsService {
       order: { createdAt: 'ASC', id: 'ASC' },
     });
     const busy = await this.busyAgentIds(workspaceId);
-    return rows.map((row) => toAgent(row, busy.has(row.id)));
+    const library = await loadLibrary(this.agents.manager, workspaceId);
+    return rows.map((row) => toAgent(row, busy.has(row.id), library));
   }
 
   async get(workspaceId: string, id: string): Promise<AgentContract> {
     const row = await this.findOwned(workspaceId, id);
-    return toAgent(row, (await this.busyAgentIds(workspaceId, [id])).has(id));
-  }
-
-  /** Every skill the product knows, with its default flag (what a new agent starts with). */
-  skillCatalog(): AgentSkillContract[] {
-    return defaultSkills();
+    const library = await loadLibrary(this.agents.manager, workspaceId);
+    return toAgent(row, (await this.busyAgentIds(workspaceId, [id])).has(id), library);
   }
 
   create(workspaceId: string, dto: CreateAgentDto, actor: AuditActor): Promise<AgentContract> {
@@ -83,16 +75,14 @@ export class AgentsService {
         dto.departmentId === undefined
           ? null
           : await this.requireDepartment(manager, workspaceId, dto.departmentId);
-      const catalog = defaultSkills();
-      const known = new Set(catalog.map((skill) => skill.id));
-      if (dto.skills?.some((skill) => !known.has(skill.id)))
-        throw new BadRequestException({ message: 'agents.UNKNOWN_SKILL' });
-      const enabledById = new Map(dto.skills?.map((skill) => [skill.id, skill.enabled]));
-      // With an explicit list, only the listed skills are on; otherwise the catalog defaults.
-      const skills = catalog.map((skill) => ({
-        ...skill,
-        enabled: dto.skills ? (enabledById.get(skill.id) ?? false) : skill.enabled,
-      }));
+      // Only the skills switched on count; they must be live skills of the workspace.
+      const skills = (
+        await resolveAgentSkills(
+          manager,
+          workspaceId,
+          (dto.skills ?? []).filter((skill) => skill.enabled).map((skill) => skill.id),
+        )
+      ).map((skill) => skill.id);
       // Row lock + count in this transaction: two creates (or create_agent tool calls) cannot both
       // take the last slot.
       const plan = await this.limits.lockPlan(manager, workspaceId);
@@ -130,8 +120,11 @@ export class AgentsService {
         manager,
       );
       effects.push(() => this.events.publish(workspaceId, { type: 'agents.changed' }));
+      if (skills.length) {
+        await this.recordSkillsChange(manager, effects, actor, row, [], skills);
+      }
       if (department) await this.placeInDepartment(manager, effects, actor, row, department, null);
-      return toAgent(row, false);
+      return toAgent(row, false, await loadLibrary(manager, workspaceId));
     });
   }
 
@@ -184,10 +177,17 @@ export class AgentsService {
       if (dto.maxTurns !== undefined) row.maxTurns = dto.maxTurns;
       if (dto.persona !== undefined) row.persona = dto.persona;
       if (dto.title !== undefined) row.title = dto.title;
+      const skillsBefore = row.skills;
       if (dto.skills) {
-        const enabledById = new Map(dto.skills.map((skill) => [skill.id, skill.enabled]));
-        row.skills = row.skills.map((skill) =>
-          enabledById.has(skill.id) ? { ...skill, enabled: enabledById.get(skill.id)! } : skill,
+        // Toggles on top of the live skills the agent already has; ids of deleted skills drop out.
+        const live = new Set((await loadLibrary(manager, workspaceId)).map((skill) => skill.id));
+        const wanted = new Set(skillsBefore.filter((skillId) => live.has(skillId)));
+        for (const skill of dto.skills) {
+          if (skill.enabled) wanted.add(skill.id);
+          else wanted.delete(skill.id);
+        }
+        row.skills = (await resolveAgentSkills(manager, workspaceId, [...wanted])).map(
+          (skill) => skill.id,
         );
       }
       await manager.save(row);
@@ -204,6 +204,9 @@ export class AgentsService {
         manager,
       );
       effects.push(() => this.events.publish(workspaceId, { type: 'agents.changed' }));
+      if (dto.skills) {
+        await this.recordSkillsChange(manager, effects, actor, row, skillsBefore, row.skills);
+      }
       if (department !== undefined) {
         await this.placeInDepartment(manager, effects, actor, row, department, departmentBefore);
       }
@@ -213,7 +216,80 @@ export class AgentsService {
         effects.push(() => this.events.publish(workspaceId, { type: 'rooms.changed' }));
       }
       const busy = (await this.busyAgentIds(workspaceId, [id], manager)).has(id);
-      return toAgent(row, busy);
+      return toAgent(row, busy, await loadLibrary(manager, workspaceId));
+    });
+  }
+
+  /**
+   * Replaces the set of skills enabled on the agent. Owner|admin for any agent; a member only for
+   * an agent of their own (non-null) department.
+   */
+  setSkills(auth: AuthContext, id: string, skillIds: string[]): Promise<AgentContract> {
+    const { workspaceId } = auth;
+    return this.lock.run(workspaceId, async (manager, effects) => {
+      const row = isUUID(id)
+        ? await manager.findOne(Agent, {
+            where: { id, workspaceId },
+            relations: { computer: true },
+          })
+        : null;
+      if (!row) throw new NotFoundException({ message: 'agents.NOT_FOUND' });
+      if (auth.role !== 'owner' && auth.role !== 'admin') {
+        const member = await manager.findOne(Member, {
+          where: { id: auth.memberId, workspaceId },
+          select: { id: true, departmentId: true },
+        });
+        if (!member?.departmentId || member.departmentId !== row.departmentId) {
+          throw new ForbiddenException({ message: 'skills.AGENT_FORBIDDEN' });
+        }
+      }
+      const before = row.skills;
+      row.skills = (await resolveAgentSkills(manager, workspaceId, skillIds)).map(
+        (skill) => skill.id,
+      );
+      await manager.save(row);
+      await this.recordSkillsChange(
+        manager,
+        effects,
+        { memberId: auth.memberId, ip: auth.ip },
+        row,
+        before,
+        row.skills,
+      );
+      const busy = (await this.busyAgentIds(workspaceId, [id], manager)).has(id);
+      return toAgent(row, busy, await loadLibrary(manager, workspaceId));
+    });
+  }
+
+  /** Audits and announces a changed skill set (nothing when the sets are equal). */
+  private async recordSkillsChange(
+    manager: EntityManager,
+    effects: Array<() => void>,
+    actor: AuditActor,
+    agent: Agent,
+    before: readonly string[],
+    after: readonly string[],
+  ): Promise<void> {
+    const was = new Set(before);
+    const is = new Set(after);
+    const added = after.filter((skillId) => !was.has(skillId));
+    const removed = before.filter((skillId) => !is.has(skillId));
+    if (!added.length && !removed.length) return;
+    await this.audit.record(
+      {
+        workspaceId: agent.workspaceId,
+        actorMemberId: actor.memberId,
+        action: 'agent.skills_changed',
+        targetType: 'agent',
+        targetId: agent.id,
+        meta: { name: agent.name, added, removed },
+        ip: actor.ip,
+      },
+      manager,
+    );
+    effects.push(() => {
+      this.events.publish(agent.workspaceId, { type: 'agents.changed' });
+      this.events.publish(agent.workspaceId, { type: 'skills.changed' });
     });
   }
 

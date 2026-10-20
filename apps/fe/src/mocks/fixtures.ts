@@ -12,11 +12,14 @@ import type {
   Room,
   RunSpan,
   SchedulerState,
+  Skill,
+  SkillVersion,
   Task,
   TaskActivity,
   TaskRun,
   Workspace,
 } from '@repo/shared';
+import { skillTemplateById } from '@repo/shared';
 
 export interface MockDb {
   session: { loggedIn: boolean; onboarded: boolean };
@@ -26,6 +29,10 @@ export interface MockDb {
   departments: Department[];
   computers: Computer[];
   agents: Agent[];
+  /** The skill library (`agentIds` is derived from the agents on read). */
+  skills: Skill[];
+  /** Saved versions per skill id, newest first. */
+  skillVersions: Record<string, SkillVersion[]>;
   rooms: Room[];
   /** Every message of a room (roots and thread replies), keyed by room id, in seq order. */
   messages: Record<string, Message[]>;
@@ -57,37 +64,17 @@ export const PERSONA = `You are an agent on this workspace, an AI-native place w
 
 Be concise. Reply in the user's language. When you are mentioned in a room, read recent history before answering. Use tools when needed and report what you ran.`;
 
-const skills = (names: string[], enabled: number) =>
-  names.map((name, i) => ({ id: name, name, enabled: i < enabled }));
-
-/** The skill catalog a new agent can pick from (mirrors the API's `/agents/skill-catalog`). */
-export const SKILL_NAMES = [
-  'browser-use',
-  'build-app',
-  'deploy-app',
-  'email-processor',
-  'web-research',
-  'website-migration',
-  'code-review',
-  'git-ops',
-  'pdf-reader',
-  'sheet-analyst',
-  'slack-digest',
-  'calendar',
-  'image-gen',
-  'summarize',
-  'translate',
-  'sql-query',
-  'test-writer',
-  'docs-writer',
-  'jira-sync',
-  'notion-sync',
-  'scraper',
-  'scheduler',
-  'memory',
+/** Library skills of the demo workspace: template id, creator and the agents that have it on. */
+const DEMO_SKILLS: { template: string; by: string; agents: string[] }[] = [
+  { template: 'bao-gia', by: 'u2', agents: [] },
+  { template: 'tra-loi-khach', by: 'u2', agents: [] },
+  { template: 'review-code', by: 'u3', agents: ['a1'] },
+  { template: 'git', by: 'u3', agents: ['a1', 'a3'] },
+  { template: 'viet-test', by: 'u3', agents: ['a1'] },
+  { template: 'tom-tat', by: 'u1', agents: ['a1', 'a2'] },
+  { template: 'nghien-cuu-web', by: 'u1', agents: ['a2'] },
+  { template: 'dich', by: 'u1', agents: ['a2'] },
 ];
-export const DEFAULT_ENABLED_SKILLS = 18;
-export const skillCatalog = () => skills(SKILL_NAMES, DEFAULT_ENABLED_SKILLS);
 
 export function seed(now: number = Date.now()): MockDb {
   const T0 = now;
@@ -201,7 +188,7 @@ export function seed(now: number = Date.now()): MockDb {
       simulated: false,
       departmentId: 'd-eng',
       title: 'Trợ lý kỹ thuật',
-      skills: skills(SKILL_NAMES, DEFAULT_ENABLED_SKILLS),
+      skills: [],
     },
     {
       id: 'a2',
@@ -216,7 +203,7 @@ export function seed(now: number = Date.now()): MockDb {
       simulated: false,
       departmentId: 'd-sales',
       title: 'Nghiên cứu thị trường',
-      skills: skills(['web-research', 'summarize', 'pdf-reader', 'translate'], 4),
+      skills: [],
     },
     {
       id: 'a3',
@@ -231,9 +218,51 @@ export function seed(now: number = Date.now()): MockDb {
       simulated: true,
       departmentId: null,
       title: null,
-      skills: skills(['deploy-app', 'git-ops', 'build-app'], 3),
+      skills: [],
     },
   ];
+
+  const skills: Skill[] = DEMO_SKILLS.map((d, i) => {
+    const tpl = skillTemplateById(d.template)!;
+    return {
+      id: `sk-${tpl.id}`,
+      slug: tpl.slug,
+      name: tpl.name,
+      description: tpl.description,
+      content: tpl.content,
+      templateId: tpl.id,
+      version: 1,
+      createdById: d.by,
+      updatedById: d.by,
+      updatedAt: iso(T0 - (i + 2) * 26 * HOUR),
+      trusted: true,
+      agentIds: [],
+    };
+  });
+  const skillVersions: Record<string, SkillVersion[]> = Object.fromEntries(
+    skills.map((k) => [
+      k.id,
+      [
+        {
+          version: 1,
+          name: k.name,
+          description: k.description,
+          content: k.content,
+          editedById: k.createdById,
+          createdAt: k.updatedAt,
+        },
+      ],
+    ]),
+  );
+  // Every agent lists the whole library (sorted by name) with its own flags.
+  for (const a of agents)
+    a.skills = [...skills]
+      .sort((x, y) => x.name.localeCompare(y.name))
+      .map((k) => ({
+        id: k.id,
+        name: k.name,
+        enabled: !!DEMO_SKILLS.find((d) => `sk-${d.template}` === k.id)?.agents.includes(a.id),
+      }));
 
   const room = (r: Partial<Room> & Pick<Room, 'id' | 'kind' | 'name' | 'icon'>): Room => ({
     isPrivate: false,
@@ -833,6 +862,8 @@ export function seed(now: number = Date.now()): MockDb {
     departments,
     computers,
     agents,
+    skills,
+    skillVersions,
     rooms,
     messages,
     reads,

@@ -4,7 +4,6 @@ import {
   canManageAgents,
   nextAgentAfterDelete,
   parseMaxTurns,
-  skillFlags,
   toCreateInput,
   validateAgentForm,
   type AgentFormValues,
@@ -93,32 +92,20 @@ describe('toCreateInput', () => {
   });
 
   it('passes the filled fields and skills', () => {
-    const skills = [{ id: 'git-ops', enabled: true }];
     expect(
-      toCreateInput({ ...base, persona: 'Be terse', workdir: ' ~/w ', maxTurns: '7' }, skills),
+      toCreateInput({ ...base, persona: 'Be terse', workdir: ' ~/w ', maxTurns: '7' }, ['sk-git']),
     ).toEqual({
       name: 'Ops Bot',
       computerId: 'c1',
       persona: 'Be terse',
       workdir: '~/w',
       maxTurns: 7,
-      skills,
+      skills: [{ id: 'sk-git', enabled: true }],
     });
   });
 });
 
 describe('helpers', () => {
-  it('maps the checked skills to flags', () => {
-    const catalog = [
-      { id: 'a', name: 'a', enabled: true },
-      { id: 'b', name: 'b', enabled: false },
-    ];
-    expect(skillFlags(catalog, new Set(['b']))).toEqual([
-      { id: 'a', enabled: false },
-      { id: 'b', enabled: true },
-    ]);
-  });
-
   it('lets only owner and admin manage agents', () => {
     expect(canManageAgents('owner')).toBe(true);
     expect(canManageAgents('admin')).toBe(true);

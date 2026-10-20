@@ -7,10 +7,12 @@ import { DataSource } from 'typeorm';
 import { ClockService } from '../src/common/clock';
 import { LEASE_MS } from '../src/contacts';
 import { Agent } from '../src/modules/agents/entities/agent.entity';
+import { Skill } from '../src/modules/skills/entities/skill.entity';
 import { AgentActivity } from '../src/modules/agents/entities/agent-activity.entity';
 import { ChatMessage } from '../src/modules/chat/entities/chat-message.entity';
 import { Computer } from '../src/modules/computers/entities/computer.entity';
 import { REALTIME_EVENT, RealtimeEnvelope } from '../src/modules/events';
+import { MAX_WRITE_CALLS } from '../src/modules/daemon/gateway-tools.service';
 import { AgentGatewayService } from '../src/modules/gateway/agent-gateway.service';
 import { Assignment } from '../src/modules/gateway/entities/assignment.entity';
 import { TaskEntity } from '../src/modules/tasks/entities/task.entity';
@@ -20,6 +22,7 @@ import {
   addMemberWithRole,
   createAgent,
   createComputer,
+  createSkill,
   createTestApp,
   LoggedInClient,
   registerAndLogin,
@@ -88,7 +91,29 @@ describe('Gateway over HTTP (e2e)', () => {
     emitter.removeAllListeners(REALTIME_EVENT);
     emitter.on(REALTIME_EVENT, (e: RealtimeEnvelope) => realtime.push(e));
     paired = await pair('test-mac');
-    agent = await createAgent(dataSource, me.workspaceId, paired.computerId, { name: 'Claude' });
+    const gitOps = await createSkill(dataSource, me.workspaceId, {
+      slug: 'git-ops',
+      name: 'Git ops',
+      description: 'Use for git work.',
+      content: '# Git ops',
+      version: 3,
+    });
+    const summarize = await createSkill(dataSource, me.workspaceId, {
+      slug: 'summarize',
+      name: 'Summarize',
+      description: 'Use to summarize.',
+      content: '# Summarize',
+    });
+    await createSkill(dataSource, me.workspaceId, {
+      slug: 'translate',
+      name: 'Translate',
+      description: 'Use to translate.',
+      content: '# Translate',
+    });
+    agent = await createAgent(dataSource, me.workspaceId, paired.computerId, {
+      name: 'Claude',
+      skills: [summarize.id, gitOps.id],
+    });
   });
 
   // ---------- helpers ----------
@@ -309,6 +334,7 @@ describe('Gateway over HTTP (e2e)', () => {
           workdir: '~/workspace',
           maxTurns: 40,
           skills: ['git-ops', 'summarize'],
+          // no skillDefs: skill content only travels with a claimed assignment
         },
       ]);
       const computer = await dataSource
@@ -352,7 +378,15 @@ describe('Gateway over HTTP (e2e)', () => {
         prompt: 'Chào Claude, giúp mình với',
         leaseMs: LEASE_MS,
         requestedBy: { id: member.memberId, name: 'Extra member', role: 'member' },
-        agent: { id: agent.id, name: 'Claude', skills: ['git-ops', 'summarize'] },
+        agent: {
+          id: agent.id,
+          name: 'Claude',
+          skills: ['git-ops', 'summarize'],
+          skillDefs: [
+            expect.objectContaining({ slug: 'git-ops', content: '# Git ops', version: 3 }),
+            expect.objectContaining({ slug: 'summarize', content: '# Summarize', version: 1 }),
+          ],
+        },
       });
       expect(claimed.session).toEqual({ id: expect.stringMatching(UUID), resume: false });
       expect(claimed.context).toContain('direct message with Extra member');
@@ -807,6 +841,11 @@ describe('Gateway over HTTP (e2e)', () => {
           status: 'working',
         }),
       ]);
+      expect((await tool('list_skills', id)).result).toEqual([
+        { slug: 'git-ops', name: 'Git ops', description: 'Use for git work.' },
+        { slug: 'summarize', name: 'Summarize', description: 'Use to summarize.' },
+        { slug: 'translate', name: 'Translate', description: 'Use to translate.' },
+      ]);
       const tasks = (await tool('list_tasks', id, { status: 'backlog' })).result as Array<{
         id: string;
       }>;
@@ -828,6 +867,42 @@ describe('Gateway over HTTP (e2e)', () => {
         'Invalid tool input',
       );
       expect(await toolError('nope', id, {}, 404)).toBe('Unknown tool nope');
+    });
+
+    it('list_skills is member-level, workspace-scoped and not a write call', async () => {
+      const stranger = await registerAndLogin(app);
+      await createSkill(dataSource, stranger.workspaceId, {
+        slug: 'foreign',
+        name: 'Foreign',
+        description: 'Other workspace.',
+        content: '# Foreign',
+      });
+      const { claimed } = await runningChat('ai đó', member);
+      for (let i = 0; i < MAX_WRITE_CALLS + 5; i++) {
+        const slugs = ((await tool('list_skills', claimed.id)).result as Array<{ slug: string }>)
+          .map((s) => s.slug)
+          .sort();
+        expect(slugs).toEqual(['git-ops', 'summarize', 'translate']);
+      }
+      // the write budget is untouched: a write tool still works after all those reads
+      await tool('create_task', claimed.id, { title: 'Vẫn ghi được', status: 'backlog' });
+    });
+
+    it('update_agent rejects unknown skill slugs and leaves the agent unchanged', async () => {
+      const ownerChat = await dmOf(agent, me);
+      await sendChat(ownerChat, 'đổi skill', me);
+      const run = (await gw<Claimed | null>('/claim', { maxChats: 3 }))!;
+      await gw(`/assignments/${run.id}/accept`, { attempt: 1 });
+      const before = await dataSource.getRepository(Agent).findOneByOrFail({ id: agent.id });
+      const message = await toolError(
+        'update_agent',
+        run.id,
+        { id: agent.id, skills: ['git-ops', 'nope'] },
+        400,
+      );
+      expect(message).toContain('unknown skills: nope');
+      const after = await dataSource.getRepository(Agent).findOneByOrFail({ id: agent.id });
+      expect(after.skills).toEqual(before.skills);
     });
 
     it('writes as the requester and attributes every write to the agent', async () => {
@@ -963,6 +1038,59 @@ describe('Gateway over HTTP (e2e)', () => {
       // a demoted requester loses the admin tools at once
       await dataSource.query(`UPDATE members SET role = 'member' WHERE id = $1`, [me.memberId]);
       await toolError('create_agent', second.id, { name: 'Another' }, 403);
+    });
+
+    it('caps a chat run at member tools while a skill was last saved by a non-admin', async () => {
+      const skill = await dataSource
+        .getRepository(Skill)
+        .findOneByOrFail({ workspaceId: me.workspaceId, slug: 'summarize' });
+      // the member created the skill and edits it
+      await dataSource.query(`UPDATE skills SET created_by_member_id = $1 WHERE id = $2`, [
+        member.memberId,
+        skill.id,
+      ]);
+      await call('patch', `/skills/${skill.id}`, { content: '# Summarize\n\nby member' }, member);
+
+      const first = await runningChat('tạo agent', me);
+      expect(await toolError('create_agent', first.claimed.id, { name: 'Hằng' }, 403)).toContain(
+        'not an owner or admin',
+      );
+      await toolError('update_agent', first.claimed.id, { id: agent.id, persona: 'x' }, 403);
+      // member-level tools still work
+      await tool('list_skills', first.claimed.id);
+      expect(await dataSource.getRepository(Agent).count()).toBe(1);
+
+      // a member cannot approve; an owner/admin approves without changing the text
+      const listed = await call<Array<{ id: string; trusted: boolean }>>('get', '/skills');
+      expect(listed.find((x) => x.id === skill.id)?.trusted).toBe(false);
+      await call('post', `/skills/${skill.id}/approve`, undefined, member, 403);
+      await toolError('update_agent', first.claimed.id, { id: agent.id, persona: 'x' }, 403);
+      const approved = await call<{ trusted: boolean; version: number; content: string }>(
+        'post',
+        `/skills/${skill.id}/approve`,
+      );
+      expect(approved).toMatchObject({
+        trusted: true,
+        version: 2,
+        content: '# Summarize\n\nby member',
+      });
+      await tool('update_agent', first.claimed.id, { id: agent.id, persona: 'Mới' });
+
+      // an editor who is demoted (or removed) stops being trusted
+      await dataSource.query(`UPDATE skills SET updated_by_member_id = $1 WHERE id = $2`, [
+        member.memberId,
+        skill.id,
+      ]);
+      await toolError('update_agent', first.claimed.id, { id: agent.id, persona: 'y' }, 403);
+      await dataSource.query(`UPDATE skills SET updated_by_member_id = $1 WHERE id = $2`, [
+        me.memberId,
+        skill.id,
+      ]);
+      await tool('update_agent', first.claimed.id, { id: agent.id, persona: 'z' });
+      await dataSource.query(`UPDATE members SET role = 'member' WHERE id = $1`, [me.memberId]);
+      await toolError('update_agent', first.claimed.id, { id: agent.id, persona: 'w' }, 403);
+      await dataSource.query(`UPDATE members SET role = 'owner' WHERE id = $1`, [me.memberId]);
+      await tool('update_agent', first.claimed.id, { id: agent.id, persona: 'v' });
     });
 
     it('create_agent / update_agent set department and title, and list tools show them', async () => {

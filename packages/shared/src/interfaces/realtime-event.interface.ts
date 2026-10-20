@@ -42,6 +42,8 @@ export type RealtimeEvent =
   | { type: 'rooms.changed' }
   /** Departments, or who belongs to which, changed (refetch departments and people). */
   | { type: 'departments.changed' }
+  /** The skill library, or which agent has which skill, changed (refetch skills and agents). */
+  | { type: 'skills.changed' }
   | { type: 'tasks.changed' }
   | { type: 'agents.changed' }
   | { type: 'computers.changed' }

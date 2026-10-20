@@ -118,7 +118,13 @@ function table(lines: string[], start: number, names: string[], key: string) {
   return { node, next: i };
 }
 
-export function blocks(src: string, names: string[]): ReactNode[] {
+const HEADING = /^(#{1,6}) +(\S.*)$/;
+
+/**
+ * `headings` (skill preview only) renders `# Title` lines as small headings (h3-h6) and ends
+ * a paragraph at them; chat keeps `#` as plain text.
+ */
+export function blocks(src: string, names: string[], headings = false): ReactNode[] {
   const out: ReactNode[] = [];
   const lines = src.split('\n');
   let i = 0;
@@ -135,6 +141,11 @@ export function blocks(src: string, names: string[]): ReactNode[] {
           <code>{buf.join('\n')}</code>
         </pre>,
       );
+    } else if (headings && HEADING.test(line)) {
+      const [, hashes, title] = HEADING.exec(line)!;
+      const Tag = `h${Math.min(hashes.length + 2, 6)}` as 'h3' | 'h4' | 'h5' | 'h6';
+      out.push(<Tag key={key}>{inline(title.trim(), names, `h${i}`)}</Tag>);
+      i++;
     } else if (isTableStart(lines, i)) {
       const t = table(lines, i, names, key);
       out.push(t.node);
@@ -159,6 +170,7 @@ export function blocks(src: string, names: string[]): ReactNode[] {
         i < lines.length &&
         lines[i].trim() &&
         !/^(\d+\. |- |```)/.test(lines[i]) &&
+        !(headings && HEADING.test(lines[i])) &&
         !isTableStart(lines, i)
       ) {
         if (parts.length) parts.push(<br key={`br${i}`} />);
