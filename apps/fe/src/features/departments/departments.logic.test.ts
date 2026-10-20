@@ -91,6 +91,11 @@ describe('titles', () => {
   it('cleans and validates', () => {
     expect(cleanTitle('  Head of Sales ')).toBe('Head of Sales');
     expect(cleanTitle('   ')).toBeNull();
+    expect(cleanTitle(' Head \n\t of   Sales ')).toBe('Head of Sales');
+    expect(cleanTitle('a\u0000b\u0085c')).toBe('abc');
+    expect(cleanTitle('\u0000\u0007')).toBeNull();
+    expect(isTitleValid(`${'a'.repeat(80)}     `)).toBe(true);
+    expect(isTitleValid(`a${' '.repeat(10)}${'b'.repeat(78)}`)).toBe(true);
     expect(isTitleValid('a'.repeat(80))).toBe(true);
     expect(isTitleValid('a'.repeat(81))).toBe(false);
   });

@@ -71,6 +71,8 @@ export function useRealtimeSync() {
             break;
           case 'rooms.changed':
             void qc.invalidateQueries({ queryKey: qk.rooms });
+            // Deleting a department's room clears departments.room_id.
+            void qc.invalidateQueries({ queryKey: qk.departments });
             void qc.invalidateQueries({ queryKey: qk.mentions });
             void qc.invalidateQueries({ queryKey: ['room-members'] });
             break;

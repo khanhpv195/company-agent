@@ -94,6 +94,9 @@ export class InvitesService {
     const now = this.clock.now();
     const token = randomBytes(32).toString('base64url');
     const created = await transactionWithEffects(this.dataSource, async (manager, effects) => {
+      // Rooms lock first (global order: rooms, then the workspaces row), so a concurrent
+      // department delete cannot leave this invite pointing at a deleted department.
+      await lockRooms(manager, auth.workspaceId);
       // Serialises two invites for one address so the partial unique index is never the answer.
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1::text))', [
         `invite:${auth.workspaceId}:${dto.email}`,

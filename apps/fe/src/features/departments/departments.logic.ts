@@ -87,10 +87,15 @@ export const isDepartmentNameTaken = (
   return departments.some((d) => d.id !== exceptId && normalizeDepartmentName(d.name) === key);
 };
 
-export const isTitleValid = (title: string): boolean => title.trim().length <= MAX_TITLE;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F]/g;
 
-/** What the API stores: trimmed, empty means no title. */
-export const cleanTitle = (title: string): string | null => title.trim() || null;
+/** What the API stores: whitespace runs as one space, control characters gone, trimmed; empty means no title. */
+export const cleanTitle = (title: string): string | null =>
+  title.replace(/\s+/g, ' ').replace(CONTROL_CHARS, '').replace(/ {2,}/g, ' ').trim() || null;
+
+export const isTitleValid = (title: string): boolean =>
+  (cleanTitle(title) ?? '').length <= MAX_TITLE;
 
 /** Owner/admin edit anyone; everyone edits their own. */
 export const canEditTitle = (

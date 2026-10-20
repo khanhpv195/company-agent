@@ -9,6 +9,7 @@ import {
 import { normalizeDepartmentName } from '../features/departments/departments.logic';
 import { HttpError, type MockBackend } from './backend';
 import { createRoom } from './chat';
+import { team } from './team';
 
 const isIcon = (v: unknown): v is DepartmentIcon =>
   typeof v === 'string' && (DEPARTMENT_ICONS as readonly string[]).includes(v);
@@ -114,6 +115,7 @@ export function deleteDepartment(b: MockBackend, id: string) {
   b.db.departments.sort((x, y) => x.rank - y.rank).forEach((x, i) => (x.rank = i));
   for (const m of b.db.members) if (m.departmentId === id) m.departmentId = null;
   for (const a of b.db.agents) if (a.departmentId === id) a.departmentId = null;
+  for (const i of team.invites) if (i.invite.departmentId === id) i.invite.departmentId = null;
   b.emit({ type: 'departments.changed' });
   b.emit({ type: 'members.changed' });
   b.emit({ type: 'agents.changed' });
