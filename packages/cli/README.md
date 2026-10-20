@@ -89,13 +89,21 @@ never uses them. For a workdir `/home/me/.agent/agents/hana` it passes path-scop
 
 The workspace skill library reaches agents through `skillDefs` in the assignment (enabled skills
 of that agent; a server that does not send it means no skills). Before each run the daemon syncs
-a Claude Code plugin named `workspace` to `~/.agent/skills/<agentId>/`, outside the workdir:
-`.claude-plugin/plugin.json` and `skills/<slug>/SKILL.md` (frontmatter `name` and `description`,
-then the skill content). A `.version` stamp per skill skips unchanged ones, skills no longer
-enabled are removed, files are written atomically, and a slug outside `^[a-z0-9-]{1,64}$` fails
-the run. The query gets `plugins: [{ type: 'local', path, skipMcpDiscovery: true }]` and
+a Claude Code plugin named `workspace` as an immutable snapshot per skill set,
+`~/.agent/skills/<agentId>/<hash>/` (the hash covers the sorted skills and their rendered text),
+outside the workdir: `.claude-plugin/plugin.json` and `skills/<slug>/SKILL.md` (frontmatter `name`
+and `description`, then the skill content), and nothing else. A snapshot that already matches is
+reused; one that differs (or has extra entries such as hooks or commands) is rebuilt. Files are
+written atomically and symlinks are never followed. Runs of one agent with different skill sets
+use different snapshots; the daemon counts the runs using each snapshot and, on the next sync,
+removes the agent's other snapshots (and any stray entry) unless a run still uses them. A slug
+outside `^[a-z0-9-]{1,64}$` fails the run. The query gets
+`plugins: [{ type: 'local', path, skipMcpDiscovery: true }]` and
 `skills: ['workspace:<slug>', ...]` (neither when there are no skills); `settingSources` stays
-`[]`. Agents cannot Edit or Write under `~/.agent/skills/**`.
+`[]`. Skill text is member-authored, so every run sets `settings: { disableSkillShellExecution: true }`
+(inline `!` commands and fenced shell blocks in skills are never executed), and the daemon also
+rewrites those constructs to plain text when it writes SKILL.md; runs of a dash in a description
+are escaped so they cannot end the frontmatter. Agents cannot Edit or Write under `~/.agent/skills/**`.
 
 ### Working directory
 

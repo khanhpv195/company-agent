@@ -22,7 +22,9 @@ import {
   Matches,
   MaxLength,
   Min,
+  ValidateBy,
   ValidateIf,
+  type ValidationOptions,
 } from 'class-validator';
 import { i18nValidationMessage } from 'nestjs-i18n';
 import { cleanDepartmentName } from '../../../common/utils';
@@ -38,6 +40,23 @@ const maxLength = { message: i18nValidationMessage('validation.MAX_LENGTH') };
 /** Postgres text cannot hold NUL; other characters (newlines, tabs) are content. */
 const cleanContent = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.split('\u0000').join('') : value;
+
+/**
+ * At most `max` UTF-16 code units (`string.length`), the unit the services and the shared limits
+ * count in. class-validator's `@MaxLength` counts code points, which lets emoji past the limit.
+ */
+export function MaxUtf16Length(max: number, options?: ValidationOptions): PropertyDecorator {
+  return ValidateBy(
+    {
+      name: 'maxUtf16Length',
+      constraints: [max],
+      validator: {
+        validate: (value: unknown) => typeof value === 'string' && value.length <= max,
+      },
+    },
+    options,
+  );
+}
 
 export class SkillDto implements SkillContract {
   @ApiProperty({ format: 'uuid' })
@@ -136,7 +155,7 @@ export class CreateSkillDto implements Partial<CreateSkillInput> {
   @Transform(cleanContent)
   @IsString(isString)
   @IsNotEmpty(notEmpty)
-  @MaxLength(MAX_SKILL_CONTENT, maxLength)
+  @MaxUtf16Length(MAX_SKILL_CONTENT, maxLength)
   content?: string;
 
   @ApiPropertyOptional({ description: 'A skill template id; the fields left out come from it' })
@@ -169,7 +188,7 @@ export class UpdateSkillDto implements UpdateSkillInput {
   @Transform(cleanContent)
   @IsString(isString)
   @IsNotEmpty(notEmpty)
-  @MaxLength(MAX_SKILL_CONTENT, maxLength)
+  @MaxUtf16Length(MAX_SKILL_CONTENT, maxLength)
   content?: string;
 }
 

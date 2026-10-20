@@ -7,6 +7,7 @@ import { DataSource } from 'typeorm';
 import { ClockService } from '../src/common/clock';
 import { LEASE_MS } from '../src/contacts';
 import { Agent } from '../src/modules/agents/entities/agent.entity';
+import { Skill } from '../src/modules/skills/entities/skill.entity';
 import { AgentActivity } from '../src/modules/agents/entities/agent-activity.entity';
 import { ChatMessage } from '../src/modules/chat/entities/chat-message.entity';
 import { Computer } from '../src/modules/computers/entities/computer.entity';
@@ -1037,6 +1038,47 @@ describe('Gateway over HTTP (e2e)', () => {
       // a demoted requester loses the admin tools at once
       await dataSource.query(`UPDATE members SET role = 'member' WHERE id = $1`, [me.memberId]);
       await toolError('create_agent', second.id, { name: 'Another' }, 403);
+    });
+
+    it('caps a chat run at member tools while a skill was last saved by a non-admin', async () => {
+      const skill = await dataSource
+        .getRepository(Skill)
+        .findOneByOrFail({ workspaceId: me.workspaceId, slug: 'summarize' });
+      // the member created the skill and edits it
+      await dataSource.query(`UPDATE skills SET created_by_member_id = $1 WHERE id = $2`, [
+        member.memberId,
+        skill.id,
+      ]);
+      await call('patch', `/skills/${skill.id}`, { content: '# Summarize\n\nby member' }, member);
+
+      const first = await runningChat('tạo agent', me);
+      expect(await toolError('create_agent', first.claimed.id, { name: 'Hằng' }, 403)).toContain(
+        'not an owner or admin',
+      );
+      await toolError('update_agent', first.claimed.id, { id: agent.id, persona: 'x' }, 403);
+      // member-level tools still work
+      await tool('list_skills', first.claimed.id);
+      expect(await dataSource.getRepository(Agent).count()).toBe(1);
+
+      // an owner/admin saves the skill again: the run is trusted
+      await call('patch', `/skills/${skill.id}`, { content: '# Summarize\n\nreviewed' });
+      await tool('update_agent', first.claimed.id, { id: agent.id, persona: 'Mới' });
+
+      // an editor who is demoted (or removed) stops being trusted
+      await dataSource.query(`UPDATE skills SET updated_by_member_id = $1 WHERE id = $2`, [
+        member.memberId,
+        skill.id,
+      ]);
+      await toolError('update_agent', first.claimed.id, { id: agent.id, persona: 'y' }, 403);
+      await dataSource.query(`UPDATE skills SET updated_by_member_id = $1 WHERE id = $2`, [
+        me.memberId,
+        skill.id,
+      ]);
+      await tool('update_agent', first.claimed.id, { id: agent.id, persona: 'z' });
+      await dataSource.query(`UPDATE members SET role = 'member' WHERE id = $1`, [me.memberId]);
+      await toolError('update_agent', first.claimed.id, { id: agent.id, persona: 'w' }, 403);
+      await dataSource.query(`UPDATE members SET role = 'owner' WHERE id = $1`, [me.memberId]);
+      await tool('update_agent', first.claimed.id, { id: agent.id, persona: 'v' });
     });
 
     it('create_agent / update_agent set department and title, and list tools show them', async () => {

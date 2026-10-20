@@ -244,14 +244,24 @@ export class GatewayToolsService {
     // A task run acts on text that any member can edit (description, comments), so it never gets
     // admin tools, whoever started it. Chat runs keep the requester's real role.
     const isAdmin = !!member && (member.role === 'owner' || member.role === 'admin');
+    // Skill text steers the model too: when any enabled skill was last saved by someone who is
+    // not (any more) an owner or admin, the run is capped at member-level tools like a task run.
+    // Only looked up when an admin tool is asked for (one query).
+    const skillCapped =
+      tool.access === 'admin' && isAdmin && row.sourceKind !== 'task'
+        ? await this.hasUntrustedSkill(agent)
+        : false;
     const allowed =
       tool.access === 'read' ||
       (tool.access === 'member' && !!member) ||
-      (tool.access === 'admin' && isAdmin && row.sourceKind !== 'task');
+      (tool.access === 'admin' && isAdmin && row.sourceKind !== 'task' && !skillCapped);
     if (!allowed) {
       throw new ForbiddenException({
-        message:
-          tool.access === 'admin' && isAdmin ? 'gateway.TASK_RUN_NO_ADMIN' : 'auth.FORBIDDEN',
+        message: !(tool.access === 'admin' && isAdmin)
+          ? 'auth.FORBIDDEN'
+          : skillCapped
+            ? 'gateway.SKILL_NO_ADMIN'
+            : 'gateway.TASK_RUN_NO_ADMIN',
       });
     }
 
@@ -291,6 +301,29 @@ export class GatewayToolsService {
       }
       throw error;
     }
+  }
+
+  /**
+   * True when an enabled, live skill of the agent was last saved by a member who is not an owner
+   * or admin now (or has been removed). Skills without an editor (templates, migration, seed)
+   * are trusted.
+   */
+  private async hasUntrustedSkill(agent: Agent): Promise<boolean> {
+    if (!agent.skills?.length) return false;
+    const count = await this.dataSource
+      .getRepository(Skill)
+      .createQueryBuilder('s')
+      .leftJoin(
+        Member,
+        'm',
+        'm.id = s.updated_by_member_id AND m.workspace_id = s.workspace_id AND m.removed_at IS NULL',
+      )
+      .where('s.id IN (:...ids)', { ids: agent.skills })
+      .andWhere('s.workspace_id = :workspaceId', { workspaceId: agent.workspaceId })
+      .andWhere('s.updated_by_member_id IS NOT NULL')
+      .andWhere("(m.id IS NULL OR m.role NOT IN ('owner', 'admin'))")
+      .getCount();
+    return count > 0;
   }
 
   // ---------- read ----------

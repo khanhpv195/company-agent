@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { skillTemplateById } from '@repo/shared';
-import type { DataSource } from 'typeorm';
+import { IsNull, Not, type DataSource } from 'typeorm';
 import { Agent } from '../../modules/agents/entities/agent.entity';
 import { SkillVersion } from '../../modules/skills/entities/skill-version.entity';
 import { Skill } from '../../modules/skills/entities/skill.entity';
@@ -42,7 +42,16 @@ export const seedSkills = async (ds: DataSource): Promise<void> => {
       return;
     }
     const workspaceId = workspace.id;
-    if (await manager.exists(Skill, { where: { workspaceId }, withDeleted: true })) return;
+    // Only template skills count (soft-deleted ones too): a dev DB that has just the placeholders
+    // migrated from the legacy skill ids still gets the template skills.
+    if (
+      await manager.exists(Skill, {
+        where: { workspaceId, templateId: Not(IsNull()) },
+        withDeleted: true,
+      })
+    ) {
+      return;
+    }
     const owner = await manager.findOne(Member, { where: { workspaceId, email: OWNER_EMAIL } });
 
     const ids = new Map<string, string>();
@@ -50,6 +59,14 @@ export const seedSkills = async (ds: DataSource): Promise<void> => {
       const template = skillTemplateById(templateId);
       if (!template) {
         logger.warn(`Skill template ${templateId} not found, skipped`);
+        continue;
+      }
+      // A live skill with this slug (a migrated placeholder) keeps its place; the agents use it.
+      const existing = await manager.findOne(Skill, {
+        where: { workspaceId, slug: template.slug },
+      });
+      if (existing) {
+        ids.set(template.id, existing.id);
         continue;
       }
       const skill = await manager.save(

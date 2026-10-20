@@ -180,6 +180,8 @@ describe('Skill library (e2e)', () => {
         { ...ok, description: 'x'.repeat(501) },
         { ...ok, content: '' },
         { ...ok, content: 'x'.repeat(MAX_SKILL_CONTENT + 1) },
+        // length counts UTF-16 units: this is under the limit in code points, over it in units
+        { ...ok, content: '😀'.repeat(MAX_SKILL_CONTENT / 2 + 1) },
         { name: 'N' },
       ];
       for (const body of bad) await fail('post', '/skills', owner, 400, body);
@@ -190,6 +192,15 @@ describe('Skill library (e2e)', () => {
         content: 'c'.repeat(MAX_SKILL_CONTENT),
       });
       expect(edge.content).toHaveLength(MAX_SKILL_CONTENT);
+      const emoji = await create({
+        name: 'Emoji',
+        description: 'd',
+        content: '😀'.repeat(MAX_SKILL_CONTENT / 2),
+      });
+      expect(emoji.content).toHaveLength(MAX_SKILL_CONTENT);
+      await fail('patch', `/skills/${emoji.id}`, owner, 400, {
+        content: '😀'.repeat(MAX_SKILL_CONTENT / 2 + 1),
+      });
       // NUL cannot be stored in Postgres text: it is dropped, not a 500
       const nul = await create({ name: 'Nul', description: 'd\u0000x', content: 'a\u0000b\nc' });
       expect(nul).toMatchObject({ description: 'dx', content: 'ab\nc' });

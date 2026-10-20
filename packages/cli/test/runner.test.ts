@@ -89,8 +89,11 @@ describe('runAssignment skills', () => {
       t.run(assignment({ agent: { ...assignment().agent, workdir, skillDefs: [skill] } })),
     );
     const o = t.seen().options;
-    const dir = path.join(agentHomeDir, 'skills', 'ag-1');
-    expect(o.plugins).toEqual([{ type: 'local', path: dir, skipMcpDiscovery: true }]);
+    const plugins = o.plugins as { type: string; path: string; skipMcpDiscovery: boolean }[];
+    const dir = plugins[0]!.path;
+    expect(path.dirname(dir)).toBe(path.join(agentHomeDir, 'skills', 'ag-1'));
+    expect(plugins).toEqual([{ type: 'local', path: dir, skipMcpDiscovery: true }]);
+    expect(o.settings).toEqual({ disableSkillShellExecution: true });
     expect(o.skills).toEqual(['workspace:tom-tat']);
     expect(o.settingSources).toEqual([]);
     expect(readFileSync(path.join(dir, 'skills', 'tom-tat', 'SKILL.md'), 'utf8')).toContain(
@@ -230,6 +233,7 @@ describe('runAssignment', () => {
       maxTurns: 5,
       permissionMode: 'dontAsk',
       settingSources: [],
+      settings: { disableSkillShellExecution: true },
       includePartialMessages: true,
     });
     expect(o.resume).toBeUndefined();

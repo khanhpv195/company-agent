@@ -71,6 +71,8 @@ export function buildOptions(
     maxTurns: a.agent.maxTurns,
     permissionMode: 'dontAsk',
     settingSources: [],
+    // Skills are member-authored text: never run their inline shell (`!` commands) at load time.
+    settings: { disableSkillShellExecution: true },
     includePartialMessages: true,
     abortController,
     // No `Skill` in allowedTools on purpose: the SDK `skills` option below enables the Skill tool, and listing `Skill` in allowedTools is deprecated.
@@ -323,10 +325,11 @@ export async function runAssignment(
 
   let failure: string | undefined;
   let sessionOverride: { id: string; resume: boolean } | undefined;
+  let skills: SkillsPlugin | null = null;
   try {
     if (!abort.signal.aborted) {
       const cwd = await prepareWorkdir(a.agent.workdir, deps.config.workdirRoots);
-      const skills = await syncAgentSkills(a.agent.id, a.agent.skillDefs);
+      skills = await syncAgentSkills(a.agent.id, a.agent.skillDefs);
       const consume = async (session: { id: string; resume: boolean }) => {
         const q = deps.query({
           prompt: a.prompt,
@@ -377,6 +380,7 @@ export async function runAssignment(
   } finally {
     clearInterval(flushTimer);
     clearInterval(leaseTimer);
+    (skills as SkillsPlugin | null)?.release();
   }
 
   const sessionId = mapper.sessionId ?? sessionOverride?.id;

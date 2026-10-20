@@ -12,6 +12,7 @@
   "TASK_RUN_NO_ASSIGN": "Task run không được giao việc cho agent; hãy để người duyệt",
   "TASK_RUN_NO_DONE": "Task run không được chuyển task sang done; việc duyệt là quyết định của người",
   "TASK_RUN_NO_REVIEW_CHANGE": "Task run không được đổi yêu cầu duyệt của task; đó là quyết định của người",
+  "SKILL_NO_ADMIN": "Một skill của agent này được lưu lần cuối bởi người không phải owner hoặc admin nên run này không được dùng công cụ quản trị (create_agent, update_agent); owner hoặc admin cần xem lại và lưu lại skill",
   "TASK_RUN_NO_ADMIN": "Task run không được dùng công cụ quản trị (create_agent, update_agent); hãy nhờ người dùng làm trong ứng dụng",
   "PAIRED": "Đã ghép nối máy",
   "HEARTBEAT": "Đã nhận heartbeat",

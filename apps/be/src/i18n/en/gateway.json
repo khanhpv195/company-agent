@@ -12,6 +12,7 @@
   "TASK_RUN_NO_ASSIGN": "A task run cannot assign work to agents; leave that to the reviewer",
   "TASK_RUN_NO_DONE": "A task run cannot mark a task done; review stays a human decision",
   "TASK_RUN_NO_REVIEW_CHANGE": "A task run cannot change whether a task requires review; that is a human decision",
+  "SKILL_NO_ADMIN": "A skill of this agent was last saved by someone who is not an owner or admin, so this run cannot use admin tools (create_agent, update_agent); an owner or admin must review and save the skill again",
   "TASK_RUN_NO_ADMIN": "A task run cannot use admin tools (create_agent, update_agent); ask the user to do it in the app",
   "PAIRED": "Computer paired",
   "HEARTBEAT": "Heartbeat received",
