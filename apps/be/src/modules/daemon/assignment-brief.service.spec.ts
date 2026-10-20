@@ -1,4 +1,4 @@
-import { requesterLine } from './assignment-brief.service';
+import { chatToolsHint, requesterLine, taskToolsHint } from './assignment-brief.service';
 
 describe('requesterLine', () => {
   it('shows name and role', () => {
@@ -23,5 +23,12 @@ describe('requesterLine', () => {
     expect(requesterLine(null)).toBe(
       'Requested by: nobody in particular (automated run, read-only tools)',
     );
+  });
+});
+
+describe('tool hints', () => {
+  it('list list_skills among the read tools of chat and task runs', () => {
+    expect(chatToolsHint()).toContain('list_members, list_skills;');
+    expect(taskToolsHint()).toContain('list_members, list_skills;');
   });
 });

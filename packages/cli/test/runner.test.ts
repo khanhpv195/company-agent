@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { GatewayClient } from '../src/api.js';
-import { silentLogger } from '../src/log.js';
+import { silentLogger, type Logger } from '../src/log.js';
 import { ABORT_CANCELLED, ABORT_SHUTDOWN, runAssignment, type QueryFn } from '../src/runner.js';
 import {
   assignment,
@@ -30,6 +30,7 @@ const timing = { flushMs: 10, leaseMs: 10, retryBaseMs: 5 };
 function setup(
   handlers: Parameters<typeof fakeFetch>[0],
   gen: (opts: Options) => AsyncGenerator<SDKMessage>,
+  log: Logger = silentLogger,
 ) {
   const { fetchImpl, calls } = fakeFetch({
     '/accept': () => envelope({ ok: true }),
@@ -48,7 +49,7 @@ function setup(
     calls,
     seen: () => seen!,
     run: (a: ReturnType<typeof assignment>, abort = new AbortController()) =>
-      runAssignment(a, { client, config, query, log: silentLogger, timing }, abort),
+      runAssignment(a, { client, config, query, log, timing }, abort),
   };
 }
 
@@ -95,6 +96,63 @@ describe('runAssignment skills', () => {
     expect(readFileSync(path.join(dir, 'skills', 'tom-tat', 'SKILL.md'), 'utf8')).toContain(
       'name: tom-tat',
     );
+  });
+
+  const initMsg = (
+    plugins: string[],
+    errors?: { plugin: string; type: string; message: string }[],
+  ) =>
+    sdkMsg({
+      type: 'system',
+      subtype: 'init',
+      session_id: 's',
+      plugins: plugins.map((name) => ({ name, path: '/p' })),
+      ...(errors ? { plugin_errors: errors } : {}),
+    });
+
+  async function warningsFor(init: SDKMessage | null, withSkills = true) {
+    const workdir = await withWorkdir();
+    const warnings: string[] = [];
+    const t = setup(
+      {},
+      async function* () {
+        if (init) yield init;
+        yield success('ok');
+      },
+      (level, m) => {
+        if (level === 'warn') warnings.push(m);
+      },
+    );
+    const agent = { ...assignment().agent, workdir, ...(withSkills ? { skillDefs: [skill] } : {}) };
+    await withHome(() => t.run(assignment({ agent })));
+    return warnings;
+  }
+
+  it('does not warn when the workspace plugin is listed without errors', async () => {
+    expect(await warningsFor(initMsg(['workspace']))).toEqual([]);
+  });
+
+  it('warns with the agent id when the plugin is not listed', async () => {
+    const w = await warningsFor(initMsg([]));
+    expect(w).toHaveLength(1);
+    expect(w[0]).toContain('ag-1');
+    expect(w[0]).toContain('not listed');
+  });
+
+  it('warns with the error when plugin_errors mentions the plugin, and still succeeds', async () => {
+    const w = await warningsFor(
+      initMsg(['workspace'], [{ plugin: 'workspace', type: 'hook-load-failed', message: 'boom' }]),
+    );
+    expect(w).toHaveLength(1);
+    expect(w[0]).toContain('ag-1');
+    expect(w[0]).toContain('boom');
+  });
+
+  it('ignores errors of other plugins and checks nothing without skills', async () => {
+    expect(
+      await warningsFor(initMsg(['workspace'], [{ plugin: 'other', type: 'x', message: 'no' }])),
+    ).toEqual([]);
+    expect(await warningsFor(initMsg([]), false)).toEqual([]);
   });
 
   it('passes neither option when skillDefs is missing or empty', async () => {
