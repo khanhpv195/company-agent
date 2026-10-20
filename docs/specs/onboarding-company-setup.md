@@ -21,9 +21,15 @@ khi chạy. Owner/admin xem, sửa, tạo skill riêng trong app.
   chỉ gọi Claude khi Jev quyết định là cần (mục 5.7). Product owner tự mua Jev và cấp key; URL
   nhà cung cấp để trong cấu hình, không viết cứng.
 - Nhân viên (member) được tạo skill (quyền chi tiết ở mục 6).
+- **Một máy chung cho cả công ty.** Chỉ chủ công ty (owner/admin) kết nối máy, nên là máy luôn bật
+  (máy văn phòng, mini PC, VPS). Mọi agent trong thẻ đề xuất được tạo trên máy đó và chạy bằng tài
+  khoản Claude của máy đó. Nhân viên chỉ cài app, nhận lời mời và chat; họ không thấy bước kết nối
+  máy (onboarding tính theo workspace, đã đúng như vậy trong code). Bước kết nối máy ghi rõ: "Đây là
+  máy chung, các agent của công ty chạy trên máy này; máy tắt thì agent tạm ngừng."
 
 Không làm trong spec này: sơ đồ tổ chức nhiều cấp (phòng ban con), phân quyền theo phòng ban,
-marketplace skill công khai, LLM sinh văn bản phía server (server chỉ gọi Jev để ra quyết định).
+marketplace skill công khai, LLM sinh văn bản phía server (server chỉ gọi Jev để ra quyết định),
+máy cá nhân của nhân viên và agent riêng tư (nhân viên tự ghép laptop, agent chỉ chủ máy dùng được).
 
 ## 2. Hiện trạng (đã kiểm tra trong code)
 
