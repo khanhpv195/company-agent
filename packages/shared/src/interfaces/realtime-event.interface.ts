@@ -40,6 +40,8 @@ export type RealtimeEvent =
     }
   | { type: 'presence.update'; memberId: string; status: PresenceStatus }
   | { type: 'rooms.changed' }
+  /** Departments, or who belongs to which, changed (refetch departments and people). */
+  | { type: 'departments.changed' }
   | { type: 'tasks.changed' }
   | { type: 'agents.changed' }
   | { type: 'computers.changed' }

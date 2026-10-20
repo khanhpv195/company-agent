@@ -16,6 +16,8 @@ export const toMember = (member: Member): MemberContract => ({
   email: member.email,
   role: member.role as MemberRole,
   color: member.color,
+  departmentId: member.departmentId,
+  title: member.title,
 });
 
 export const toSessionUser = (member: Member): SessionUser => ({

@@ -523,6 +523,8 @@ export class MockBackend {
       maxTurns: input.maxTurns ?? 40,
       status: 'idle',
       simulated: pc.simulated,
+      departmentId: null,
+      title: null,
     };
     this.db.agents.push(agent);
     this.syncAgents();

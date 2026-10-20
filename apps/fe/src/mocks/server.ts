@@ -340,6 +340,8 @@ on('POST', '/invites/accept', (ctx) => {
     email: invite.email,
     role: invite.role,
     color: PALETTE[db.members.length % PALETTE.length],
+    departmentId: null,
+    title: null,
   };
   db.members.push(member);
   db.meId = member.id;

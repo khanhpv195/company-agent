@@ -35,6 +35,8 @@ export function createInvite(
     id: `inv-${team.seq}`,
     email,
     role: input.role as AssignableRole,
+    departmentId: null,
+    title: null,
     invitedByName: inviterName,
     createdAt: iso(now),
     expiresAt: iso(now + 7 * DAY),

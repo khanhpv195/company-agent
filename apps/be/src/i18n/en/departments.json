@@ -1,0 +1,12 @@
+{
+  "LISTED": "Departments loaded",
+  "CREATED": "Department created",
+  "UPDATED": "Department updated",
+  "REORDERED": "Departments reordered",
+  "DELETED": "Department deleted",
+  "ASSIGNED": "Department updated",
+  "TITLE_UPDATED": "Title updated",
+  "NOT_FOUND": "Department not found",
+  "NAME_TAKEN": "A department with this name already exists",
+  "ORDER_MISMATCH": "The list must contain every department exactly once"
+}

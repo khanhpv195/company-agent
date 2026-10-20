@@ -9,3 +9,11 @@ export const stripControlChars = (value: string): string =>
  */
 export const cleanName = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? stripControlChars(value).trim() : value;
+
+/** `@Transform` for department names: like `cleanName`, and runs of whitespace become one space. */
+export const cleanDepartmentName = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' ? stripControlChars(value).replace(/\s+/g, ' ').trim() : value;
+
+/** `@Transform` for job titles: like `cleanName`, and an empty title becomes `null` (cleared). */
+export const cleanTitle = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' ? stripControlChars(value).trim() || null : value;

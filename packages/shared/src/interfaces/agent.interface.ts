@@ -20,6 +20,8 @@ export interface Agent {
   status: AgentStatus;
   /** Demo agent on a simulated computer: it only plays scripted, honest demo replies. */
   simulated: boolean;
+  departmentId: string | null;
+  title: string | null;
 }
 
 export interface CreateAgentInput {
@@ -35,6 +37,10 @@ export interface CreateAgentInput {
   workdir?: string;
   /** 1..200, default 40. */
   maxTurns?: number;
+  /** A live department of the workspace; the agent joins its room. */
+  departmentId?: string;
+  /** Trimmed, at most 80 characters. */
+  title?: string;
 }
 
 export interface UpdateAgentInput {
@@ -45,6 +51,10 @@ export interface UpdateAgentInput {
   maxTurns?: number;
   /** Rejected (409) while the agent has open work. */
   computerId?: string;
+  /** A live department, or `null` to clear it (the old room is kept). */
+  departmentId?: string | null;
+  /** Trimmed, at most 80 characters; empty or `null` clears it. */
+  title?: string | null;
 }
 
 export interface AgentActivity {

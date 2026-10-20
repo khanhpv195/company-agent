@@ -10,6 +10,7 @@ import {
   Unique,
 } from 'typeorm';
 import type { AssignableRole } from '@repo/shared';
+import { Department } from '../../departments/entities/department.entity';
 import { Member } from '../../workspace/entities/member.entity';
 import { Workspace } from '../../workspace/entities/workspace.entity';
 
@@ -39,6 +40,18 @@ export class Invite {
 
   @Column({ type: 'varchar' })
   role: AssignableRole;
+
+  @Index()
+  @Column({ name: 'department_id', type: 'uuid', nullable: true })
+  departmentId: string | null;
+
+  @ManyToOne(() => Department, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'department_id' })
+  department: Department | null;
+
+  /** Job title, at most 80 characters. */
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  title: string | null;
 
   /** sha256 of the raw token; the raw token only exists in the mail and the create response. */
   @Column({ name: 'token_hash', type: 'varchar' })

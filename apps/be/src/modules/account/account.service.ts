@@ -52,11 +52,13 @@ export class AccountService {
   async updateProfile(auth: AuthContext, dto: UpdateProfileDto): Promise<Session> {
     return transactionWithEffects(this.dataSource, async (manager, effects) => {
       const member = await this.load(manager, auth.memberId);
-      const changes: Partial<Pick<Member, 'name' | 'color'>> = {};
+      const changes: Partial<Pick<Member, 'name' | 'color' | 'title'>> = {};
       if (dto.name !== undefined) changes.name = dto.name;
       if (dto.color !== undefined)
         changes.color = dto.color === null ? null : dto.color.toLowerCase();
+      if (dto.title !== undefined && dto.title !== member.title) changes.title = dto.title;
       if (Object.keys(changes).length > 0) {
+        const titleBefore = member.title;
         await manager.update(Member, { id: member.id }, changes);
         Object.assign(member, changes);
         await this.audit.record(
@@ -71,6 +73,20 @@ export class AccountService {
           },
           manager,
         );
+        if (changes.title !== undefined) {
+          await this.audit.record(
+            {
+              workspaceId: member.workspaceId,
+              actorMemberId: member.id,
+              action: 'member.title_changed',
+              targetType: 'member',
+              targetId: member.id,
+              meta: { from: titleBefore, to: changes.title, self: true },
+              ip: auth.ip,
+            },
+            manager,
+          );
+        }
         effects.push(() => this.events.publish(member.workspaceId, { type: 'members.changed' }));
       }
       return toSession(member, member.workspace);

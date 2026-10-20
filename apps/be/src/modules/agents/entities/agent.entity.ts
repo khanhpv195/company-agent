@@ -10,6 +10,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import type { AgentSkill } from '@repo/shared';
+import { Department } from '../../departments/entities/department.entity';
 import { Computer } from '../../computers/entities/computer.entity';
 import { Workspace } from '../../workspace/entities/workspace.entity';
 
@@ -64,6 +65,18 @@ export class Agent {
 
   @Column({ type: 'jsonb', default: () => `'[]'` })
   skills: AgentSkill[];
+
+  @Index()
+  @Column({ name: 'department_id', type: 'uuid', nullable: true })
+  departmentId: string | null;
+
+  @ManyToOne(() => Department, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'department_id' })
+  department: Department | null;
+
+  /** Job title, at most 80 characters. */
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  title: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

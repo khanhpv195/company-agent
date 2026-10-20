@@ -5,12 +5,20 @@ import { seedAgents } from './agents.seed';
 import { seedAuth } from './auth.seed';
 import { seedChat } from './chat.seed';
 import { seedDashboard } from './dashboard.seed';
+import { seedDepartments } from './departments.seed';
 import { seedTasks } from './tasks.seed';
 
 type Seeder = (ds: DataSource) => Promise<void>;
 
 // Later phases (auth, agents, tasks...) register their seeders here, in run order.
-const seeders: Seeder[] = [seedAuth, seedAgents, seedTasks, seedChat, seedDashboard];
+const seeders: Seeder[] = [
+  seedAuth,
+  seedAgents,
+  seedTasks,
+  seedChat,
+  seedDepartments,
+  seedDashboard,
+];
 
 const logger = new Logger('Seed');
 

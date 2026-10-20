@@ -125,9 +125,33 @@ export function seed(now: number = Date.now()): MockDb {
     items.map(([title, done]) => ({ title, done: !!done }));
 
   const members: Member[] = [
-    { id: 'u1', name: 'khanhpv', email: 'khanhpv@holatech.tech', role: 'owner', color: null },
-    { id: 'u2', name: 'Hằng', email: 'hang@holatech.tech', role: 'member', color: '#b0516f' },
-    { id: 'u3', name: 'Minh', email: 'minh@holatech.tech', role: 'admin', color: '#3d8a6a' },
+    {
+      id: 'u1',
+      name: 'khanhpv',
+      email: 'khanhpv@holatech.tech',
+      role: 'owner',
+      color: null,
+      departmentId: null,
+      title: null,
+    },
+    {
+      id: 'u2',
+      name: 'Hằng',
+      email: 'hang@holatech.tech',
+      role: 'member',
+      color: '#b0516f',
+      departmentId: null,
+      title: null,
+    },
+    {
+      id: 'u3',
+      name: 'Minh',
+      email: 'minh@holatech.tech',
+      role: 'admin',
+      color: '#3d8a6a',
+      departmentId: null,
+      title: null,
+    },
   ];
 
   const computers: Computer[] = [
@@ -167,6 +191,8 @@ export function seed(now: number = Date.now()): MockDb {
       maxTurns: 40,
       status: 'idle',
       simulated: false,
+      departmentId: null,
+      title: null,
       skills: skills(SKILL_NAMES, DEFAULT_ENABLED_SKILLS),
     },
     {
@@ -180,6 +206,8 @@ export function seed(now: number = Date.now()): MockDb {
       maxTurns: 40,
       status: 'idle',
       simulated: false,
+      departmentId: null,
+      title: null,
       skills: skills(['web-research', 'summarize', 'pdf-reader', 'translate'], 4),
     },
     {
@@ -193,6 +221,8 @@ export function seed(now: number = Date.now()): MockDb {
       maxTurns: 40,
       status: 'offline',
       simulated: true,
+      departmentId: null,
+      title: null,
       skills: skills(['deploy-app', 'git-ops', 'build-app'], 3),
     },
   ];

@@ -41,6 +41,7 @@ import { ComputersModule } from './modules/computers/computers.module';
 import { ConnectionsModule } from './modules/connections/connections.module';
 import { DaemonModule } from './modules/daemon/daemon.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { DepartmentsModule } from './modules/departments/departments.module';
 import { EventsModule } from './modules/events';
 import { GatewayModule } from './modules/gateway/gateway.module';
 import { MailModule } from './modules/mail/mail.module';
@@ -132,6 +133,7 @@ const API_THROTTLE_TTL_MS = 60_000;
     OnboardingModule,
     TasksModule,
     ChatModule,
+    DepartmentsModule,
     DashboardModule,
     ConnectionsModule,
     SimulatorModule,

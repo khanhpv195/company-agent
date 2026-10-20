@@ -16,6 +16,8 @@ export const toAgent = (agent: Agent, busy: boolean): AgentContract => ({
   maxTurns: agent.maxTurns,
   status: deriveAgentStatus(agent.computer.status, busy),
   simulated: agent.computer.simulated,
+  departmentId: agent.departmentId,
+  title: agent.title,
 });
 
 export const toAgentActivity = (row: AgentActivity): AgentActivityContract => ({
