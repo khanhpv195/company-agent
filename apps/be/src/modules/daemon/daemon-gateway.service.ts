@@ -8,6 +8,7 @@ import { ClockService } from '../../common/clock';
 import { transactionWithEffects } from '../../common/utils';
 import type { ComputerContext } from '../../common/types';
 import { Agent } from '../agents/entities/agent.entity';
+import { loadSkillDefs, type GatewaySkillDef } from '../skills/skill-access';
 import { ChatService } from '../chat/chat.service';
 import { ComputersService } from '../computers/computers.service';
 import { Computer } from '../computers/entities/computer.entity';
@@ -37,7 +38,10 @@ export interface GatewayAgent {
   persona: string;
   workdir: string;
   maxTurns: number;
+  /** Slugs of the enabled library skills (kept for daemons that predate `skillDefs`). */
   skills: string[];
+  /** The enabled skills of live library entries, sorted by slug. */
+  skillDefs: GatewaySkillDef[];
 }
 
 export interface GatewayAssignment {
@@ -66,14 +70,31 @@ const TOOL_STATUSES = ['running', 'ok', 'error'];
 const str = (value: unknown, max: number): string | null =>
   typeof value === 'string' ? value.slice(0, max) : null;
 
-export const toGatewayAgent = (agent: Agent): GatewayAgent => ({
-  id: agent.id,
-  name: agent.name,
-  persona: agent.persona,
-  workdir: agent.workdir,
-  maxTurns: agent.maxTurns,
-  skills: agent.skills.filter((skill) => skill.enabled).map((skill) => skill.id),
-});
+/** `library` holds the live skills of the workspace by id; ids of deleted skills are skipped. */
+export const toGatewayAgent = (
+  agent: Agent,
+  library: ReadonlyMap<string, GatewaySkillDef & { id: string }>,
+): GatewayAgent => {
+  const skillDefs = agent.skills
+    .flatMap((id) => library.get(id) ?? [])
+    .map(({ slug, name, description, content, version }) => ({
+      slug,
+      name,
+      description,
+      content,
+      version,
+    }))
+    .sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
+  return {
+    id: agent.id,
+    name: agent.name,
+    persona: agent.persona,
+    workdir: agent.workdir,
+    maxTurns: agent.maxTurns,
+    skills: skillDefs.map((skill) => skill.slug),
+    skillDefs,
+  };
+};
 
 /** Over-long result text is stored cut, with a note, instead of failing the whole report. */
 export const clipResultText = (text: string): string =>
@@ -199,7 +220,13 @@ export class DaemonGatewayService {
       where: { computerId },
       order: { createdAt: 'ASC', id: 'ASC' },
     });
-    return agents.map(toGatewayAgent);
+    if (!agents.length) return [];
+    const library = await loadSkillDefs(
+      this.dataSource.manager,
+      agents[0].workspaceId,
+      agents.flatMap((agent) => agent.skills),
+    );
+    return agents.map((agent) => toGatewayAgent(agent, library));
   }
 
   // ---------- claim ----------
@@ -241,12 +268,13 @@ export class DaemonGatewayService {
     const saved = await manager.findOneBy(AgentSession, { agentId: agent.id, key });
     if (row.sourceKind === 'chat') await this.streams.publishNow(row.id);
     const place = row.sourceKind === 'chat' ? await this.chat.placeOfReply(row.id) : null;
+    const library = await loadSkillDefs(manager, agent.workspaceId, agent.skills);
 
     return {
       id: row.id,
       attempt: row.attempt,
       kind: row.sourceKind,
-      agent: toGatewayAgent(agent),
+      agent: toGatewayAgent(agent, library),
       session: saved ? { id: saved.sessionId, resume: true } : { id: randomUUID(), resume: false },
       prompt: brief.prompt,
       context: brief.context,

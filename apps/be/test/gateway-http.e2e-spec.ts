@@ -20,6 +20,7 @@ import {
   addMemberWithRole,
   createAgent,
   createComputer,
+  createSkill,
   createTestApp,
   LoggedInClient,
   registerAndLogin,
@@ -88,7 +89,29 @@ describe('Gateway over HTTP (e2e)', () => {
     emitter.removeAllListeners(REALTIME_EVENT);
     emitter.on(REALTIME_EVENT, (e: RealtimeEnvelope) => realtime.push(e));
     paired = await pair('test-mac');
-    agent = await createAgent(dataSource, me.workspaceId, paired.computerId, { name: 'Claude' });
+    const gitOps = await createSkill(dataSource, me.workspaceId, {
+      slug: 'git-ops',
+      name: 'Git ops',
+      description: 'Use for git work.',
+      content: '# Git ops',
+      version: 3,
+    });
+    const summarize = await createSkill(dataSource, me.workspaceId, {
+      slug: 'summarize',
+      name: 'Summarize',
+      description: 'Use to summarize.',
+      content: '# Summarize',
+    });
+    await createSkill(dataSource, me.workspaceId, {
+      slug: 'translate',
+      name: 'Translate',
+      description: 'Use to translate.',
+      content: '# Translate',
+    });
+    agent = await createAgent(dataSource, me.workspaceId, paired.computerId, {
+      name: 'Claude',
+      skills: [summarize.id, gitOps.id],
+    });
   });
 
   // ---------- helpers ----------
@@ -309,6 +332,22 @@ describe('Gateway over HTTP (e2e)', () => {
           workdir: '~/workspace',
           maxTurns: 40,
           skills: ['git-ops', 'summarize'],
+          skillDefs: [
+            {
+              slug: 'git-ops',
+              name: 'Git ops',
+              description: 'Use for git work.',
+              content: '# Git ops',
+              version: 3,
+            },
+            {
+              slug: 'summarize',
+              name: 'Summarize',
+              description: 'Use to summarize.',
+              content: '# Summarize',
+              version: 1,
+            },
+          ],
         },
       ]);
       const computer = await dataSource
@@ -352,7 +391,15 @@ describe('Gateway over HTTP (e2e)', () => {
         prompt: 'Chào Claude, giúp mình với',
         leaseMs: LEASE_MS,
         requestedBy: { id: member.memberId, name: 'Extra member', role: 'member' },
-        agent: { id: agent.id, name: 'Claude', skills: ['git-ops', 'summarize'] },
+        agent: {
+          id: agent.id,
+          name: 'Claude',
+          skills: ['git-ops', 'summarize'],
+          skillDefs: [
+            expect.objectContaining({ slug: 'git-ops', content: '# Git ops', version: 3 }),
+            expect.objectContaining({ slug: 'summarize', content: '# Summarize', version: 1 }),
+          ],
+        },
       });
       expect(claimed.session).toEqual({ id: expect.stringMatching(UUID), resume: false });
       expect(claimed.context).toContain('direct message with Extra member');
@@ -806,6 +853,11 @@ describe('Gateway over HTTP (e2e)', () => {
           skills: ['git-ops', 'summarize'],
           status: 'working',
         }),
+      ]);
+      expect((await tool('list_skills', id)).result).toEqual([
+        { slug: 'git-ops', name: 'Git ops', description: 'Use for git work.' },
+        { slug: 'summarize', name: 'Summarize', description: 'Use to summarize.' },
+        { slug: 'translate', name: 'Translate', description: 'Use to translate.' },
       ]);
       const tasks = (await tool('list_tasks', id, { status: 'backlog' })).result as Array<{
         id: string;

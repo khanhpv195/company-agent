@@ -6,6 +6,7 @@ import { seedAuth } from './auth.seed';
 import { seedChat } from './chat.seed';
 import { seedDashboard } from './dashboard.seed';
 import { seedDepartments } from './departments.seed';
+import { seedSkills } from './skills.seed';
 import { seedTasks } from './tasks.seed';
 
 type Seeder = (ds: DataSource) => Promise<void>;
@@ -14,6 +15,7 @@ type Seeder = (ds: DataSource) => Promise<void>;
 const seeders: Seeder[] = [
   seedAuth,
   seedAgents,
+  seedSkills,
   seedTasks,
   seedChat,
   seedDepartments,

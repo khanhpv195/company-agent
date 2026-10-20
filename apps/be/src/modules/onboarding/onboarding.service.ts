@@ -7,13 +7,7 @@ import { ClockService } from '../../common/clock';
 import { AuthContext } from '../../common/types';
 import { agentConfig } from '../../config';
 import { SIMULATED_CONNECT_DELAY_MS } from '../../contacts';
-import {
-  buildSkills,
-  DEFAULT_ENABLED_SKILLS,
-  DEFAULT_MAX_TURNS,
-  DEFAULT_PERSONA,
-  DEFAULT_SKILL_NAMES,
-} from '../agents/agent-defaults';
+import { DEFAULT_MAX_TURNS, DEFAULT_PERSONA } from '../agents/agent-defaults';
 import { Agent } from '../agents/entities/agent.entity';
 import { API_KEY_PREFIX, hashApiKey } from '../computers/computers.service';
 import { Computer } from '../computers/entities/computer.entity';
@@ -95,7 +89,7 @@ export class OnboardingService {
           avatar: 0,
           provider: 'claude-code',
           persona: DEFAULT_PERSONA,
-          skills: buildSkills(DEFAULT_SKILL_NAMES, DEFAULT_ENABLED_SKILLS),
+          skills: [],
           workdir: '~/workspace',
           maxTurns: DEFAULT_MAX_TURNS,
         }),

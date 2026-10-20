@@ -144,7 +144,7 @@ export class CreateAgentDto implements CreateAgentInput {
 
   @ApiPropertyOptional({
     type: [SkillToggleDto],
-    description: 'Catalog skill ids and their flags; defaults to the catalog defaults',
+    description: 'Library skill ids and their flags; only the enabled ones count (default: none)',
   })
   @IsOptional()
   @IsArray({ message: i18nValidationMessage('validation.IS_ARRAY') })
@@ -197,7 +197,8 @@ export class UpdateAgentDto implements UpdateAgentInput {
 
   @ApiPropertyOptional({
     type: [SkillToggleDto],
-    description: 'Toggles existing skills only; unknown ids are ignored',
+    description:
+      'Toggles library skills on top of the current set; an unknown id to enable is a 404',
   })
   @IsOptional()
   @IsArray({ message: i18nValidationMessage('validation.IS_ARRAY') })

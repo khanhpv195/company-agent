@@ -9,7 +9,6 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import type { AgentSkill } from '@repo/shared';
 import { Department } from '../../departments/entities/department.entity';
 import { Computer } from '../../computers/entities/computer.entity';
 import { Workspace } from '../../workspace/entities/workspace.entity';
@@ -63,8 +62,9 @@ export class Agent {
   @Column({ name: 'max_turns', type: 'int', default: 40 })
   maxTurns: number;
 
+  /** Uuids of the library skills enabled on this agent (`skills.id`), no foreign key. */
   @Column({ type: 'jsonb', default: () => `'[]'` })
-  skills: AgentSkill[];
+  skills: string[];
 
   @Index()
   @Column({ name: 'department_id', type: 'uuid', nullable: true })

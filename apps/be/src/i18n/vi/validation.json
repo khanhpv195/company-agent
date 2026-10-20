@@ -15,5 +15,6 @@
   "IS_CURSOR": "{property} không phải là con trỏ hợp lệ",
   "IS_ISO_DATE": "{property} phải là ngày theo chuẩn ISO 8601",
   "IS_HEX_COLOR": "{property} phải là màu dạng #b0516f",
-  "IS_UUID": "{property} phải là một mã hợp lệ"
+  "IS_UUID": "{property} phải là một mã hợp lệ",
+  "IS_SLUG": "{property} chỉ gồm chữ thường, chữ số và \"-\" (1-64 ký tự)"
 }

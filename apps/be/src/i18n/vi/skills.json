@@ -1,0 +1,19 @@
+{
+  "LISTED": "Đã tải danh sách skill",
+  "LOADED": "Đã tải skill",
+  "VERSIONS_LISTED": "Đã tải các phiên bản của skill",
+  "CREATED": "Đã tạo skill",
+  "UPDATED": "Đã cập nhật skill",
+  "RESTORED": "Đã khôi phục phiên bản của skill",
+  "DELETED": "Đã xoá skill",
+  "AGENT_SKILLS_UPDATED": "Đã cập nhật skill của agent",
+  "NOT_FOUND": "Không tìm thấy skill",
+  "VERSION_NOT_FOUND": "Không tìm thấy phiên bản của skill",
+  "SLUG_TAKEN": "Đã có skill trùng slug",
+  "UNKNOWN_TEMPLATE": "Không tìm thấy mẫu skill",
+  "FORBIDDEN": "Chỉ người tạo, chủ sở hữu hoặc quản trị viên mới sửa được skill này",
+  "AGENT_FORBIDDEN": "Chỉ chủ sở hữu, quản trị viên hoặc thành viên cùng phòng ban với agent mới đổi được skill của agent",
+  "IN_USE": "Skill đang được bật ở các agent; hãy tắt ở đó trước",
+  "TOO_MANY": "Một agent có tối đa {max} skill",
+  "TOO_LARGE": "Tổng nội dung skill của một agent tối đa {max} ký tự"
+}

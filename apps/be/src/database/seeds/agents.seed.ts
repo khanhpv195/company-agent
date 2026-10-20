@@ -1,13 +1,7 @@
 import { Logger } from '@nestjs/common';
-import type { AgentActivity as AgentActivityContract, AgentSkill } from '@repo/shared';
+import type { AgentActivity as AgentActivityContract } from '@repo/shared';
 import type { DataSource } from 'typeorm';
-import {
-  buildSkills,
-  DEFAULT_ENABLED_SKILLS,
-  DEFAULT_MAX_TURNS,
-  DEFAULT_PERSONA,
-  DEFAULT_SKILL_NAMES,
-} from '../../modules/agents/agent-defaults';
+import { DEFAULT_MAX_TURNS, DEFAULT_PERSONA } from '../../modules/agents/agent-defaults';
 import { AgentActivity } from '../../modules/agents/entities/agent-activity.entity';
 import { Agent } from '../../modules/agents/entities/agent.entity';
 import { Computer } from '../../modules/computers/entities/computer.entity';
@@ -44,7 +38,6 @@ const AGENTS: {
   avatar: number;
   computer: string;
   workdir: string;
-  skills: AgentSkill[];
   activity: {
     where: string;
     request: string;
@@ -57,7 +50,6 @@ const AGENTS: {
     avatar: 0,
     computer: 'c1',
     workdir: '~/.agent/agents/a1',
-    skills: buildSkills(DEFAULT_SKILL_NAMES, DEFAULT_ENABLED_SKILLS),
     activity: [
       { where: 'DM', request: 'Tin nhắn riêng (DM)', status: 'completed', agoH: 23 },
       { where: 'DM', request: 'Tin nhắn riêng (DM)', status: 'completed', agoH: 26 },
@@ -69,7 +61,6 @@ const AGENTS: {
     avatar: 1,
     computer: 'c1',
     workdir: '~/.agent/agents/a2',
-    skills: buildSkills(['web-research', 'summarize', 'pdf-reader', 'translate'], 4),
     activity: [
       { where: '#test › Hello', request: 'Hello', status: 'completed', agoH: 23 },
       { where: '#test › Hello', request: 'Crawl giá đối thủ', status: 'failed', agoH: 6 },
@@ -80,7 +71,6 @@ const AGENTS: {
     avatar: 2,
     computer: 'c2',
     workdir: '/srv/agent/a3',
-    skills: buildSkills(['deploy-app', 'git-ops', 'build-app'], 3),
     activity: [{ where: '#all-members', request: 'deploy staging', status: 'failed', agoH: 48 }],
   },
 ];
@@ -135,7 +125,7 @@ export const seedAgents = async (ds: DataSource): Promise<void> => {
           avatar: data.avatar,
           provider: 'claude-code',
           persona: DEFAULT_PERSONA,
-          skills: data.skills,
+          skills: [],
           workdir: data.workdir,
           maxTurns: DEFAULT_MAX_TURNS,
         }),

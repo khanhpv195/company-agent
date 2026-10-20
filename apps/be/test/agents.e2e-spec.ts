@@ -8,6 +8,7 @@ import { AgentGatewayService } from '../src/modules/gateway/agent-gateway.servic
 import {
   createAgent,
   createComputer,
+  createSkill,
   createTestApp,
   LoggedInClient,
   registerAndLogin,
@@ -174,9 +175,20 @@ describe('Computers and agents (e2e)', () => {
   });
 
   describe('PATCH /agents/:id', () => {
-    it('replaces the persona (empty allowed) and toggles known skills only', async () => {
+    it('replaces the persona (empty allowed) and toggles library skills', async () => {
       const computer = await createComputer(dataSource, me.workspaceId);
-      const agent = await createAgent(dataSource, me.workspaceId, computer.id);
+      const gitOps = await createSkill(dataSource, me.workspaceId, { slug: 'git-ops', name: 'a' });
+      const summarize = await createSkill(dataSource, me.workspaceId, {
+        slug: 'summarize',
+        name: 'b',
+      });
+      const translate = await createSkill(dataSource, me.workspaceId, {
+        slug: 'translate',
+        name: 'c',
+      });
+      const agent = await createAgent(dataSource, me.workspaceId, computer.id, {
+        skills: [gitOps.id, summarize.id],
+      });
 
       const updated = unwrap<Agent>(
         await http()
@@ -185,29 +197,33 @@ describe('Computers and agents (e2e)', () => {
           .send({
             persona: 'New persona',
             skills: [
-              { id: 'git-ops', enabled: false },
-              { id: 'translate', enabled: true },
-              { id: 'does-not-exist', enabled: true },
+              { id: gitOps.id, enabled: false },
+              { id: translate.id, enabled: true },
             ],
           })
           .expect(200),
       );
       expect(updated.persona).toBe('New persona');
       expect(updated.skills).toEqual([
-        { id: 'git-ops', name: 'git-ops', enabled: false },
-        { id: 'summarize', name: 'summarize', enabled: true },
-        { id: 'translate', name: 'translate', enabled: true },
+        { id: gitOps.id, name: 'a', enabled: false },
+        { id: summarize.id, name: 'b', enabled: true },
+        { id: translate.id, name: 'c', enabled: true },
       ]);
+      await http()
+        .patch(`/api/v1/agents/${agent.id}`)
+        .set(me.bearer)
+        .send({ skills: [{ id: 'does-not-exist', enabled: true }] })
+        .expect(404);
 
       const skillsOnly = unwrap<Agent>(
         await http()
           .patch(`/api/v1/agents/${agent.id}`)
           .set(me.bearer)
-          .send({ skills: [{ id: 'summarize', enabled: false }] })
+          .send({ skills: [{ id: summarize.id, enabled: false }] })
           .expect(200),
       );
       expect(skillsOnly.persona).toBe('New persona');
-      expect(skillsOnly.skills.find((s) => s.id === 'summarize')?.enabled).toBe(false);
+      expect(skillsOnly.skills.find((s) => s.id === summarize.id)?.enabled).toBe(false);
 
       const cleared = unwrap<Agent>(
         await http()
